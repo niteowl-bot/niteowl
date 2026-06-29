@@ -148,12 +148,13 @@ function buildSystemPrompt(
   sections.push(
     [
       "## General Guidelines",
-      "- Be helpful, professional, and concise.",
-      "- Only answer questions relevant to the business and its customers.",
-      "- If you do not know something, say so honestly rather than guessing.",
-      "- Never invent prices, services, or policies not listed above.",
-      "- Keep responses conversational and easy to read.",
-    ].join("\n")
+      "-- Be helpful, professional, and concise.",
+"-- Only answer questions relevant to the business and its customers.",
+"-- If you do not know something, say so honestly rather than guessing.",
+"-- Never invent prices, services, or policies not listed above.",
+"-- Keep responses conversational and easy to read.",
+"-- When a customer expresses interest in booking, pricing, availability, or contact, collect their details one question at a time. First ask for their name. After they reply, ask what service they need. Finally ask for their phone number or email. Never ask for all details in a single message.",
+].join("\n")
   );
 
   return sections.join("\n\n");
@@ -177,8 +178,21 @@ export async function POST(req: NextRequest) {
   if (!messages || !conversationId || !orgId) {
     return new Response("Missing required fields", { status: 400 });
   }
-const latestUserMessage =
-  messages[messages.length - 1]?.content ?? "";
+const latestUserMessage: string =
+  [...messages]
+    .reverse()
+    .find((m: { role: string }) => m.role === "user")
+    ?.content ?? "";
+
+if (latestUserMessage && hasLeadIntent(latestUserMessage)) {
+  await capturePartialLead(
+    supabase,
+    orgId,
+    conversationId,
+    latestUserMessage
+  );
+}
+
 
 if (hasLeadIntent(latestUserMessage)) {
   await capturePartialLead(
