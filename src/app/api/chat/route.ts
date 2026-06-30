@@ -2,51 +2,564 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
-// ── Lead intent detection ────────────────────────────────────────
 
-const LEAD_INTENT_KEYWORDS = [
-  "appointment",
-  "book",
-  "booking",
-  "call me",
-  "contact me",
-  "phone",
-  "email",
-  "quote",
-  "price",
-  "pricing",
-  "availability",
+// ── Lead extraction types ────────────────────────────────────────
+
+type LeadIntent =
+  | "new_booking"
+  | "reschedule"
+  | "contact_update"
+  | "question"
+  | "unknown";
+
+interface ExtractedLead {
+  intent: LeadIntent;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  service: string | null;
+  preferred_datetime: string | null;
+  confidence: number;
+}
+
+const EMPTY_LEAD: ExtractedLead = {
+  intent: "unknown",
+  name: null,
+  email: null,
+  phone: null,
+  service: null,
+  preferred_datetime: null,
+  confidence: 0,
+};
+
+const ACTIONABLE_INTENTS: LeadIntent[] = [
+  "new_booking",
+  "reschedule",
+  "contact_update",
+];
+// ── Lead lifecycle ────────────────────────────────────────────────
+
+type LeadStatus =
+  | "new"
+  | "contacted"
+  | "qualified"
+  | "booked"
+  | "lost"
+  | "cancelled";
+
+// Open statuses are eligible to receive merged updates from ongoing
+// conversation. Closed statuses (booked/lost/cancelled) represent a
+// concluded enquiry — any further contact starts a fresh lead.
+// "Open" describes dashboard/reporting semantics — an enquiry not yet booked.
+const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "contacted", "qualified"];
+
+// "Mergeable" describes which leads can still receive updates from
+// follow-up messages in the same chat session. A booked appointment
+// is not closed — the customer can still correct contact details or
+// reschedule. Only lost/cancelled are genuinely concluded and excluded.
+const MERGEABLE_STATUSES: LeadStatus[] = [
+  "new",
+  "contacted",
+  "qualified",
+  "booked",
 ];
 
-function hasLeadIntent(text: string): boolean {
-  const lower = text.toLowerCase();
-  return LEAD_INTENT_KEYWORDS.some((keyword) => lower.includes(keyword));
+// Statuses that must never be silently overwritten by the merge logic
+const PROTECTED_STATUSES: LeadStatus[] = ["contacted", "qualified"];
+
+
+// ── Smart merge helpers ──────────────────────────────────────────
+
+const CONTACT_INFO_PATTERNS: RegExp[] = [
+  /^my (email|phone|number|mobile|telephone)/i,
+  /^(email|phone|number|mobile|telephone)(\s+is|\s+address)?/i,
+  /^(it'?s|that'?s|this is)\s+[\w@.+\-]+$/i,
+  /^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i,
+  /^[\d\s\-()+]{7,}$/,
+  /^(my )?(email|phone) (is|address is)/i,
+  /^(you can (reach|contact|call|email) me)/i,
+];
+
+function looksLikeContactInfo(text: string | null): boolean {
+  if (!text) return false;
+  return CONTACT_INFO_PATTERNS.some((p) => p.test(text.trim()));
 }
+
+function shouldUpdateService(
+  extracted: string | null,
+  existing: string | null,
+  intent: LeadIntent
+): string | null {
+  // Intent gate — primary defence
+  // Only new_booking can ever change the service field
+  if (intent !== "new_booking") return existing;
+
+  // Nothing extracted
+  if (!extracted) return existing;
+
+  // Secondary string guards — catch GPT intent misclassification
+  if (looksLikeContactInfo(extracted)) return existing;
+
+  const containsEmail = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(extracted);
+  const containsPhone = /\b[\d\s\-()+]{7,}\b/.test(extracted);
+  if (containsEmail || containsPhone) return existing;
+
+  const adminPhrases = [
+    /^(phone|email|contact|name)\s*(update|change|correction)?$/i,
+    /^(provide|giving|sharing)\s+(phone|email|contact|number)/i,
+    /^reschedul/i,
+    /^booking\s+update$/i,
+    /^appointment\s+update$/i,
+  ];
+  if (adminPhrases.some((p) => p.test(extracted.trim()))) return existing;
+
+  // Only replace an existing service if the new value is more than 2 words
+  if (existing && extracted.split(/\s+/).length <= 2) return existing;
+
+  return extracted;
+}
+function shouldUpdateName(
+  extracted: string | null,
+  existing: string | null
+): string | null {
+  if (!extracted) return existing;
+  if (looksLikeContactInfo(extracted)) return existing;
+  return extracted;
+}
+
+
+function deduplicateMessage(
+  existing: string | null,
+  incoming: string
+): string {
+  if (!existing) return incoming;
+  const lines = existing.split("\n").map((l) => l.trim());
+  if (lines[lines.length - 1] === incoming.trim()) return existing;
+  return `${existing}\n${incoming.trim()}`;
+}
+
+// ── extractLeadData ──────────────────────────────────────────────
+
+async function extractLeadData(message: string): Promise<ExtractedLead> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) return { ...EMPTY_LEAD, confidence: 0.5 };
+
+  const prompt = `You are a lead extraction assistant for a business booking system.
+
+Analyse the customer message and return ONLY a valid JSON object.
+
+## Required JSON shape
+{
+  "intent": "new_booking" | "reschedule" | "contact_update" | "question" | "unknown",
+  "name": string or null,
+  "email": string or null,
+  "phone": string or null,
+  "service": string or null,
+  "preferred_datetime": string or null,
+  "confidence": number 0.0-1.0
+}
+
+## Intent definitions
+
+"new_booking"
+  Customer wants to book, schedule, get a quote, check availability, or request a service.
+  Triggers: "I'd like to book", "Can I make an appointment", "I need a quote",
+  "Are you available", "I want to arrange", "How much for", "Can you come out"
+
+"reschedule"
+  Customer wants to change, move, update, or correct an existing booking time or date.
+  Triggers: "change my booking", "update my appointment", "move it to", "make it",
+  "actually", "reschedule", "instead", "different time", "can we do", "how about",
+  "5pm instead", "tomorrow instead", "let's do Friday", "change the time",
+  "can you change", "I'd prefer", "switch to"
+
+"contact_update"
+  Customer is providing or correcting contact details only.
+  Triggers: "my email is", "my number is", "you can reach me at",
+  "my name is", "I'm called", "this is [name]", "my phone is"
+
+"question"
+  General question about the business — no booking action required.
+  Triggers: "what are your hours", "do you offer", "how much does",
+  "are you open", "what services", "where are you"
+
+"unknown"
+  Does not fit any category above.
+
+## Field rules
+
+intent
+  Choose the single best intent. When in doubt between new_booking and reschedule,
+  look for words like "change", "update", "move", "actually", "instead", "make it"
+  — those signal reschedule even without the word "reschedule".
+
+name
+  Extract from: "My name is X", "I'm X", "This is X", "call me X".
+  Return null if no name is clearly stated.
+
+email
+  Exact email address as written. Return null if none.
+
+phone
+  Any phone format. Return null if none.
+
+service
+  Short summary of the service or job the customer is requesting.
+  Examples: "Boiler repair", "Hair appointment", "Plumbing quote".
+  STRICT RULES:
+  - Return null if intent is "reschedule". Rescheduling is not a new service request.
+  - Return null if intent is "contact_update". Providing contact details is not a service request.
+  - Return null if intent is "question". Asking a question is not a service request.
+  - Return null if intent is "unknown".
+  - Only populate this field when intent is "new_booking" AND the customer is clearly requesting a specific job or service.
+  - Never copy a phone number, email address, or name into this field.
+  - Never use "phone update", "contact update", "reschedule", or similar administrative descriptions as the service.
+  - If in doubt, return null.
+
+preferred_datetime
+  Extract ANY time or date reference regardless of intent.
+  Covers new bookings, rescheduling, corrections, and relative times.
+  Examples: "5pm tomorrow", "Friday at 2pm", "next Monday morning",
+  "make it 3pm", "actually Tuesday", "morning would be better".
+  Return the value exactly as the customer said it.
+  Return null ONLY if the message contains zero time or date information.
+
+confidence
+  0.9-1.0 confirmed booking with contact details
+  0.7-0.89 booking or service request, details incomplete
+  0.5-0.69 reschedule or contact update
+  0.1-0.49 general question with mild intent signals
+  0.0 no lead intent
+
+## Examples
+
+"I'd like to book a plumber for tomorrow at 3pm, my name is James"
+{"intent":"new_booking","name":"James","email":null,"phone":null,"service":"Plumber booking","preferred_datetime":"tomorrow at 3pm","confidence":0.92}
+
+"Can you change my appointment to 5pm tomorrow?"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"5pm tomorrow","confidence":0.6}
+
+"Actually make it 3pm on Friday"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"3pm on Friday","confidence":0.6}
+
+"Reschedule to next Monday at 9am"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"next Monday at 9am","confidence":0.6}
+
+"My email is john@example.com"
+{"intent":"contact_update","name":null,"email":"john@example.com","phone":null,"service":null,"preferred_datetime":null,"confidence":0.55}
+
+"My name is Sarah and my number is 07911 123456"
+{"intent":"contact_update","name":"Sarah","email":null,"phone":"07911 123456","service":null,"preferred_datetime":null,"confidence":0.55}
+
+"What are your opening hours?"
+{"intent":"question","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":null,"confidence":0.0}
+
+## Critical rules
+- Return ONLY the JSON object — no markdown, no explanation, no code fences
+- Never return preferred_datetime as null when any time or date is mentioned
+- For rescheduling messages always set intent to "reschedule" even if the word "reschedule" is not used
+
+Customer message:
+"""
+${message}
+"""`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 250,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[extractLeadData] OpenAI error:", res.status);
+      return { ...EMPTY_LEAD, confidence: 0.5 };
+    }
+
+    const json = await res.json();
+    const raw: string = json.choices?.[0]?.message?.content ?? "";
+
+    const cleaned = raw
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned) as Partial<ExtractedLead>;
+
+    const validIntents: LeadIntent[] = [
+      "new_booking",
+      "reschedule",
+      "contact_update",
+      "question",
+      "unknown",
+    ];
+
+    return {
+      intent:
+        typeof parsed.intent === "string" &&
+        validIntents.includes(parsed.intent as LeadIntent)
+          ? (parsed.intent as LeadIntent)
+          : "unknown",
+      name:
+        typeof parsed.name === "string"
+          ? parsed.name.trim() || null
+          : null,
+      email:
+        typeof parsed.email === "string"
+          ? parsed.email.trim() || null
+          : null,
+      phone:
+        typeof parsed.phone === "string"
+          ? parsed.phone.trim() || null
+          : null,
+      service:
+        typeof parsed.service === "string"
+          ? parsed.service.trim() || null
+          : null,
+      preferred_datetime:
+        typeof parsed.preferred_datetime === "string"
+          ? parsed.preferred_datetime.trim() || null
+          : null,
+      confidence:
+        typeof parsed.confidence === "number"
+          ? Math.min(1, Math.max(0, parsed.confidence))
+          : 0.5,
+    };
+  } catch (err) {
+    console.error("[extractLeadData] parse error:", err);
+    return { ...EMPTY_LEAD, confidence: 0.5 };
+  }
+}
+
+// ── capturePartialLead ───────────────────────────────────────────
+
+
+
+interface LeadRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  service_needed: string | null;
+  preferred_datetime: string | null;
+  message: string | null;
+  status: string;
+  conversation_id: string | null;
+}
+
+const LEAD_SELECT_COLUMNS =
+  "id, name, email, phone, service_needed, preferred_datetime, message, status, conversation_id";
+
+/**
+ * Resolves the correct open lead for this message using a layered
+ * identity strategy. Returns null only when this is genuinely a new
+ * enquiry with no resolvable connection to an existing open lead.
+ */
+async function findOpenLeadForCapture(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  orgId: string,
+  conversationId: string | null,
+  extracted: ExtractedLead
+): Promise<LeadRow | null> {
+  // ── Layer 1: exact conversation_id match on a mergeable lead ─────
+  if (conversationId) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select(LEAD_SELECT_COLUMNS)
+      .eq("org_id", orgId)
+      .eq("conversation_id", conversationId)
+      .in("status", MERGEABLE_STATUSES)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[lead resolve] conversation_id lookup error:", error.message);
+    } else if (data) {
+      console.log("[lead resolve] matched via conversation_id:", data.id);
+      return data as LeadRow;
+    }
+  }
+
+  // ── Layer 2: known contact details on a mergeable lead ───────────
+  if (extracted.email || extracted.phone) {
+    let query = supabase
+      .from("leads")
+      .select(LEAD_SELECT_COLUMNS)
+      .eq("org_id", orgId)
+      .in("status", MERGEABLE_STATUSES)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (extracted.email && extracted.phone) {
+      query = query.or(`email.eq.${extracted.email},phone.eq.${extracted.phone}`);
+    } else if (extracted.email) {
+      query = query.eq("email", extracted.email);
+    } else if (extracted.phone) {
+      query = query.eq("phone", extracted.phone);
+    }
+
+    const { data, error } = await query.maybeSingle();
+
+    if (error) {
+      console.error("[lead resolve] contact match lookup error:", error.message);
+    } else if (data) {
+      console.log("[lead resolve] matched via contact details:", data.id);
+      return data as LeadRow;
+    }
+  }
+
+  // ── Layer 3: most recent mergeable lead in this org, bounded ─────
+  const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .select(LEAD_SELECT_COLUMNS)
+    .eq("org_id", orgId)
+    .eq("source", "chat")
+    .in("status", MERGEABLE_STATUSES)
+    .gte("created_at", thirtyMinutesAgo)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[lead resolve] recency fallback lookup error:", error.message);
+  } else if (data) {
+    console.log("[lead resolve] matched via recency fallback:", data.id);
+    return data as LeadRow;
+  }
+
+  console.log("[lead resolve] no mergeable lead found — will insert new");
+  return null;
+}
+
+
+function isBookingConfirmed(
+  intent: LeadIntent,
+  preferredDatetime: string | null,
+  phone: string | null,
+  email: string | null
+): boolean {
+  if (intent !== "new_booking" && intent !== "reschedule") return false;
+  const hasContact = Boolean(phone || email);
+  const hasTime = Boolean(preferredDatetime);
+  return hasContact && hasTime;
+}
+
 
 async function capturePartialLead(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
-  conversationId: string,
-  userMessage: string
+  conversationId: string | null | undefined,
+  userMessage: string,
+  extracted: ExtractedLead
 ): Promise<void> {
-  const { error } = await supabase.from("leads").insert({
-    org_id: orgId,
-    conversation_id: conversationId,
-    source: "chat",
-    message: userMessage,
-    service_needed: userMessage,
-    ai_confidence: 0.7,
-    status: "new",
-  });
+  const safeConversationId =
+    typeof conversationId === "string" && conversationId.trim().length > 0
+      ? conversationId.trim()
+      : null;
 
-  if (error) {
-    // Non-fatal — log and continue so the chat response still streams
-    console.error("[lead capture]", error.message);
+  console.log("[lead capture] intent:", extracted.intent, "| conversationId:", safeConversationId);
+
+  const existing = await findOpenLeadForCapture(
+    supabase,
+    orgId,
+    safeConversationId,
+    extracted
+  );
+
+  if (existing) {
+    // ── Update path — merge into the existing open lead ───────────
+    const updatedDatetime =
+      extracted.intent === "reschedule" && extracted.preferred_datetime
+        ? extracted.preferred_datetime
+        : extracted.preferred_datetime ?? existing.preferred_datetime;
+
+    const mergedEmail = extracted.email ?? existing.email;
+    const mergedPhone = extracted.phone ?? existing.phone;
+
+    const nextStatus: LeadStatus =
+      PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
+      existing.status === "booked"
+        ? (existing.status as LeadStatus)
+        : isBookingConfirmed(
+            extracted.intent,
+            updatedDatetime,
+            mergedPhone,
+            mergedEmail
+          )
+        ? "booked"
+        : "new";
+
+    const updatePayload = {
+      name: shouldUpdateName(extracted.name, existing.name),
+      email: mergedEmail,
+      phone: mergedPhone,
+      service_needed: shouldUpdateService(
+        extracted.service,
+        existing.service_needed,
+        extracted.intent
+      ),
+      preferred_datetime: updatedDatetime,
+      message: deduplicateMessage(existing.message, userMessage),
+      status: nextStatus,
+      ai_confidence: extracted.confidence,
+      ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
+    };
+
+
+    const { error: updateError } = await supabase
+      .from("leads")
+      .update(updatePayload)
+      .eq("id", existing.id);
+
+    if (updateError) {
+      console.error("[lead capture] update failed:", updateError.message);
+    } else {
+      console.log("[lead capture] updated existing lead:", existing.id);
+    }
+
+    return;
+  }
+
+  // ── Insert path — genuinely new enquiry ──────────────────────────
+  const { data: inserted, error: insertError } = await supabase
+    .from("leads")
+    .insert({
+      org_id: orgId,
+      ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
+      source: "chat",
+      name: extracted.name,
+      email: extracted.email,
+      phone: extracted.phone,
+      service_needed: extracted.service ?? userMessage,
+      preferred_datetime: extracted.preferred_datetime,
+      message: userMessage,
+      ai_confidence: extracted.confidence,
+      status: "new",
+    })
+    .select("id")
+    .single();
+
+  if (insertError) {
+    console.error("[lead capture] insert failed:", insertError.message);
+  } else {
+    console.log("[lead capture] inserted new lead:", inserted?.id);
   }
 }
 
 
-// ── Types ────────────────────────────────────────────────────────
+
+// ── Knowledge types ──────────────────────────────────────────────
 
 interface KnowledgeRecord {
   category: string;
@@ -64,9 +577,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   custom_instruction: "Additional Instructions",
 };
 
-// Custom instructions are injected differently — appended after the
-// main prompt block rather than listed as knowledge, so the model
-// treats them as direct behavioural rules.
 const CUSTOM_INSTRUCTION_CATEGORY = "custom_instruction";
 
 // ── System prompt builder ────────────────────────────────────────
@@ -82,23 +592,20 @@ function buildSystemPrompt(
 ): string {
   const sections: string[] = [];
 
-  // ── Identity block ─────────────────────────────────────────────
+  // Identity
   sections.push(
     [
       `You are Remy, a professional AI assistant for ${org.business_name}.`,
       `Business type: ${org.business_type}.`,
       `Primary goal: ${org.primary_goal}.`,
-      org.description
-        ? `About the business: ${org.description}`
-        : null,
+      org.description ? `About the business: ${org.description}` : null,
     ]
       .filter(Boolean)
       .join("\n")
   );
 
-  // ── Knowledge blocks ───────────────────────────────────────────
+  // Knowledge blocks
   if (knowledge.length > 0) {
-    // Separate custom instructions from the rest
     const standardKnowledge = knowledge.filter(
       (r) => r.category !== CUSTOM_INSTRUCTION_CATEGORY
     );
@@ -109,58 +616,60 @@ function buildSystemPrompt(
     if (standardKnowledge.length > 0) {
       sections.push("## Business Knowledge\n");
 
-      // Group by category, preserving the label order defined above
-      const grouped = standardKnowledge.reduce<
-        Record<string, KnowledgeRecord[]>
-      >((acc, record) => {
-        if (!acc[record.category]) acc[record.category] = [];
-        acc[record.category].push(record);
-        return acc;
-      }, {});
+      const grouped = standardKnowledge.reduce<Record<string, KnowledgeRecord[]>>(
+        (acc, record) => {
+          if (!acc[record.category]) acc[record.category] = [];
+          acc[record.category].push(record);
+          return acc;
+        },
+        {}
+      );
 
       for (const [category, label] of Object.entries(CATEGORY_LABELS)) {
         if (category === CUSTOM_INSTRUCTION_CATEGORY) continue;
         const records = grouped[category];
         if (!records || records.length === 0) continue;
 
-        const block = [
-          `### ${label}`,
-          ...records.map((r) => `- ${r.title}: ${r.content}`),
-        ].join("\n");
-
-        sections.push(block);
+        sections.push(
+          [
+            `### ${label}`,
+            ...records.map((r) => `- ${r.title}: ${r.content}`),
+          ].join("\n")
+        );
       }
     }
 
-    // ── Custom instructions ──────────────────────────────────────
     if (customInstructions.length > 0) {
-      const block = [
-        "## Your Behaviour Rules",
-        "Follow these instructions precisely in every response:",
-        ...customInstructions.map((r) => `- ${r.content}`),
-      ].join("\n");
-
-      sections.push(block);
+      sections.push(
+        [
+          "## Your Behaviour Rules",
+          "Follow these instructions precisely in every response:",
+          ...customInstructions.map((r) => `- ${r.content}`),
+        ].join("\n")
+      );
     }
   }
 
-  // ── Standing instructions ──────────────────────────────────────
+  // Standing rules
   sections.push(
     [
-      "## General Guidelines",
-      "-- Be helpful, professional, and concise.",
-"-- Only answer questions relevant to the business and its customers.",
-"-- If you do not know something, say so honestly rather than guessing.",
-"-- Never invent prices, services, or policies not listed above.",
-"-- Keep responses conversational and easy to read.",
-"-- When a customer expresses interest in booking, pricing, availability, or contact, collect their details one question at a time. First ask for their name. After they reply, ask what service they need. Finally ask for their phone number or email. Never ask for all details in a single message.",
-].join("\n")
+      "## Rules",
+      "1. Use the business knowledge above when answering customer questions.",
+      "2. Do not invent prices, hours, services, or policies not listed above.",
+      "3. If a question falls outside the knowledge base, say you do not have that detail and suggest the customer contacts the team — EXCEPT for bookings, rescheduling, and lead capture, which you handle directly in this chat.",
+      "4. Be helpful, professional, and concise. Ask one question at a time when collecting information.",
+      "5. When a customer wants to book or enquire about a service, collect their name, preferred time, and a contact method (phone or email) — one piece at a time.",
+      "6. When a customer wants to reschedule or change a booking — including phrases like 'change to', 'update to', 'make it', 'actually', 'instead', 'reschedule', 'move to', 'how about', 'can we do', 'I'd prefer' followed by a time or date — respond warmly and confirm the new time. Always refer to it as an 'appointment', never as a 'preferred contact time' or 'preferred time'. Example: 'Got it, I've updated your appointment to [new time]. Is there anything else I can help you with?'",
+      "7. Never say you cannot change, update, or modify a booking. You capture customer preferences on behalf of the business. Booking changes are always handled here — never redirect the customer elsewhere for this.",
+      "8. Never repeat back a long transcript. Keep confirmations short and friendly.",
+      "9. Always describe a booking using the word 'appointment' — e.g. 'I've scheduled your appointment', 'Your appointment is confirmed for [time]', 'I've updated your appointment to [time]'. Never use the phrase 'preferred contact time' or 'preferred time' when confirming a booking or reschedule back to the customer.",
+    ].join("\n")
   );
 
   return sections.join("\n\n");
 }
 
-// ── Route handler ────────────────────────────────────────────────
+// ── POST handler ─────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -178,39 +687,44 @@ export async function POST(req: NextRequest) {
   if (!messages || !conversationId || !orgId) {
     return new Response("Missing required fields", { status: 400 });
   }
-const latestUserMessage: string =
-  [...messages]
-    .reverse()
-    .find((m: { role: string }) => m.role === "user")
-    ?.content ?? "";
 
-if (latestUserMessage && hasLeadIntent(latestUserMessage)) {
-  await capturePartialLead(
-    supabase,
-    orgId,
-    conversationId,
-    latestUserMessage
-  );
-}
+  // ── Lead extraction — every message, no keyword filter ───────────
+  const latestUserMessage: string =
+    [...messages]
+      .reverse()
+      .find((m: { role: string }) => m.role === "user")?.content ?? "";
 
+  if (latestUserMessage) {
+    try {
+      const extracted = await extractLeadData(latestUserMessage);
 
-if (hasLeadIntent(latestUserMessage)) {
-  await capturePartialLead(
-    supabase,
-    orgId,
-    conversationId,
-    latestUserMessage
-  );
-}
+      console.log("[post handler] extraction complete — intent:", extracted.intent);
+      console.log("[post handler] conversationId passed to capture:", conversationId);
+
+      if (ACTIONABLE_INTENTS.includes(extracted.intent)) {
+        await capturePartialLead(
+          supabase,
+          orgId,
+          conversationId,
+          latestUserMessage,
+          extracted
+        );
+      } else {
+        console.log("[post handler] intent not actionable — skipping lead capture");
+      }
+    } catch (err) {
+      console.error("[post handler] lead extraction/capture error:", err);
+    }
+  }
+
 
   // ── Fetch org + knowledge in parallel ───────────────────────────
-
   const [orgResult, knowledgeResult] = await Promise.all([
     supabase
       .from("organisations")
       .select("business_name, business_type, primary_goal, description")
       .eq("id", orgId)
-      .single(),
+      .maybeSingle(),
 
     supabase
       .from("business_knowledge")
@@ -224,16 +738,11 @@ if (hasLeadIntent(latestUserMessage)) {
   const org = orgResult.data;
   const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
 
-  // ── Build system prompt ──────────────────────────────────────────
-
   const systemPrompt = org
-  ? buildSystemPrompt(org, knowledge)
-  : "You are Remy, a helpful AI business assistant. Be concise and professional.";
-
-
+    ? buildSystemPrompt(org, knowledge)
+    : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────
-
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -242,7 +751,6 @@ if (hasLeadIntent(latestUserMessage)) {
         const openaiKey = process.env.OPENAI_API_KEY;
 
         if (!openaiKey) {
-          // Stub mode — streams a placeholder so the UI works without a key
           const knowledgeSummary =
             knowledge.length > 0
               ? `I have ${knowledge.length} knowledge record(s) loaded across ${[...new Set(knowledge.map((r) => r.category))].length} category(ies).`
@@ -265,7 +773,6 @@ if (hasLeadIntent(latestUserMessage)) {
         }
 
         // ── Real OpenAI streaming ──────────────────────────────────
-
         const openaiRes = await fetch(
           "https://api.openai.com/v1/chat/completions",
           {
@@ -337,4 +844,3 @@ if (hasLeadIntent(latestUserMessage)) {
     },
   });
 }
-
