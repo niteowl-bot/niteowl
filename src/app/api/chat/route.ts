@@ -132,11 +132,18 @@ function deduplicateMessage(
   existing: string | null,
   incoming: string
 ): string {
-  if (!existing) return incoming;
-  const lines = existing.split("\n").map((l) => l.trim());
+  if (!existing) return incoming.trim();
+
+  const lines = existing.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // Avoid appending exact duplicate of the last line
   if (lines[lines.length - 1] === incoming.trim()) return existing;
-  return `${existing}\n${incoming.trim()}`;
+
+  // Keep only the last 10 messages to prevent cross-conversation pollution
+  const updated = [...lines, incoming.trim()].slice(-10);
+  return updated.join("\n");
 }
+
 
 // ── extractLeadData ──────────────────────────────────────────────
 
@@ -588,8 +595,10 @@ function buildSystemPrompt(
     primary_goal: string;
     description: string | null;
   },
-  knowledge: KnowledgeRecord[]
+  knowledge: KnowledgeRecord[],
+  intent: LeadIntent = "unknown"
 ): string {
+
   const sections: string[] = [];
 
   // Identity
@@ -651,18 +660,25 @@ function buildSystemPrompt(
   }
 
   // Standing rules
+  const isBookingContext =
+    intent === "new_booking" ||
+    intent === "reschedule" ||
+    intent === "contact_update";
+
   sections.push(
     [
       "## Rules",
       "1. Use the business knowledge above when answering customer questions.",
       "2. Do not invent prices, hours, services, or policies not listed above.",
-      "3. If a question falls outside the knowledge base, say you do not have that detail and suggest the customer contacts the team — EXCEPT for bookings, rescheduling, and lead capture, which you handle directly in this chat.",
+      isBookingContext
+        ? "3. BOOKING MODE ACTIVE: The customer is making a booking request. Accept it immediately. Do NOT say you cannot help or that you lack details. Confirm the service back to them, thank them, and confirm the appointment details naturally. Never redirect them elsewhere."
+        : "3. If a question falls outside the knowledge base, say you do not have that specific detail and suggest the customer contacts the team — EXCEPT for bookings, rescheduling, and lead capture, which you always handle directly in this chat.",
       "4. Be helpful, professional, and concise. Ask one question at a time when collecting information.",
       "5. When a customer wants to book or enquire about a service, collect their name, preferred time, and a contact method (phone or email) — one piece at a time.",
-      "6. When a customer wants to reschedule or change a booking — including phrases like 'change to', 'update to', 'make it', 'actually', 'instead', 'reschedule', 'move to', 'how about', 'can we do', 'I'd prefer' followed by a time or date — respond warmly and confirm the new time. Always refer to it as an 'appointment', never as a 'preferred contact time' or 'preferred time'. Example: 'Got it, I've updated your appointment to [new time]. Is there anything else I can help you with?'",
+      "6. When a customer wants to reschedule or change a booking — including phrases like 'change to', 'update to', 'make it', 'actually', 'instead', 'reschedule', 'move to', 'how about', 'can we do', 'I'd prefer' followed by a time or date — respond warmly and confirm the new time. Example: 'Got it, I've updated your appointment to [new time]. Is there anything else I can help you with?'",
       "7. Never say you cannot change, update, or modify a booking. You capture customer preferences on behalf of the business. Booking changes are always handled here — never redirect the customer elsewhere for this.",
       "8. Never repeat back a long transcript. Keep confirmations short and friendly.",
-      "9. Always describe a booking using the word 'appointment' — e.g. 'I've scheduled your appointment', 'Your appointment is confirmed for [time]', 'I've updated your appointment to [time]'. Never use the phrase 'preferred contact time' or 'preferred time' when confirming a booking or reschedule back to the customer.",
+      "9. When a customer requests any service — even one not listed in the knowledge base — always accept it as a booking. Say something like: 'Thank you, I've noted your request for [service]. Let me confirm your appointment details.' Never say you don't have information about a service when the customer is trying to book it.",
     ].join("\n")
   );
 
@@ -693,10 +709,11 @@ export async function POST(req: NextRequest) {
     [...messages]
       .reverse()
       .find((m: { role: string }) => m.role === "user")?.content ?? "";
-
-  if (latestUserMessage) {
+let detectedIntent: LeadIntent = "unknown";
+      if (latestUserMessage) {
     try {
       const extracted = await extractLeadData(latestUserMessage);
+      detectedIntent = extracted.intent;
 
       console.log("[post handler] extraction complete — intent:", extracted.intent);
       console.log("[post handler] conversationId passed to capture:", conversationId);
@@ -739,7 +756,7 @@ export async function POST(req: NextRequest) {
   const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
 
   const systemPrompt = org
-    ? buildSystemPrompt(org, knowledge)
+    ? buildSystemPrompt(org, knowledge, detectedIntent)
     : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────
