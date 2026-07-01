@@ -37,12 +37,12 @@ Rules:
 - Do not return any explanation, just the ISO string or "null"
 
 Examples:
-"tomorrow at 4pm" → "2024-07-02T15:00:00.000Z" (adjusted for timezone)
-"next Monday 10am" → "2024-07-07T09:00:00.000Z"
-"Friday afternoon" → "2024-07-05T13:00:00.000Z"
-"July 15 at 2:30pm" → "2024-07-15T13:30:00.000Z"
-"sometime next week" → "null"`;
-
+tomorrow at 4pm → 2024-07-02T15:00:00.000Z (adjusted for timezone)
+next Monday 10am → 2024-07-07T09:00:00.000Z
+Friday afternoon → 2024-07-05T13:00:00.000Z
+July 15 at 2:30pm → 2024-07-15T13:30:00.000Z
+sometime next week → null
+`;
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -64,7 +64,8 @@ Examples:
     }
 
     const json = await res.json();
-    const raw = json.choices?.[0]?.message?.content?.trim() ?? "null";
+    const raw = (json.choices?.[0]?.message?.content?.trim() ?? "null").replace(/^["']|["']$/g, "");
+
 
     if (raw === "null" || raw === "") {
       return { iso: null, failed: false };

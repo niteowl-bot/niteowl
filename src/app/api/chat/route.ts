@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
+import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,7 @@ const ACTIONABLE_INTENTS: LeadIntent[] = [
 
 type LeadStatus =
   | "new"
+  | "awaiting_confirmation"
   | "contacted"
   | "qualified"
   | "booked"
@@ -52,7 +54,7 @@ type LeadStatus =
 // conversation. Closed statuses (booked/lost/cancelled) represent a
 // concluded enquiry — any further contact starts a fresh lead.
 // "Open" describes dashboard/reporting semantics — an enquiry not yet booked.
-const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "contacted", "qualified"];
+const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "awaiting_confirmation", "contacted", "qualified"];
 
 // "Mergeable" describes which leads can still receive updates from
 // follow-up messages in the same chat session. A booked appointment
@@ -60,6 +62,7 @@ const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "contacted", "qualified"];
 // reschedule. Only lost/cancelled are genuinely concluded and excluded.
 const MERGEABLE_STATUSES: LeadStatus[] = [
   "new",
+  "awaiting_confirmation",
   "contacted",
   "qualified",
   "booked",
@@ -424,9 +427,17 @@ async function findOpenLeadForCapture(
       console.log("[lead resolve] matched via contact details:", data.id);
       return data as LeadRow;
     }
+
+    // Customer gave contact info but it matched no existing lead —
+    // this is a genuinely new/different person. Do not fall through
+    // to the recency fallback, which could merge into an unrelated lead.
+    console.log("[lead resolve] contact details given but no match — will insert new");
+    return null;
   }
 
   // ── Layer 3: most recent mergeable lead in this org, bounded ─────
+  // Only reached when the customer gave NO email/phone at all — e.g. a
+  // bare "yes that works" reply with nothing else to identify them by.
   const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
 
   const { data, error } = await supabase
@@ -479,7 +490,7 @@ async function capturePartialLead(
   conversationId: string | null | undefined,
   userMessage: string,
   extracted: ExtractedLead
-): Promise<void> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null }> {
   const safeConversationId =
     typeof conversationId === "string" && conversationId.trim().length > 0
       ? conversationId.trim()
@@ -492,6 +503,36 @@ async function capturePartialLead(
   if (datetimeParseFailed) {
     console.error("[lead capture] datetime parsing failed for:", extracted.preferred_datetime);
   }
+  let outsideBusinessHours = false;
+  let suggestedAlternativeIso: string | null = null;
+  let unavailableReason: "hours" | "capacity" | null = null;
+
+    if (resolvedIso) {
+    const availability = await isWithinBusinessHours(orgId, resolvedIso);
+    const slotAvailable = availability.isAvailable
+      ? await isSlotAvailable(orgId, resolvedIso)
+      : true;
+
+    if (!availability.isAvailable || !slotAvailable) {
+      outsideBusinessHours = true;
+      unavailableReason = !availability.isAvailable ? "hours" : "capacity";
+      suggestedAlternativeIso = await findNextAvailableSlot(orgId, resolvedIso);
+      console.log(
+        "[lead capture] requested time unavailable:",
+        resolvedIso,
+        "| withinHours:",
+        availability.isAvailable,
+        "| reason:",
+        availability.reason,
+        "| slotAvailable:",
+        slotAvailable,
+        "| suggested:",
+        suggestedAlternativeIso
+      );
+    }
+  }
+
+
 
   
 
@@ -526,7 +567,8 @@ async function capturePartialLead(
             updatedAppointmentIso,
             mergedPhone,
             mergedEmail
-          )
+          ) && !outsideBusinessHours
+
         ? "booked"
         : "new";
 
@@ -560,18 +602,21 @@ async function capturePartialLead(
       console.log("[lead capture] updated existing lead:", existing.id);
     }
 
-    return;
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
   const insertStatus: LeadStatus = isBookingConfirmed(
-    extracted.intent,
-    resolvedIso,
-    extracted.phone,
-    extracted.email
-  )
-    ? "booked"
-    : "new";
+  extracted.intent,
+  resolvedIso,
+  extracted.phone,
+  extracted.email
+) && !outsideBusinessHours
+  ? "booked"
+  : suggestedAlternativeIso
+  ? "awaiting_confirmation"
+  : "new";
+
 
   const { data: inserted, error: insertError } = await supabase
     .from("leads")
@@ -598,6 +643,7 @@ async function capturePartialLead(
   } else {
     console.log("[lead capture] inserted new lead:", inserted?.id);
   }
+return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
 }
 
 
@@ -632,7 +678,9 @@ function buildSystemPrompt(
     description: string | null;
   },
   knowledge: KnowledgeRecord[],
-  intent: LeadIntent = "unknown"
+  intent: LeadIntent = "unknown",
+  suggestedAlternativeIso: string | null = null,
+  unavailableReason: "hours" | "capacity" | null = null,
 ): string {
 
   const sections: string[] = [];
@@ -718,7 +766,27 @@ function buildSystemPrompt(
     ].join("\n")
   );
 
-  return sections.join("\n\n");
+  if (suggestedAlternativeIso) {
+    const formatted = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/London",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(suggestedAlternativeIso));
+
+    sections.push(
+      [
+        "## Availability Note",
+unavailableReason === "capacity"
+  ? `The customer's requested time is unfortunately already booked (fully booked for that slot). Politely let them know it's no longer available, and suggest ${formatted} as the nearest available alternative instead. Do not confirm the original requested time as booked.`
+  : `The customer's requested time is outside business hours. Politely let them know, and suggest ${formatted} as the nearest available alternative instead. Do not confirm the original requested time as booked.`
+
+      ].join("\n")
+    );
+  }
+return sections.join("\n\n");
 }
 
 // ── POST handler ─────────────────────────────────────────────────
@@ -746,6 +814,10 @@ export async function POST(req: NextRequest) {
       .reverse()
       .find((m: { role: string }) => m.role === "user")?.content ?? "";
 let detectedIntent: LeadIntent = "unknown";
+let outsideBusinessHours = false;
+  let suggestedAlternativeIso: string | null = null;
+  let unavailableReason: "hours" | "capacity" | null = null;
+
       if (latestUserMessage) {
     try {
       const extracted = await extractLeadData(latestUserMessage);
@@ -755,13 +827,17 @@ let detectedIntent: LeadIntent = "unknown";
       console.log("[post handler] conversationId passed to capture:", conversationId);
 
       if (ACTIONABLE_INTENTS.includes(extracted.intent)) {
-        await capturePartialLead(
+        const captureResult = await capturePartialLead(
           supabase,
           orgId,
           conversationId,
           latestUserMessage,
           extracted
         );
+        outsideBusinessHours = captureResult.outsideBusinessHours;
+        suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
+        unavailableReason = captureResult.unavailableReason;
+
       } else {
         console.log("[post handler] intent not actionable — skipping lead capture");
       }
@@ -792,7 +868,7 @@ let detectedIntent: LeadIntent = "unknown";
   const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
 
   const systemPrompt = org
-    ? buildSystemPrompt(org, knowledge, detectedIntent)
+    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason)
     : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────
