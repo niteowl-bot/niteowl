@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/server";
+
 import HoursForm from "./HoursForm";
 
 export interface BusinessHoursRow {
@@ -22,7 +24,9 @@ export default async function BusinessHoursPage() {
 
   const { data: org } = await supabase
     .from("organisations")
-    .select("id, appointment_duration_minutes, emergency_mode_enabled")
+    .select(
+      "id, appointment_duration_minutes, emergency_mode_enabled, max_concurrent_bookings"
+    )
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -42,6 +46,7 @@ export default async function BusinessHoursPage() {
       initialHours={(hours ?? []) as BusinessHoursRow[]}
       initialDuration={org.appointment_duration_minutes ?? 60}
       initialEmergencyMode={org.emergency_mode_enabled ?? false}
+      initialMaxConcurrentBookings={org.max_concurrent_bookings ?? 1}
     />
   );
 }

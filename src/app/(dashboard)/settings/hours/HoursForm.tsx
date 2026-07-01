@@ -37,22 +37,57 @@ function buildInitialDays(initialHours: BusinessHoursRow[]): DayFormState[] {
   });
 }
 
+function toMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function validateDay(d: DayFormState): string | null {
+  if (d.is_closed) return null;
+  if (!d.open_time || !d.close_time) return "Open and close time are required.";
+  if (toMinutes(d.close_time) <= toMinutes(d.open_time)) {
+    return "Close time must be after open time.";
+  }
+  const hasLunchStart = !!d.lunch_start;
+  const hasLunchEnd = !!d.lunch_end;
+  if (hasLunchStart !== hasLunchEnd) {
+    return "Both lunch start and end are required if either is set.";
+  }
+  if (hasLunchStart && hasLunchEnd) {
+    if (toMinutes(d.lunch_end) <= toMinutes(d.lunch_start)) {
+      return "Lunch end must be after lunch start.";
+    }
+    if (
+      toMinutes(d.lunch_start) < toMinutes(d.open_time) ||
+      toMinutes(d.lunch_end) > toMinutes(d.close_time)
+    ) {
+      return "Lunch break must fall within open hours.";
+    }
+  }
+  return null;
+}
+
 export default function HoursForm({
   orgId,
   initialHours,
   initialDuration,
   initialEmergencyMode,
+  initialMaxConcurrentBookings,
 }: {
   orgId: string;
   initialHours: BusinessHoursRow[];
   initialDuration: number;
   initialEmergencyMode: boolean;
+  initialMaxConcurrentBookings: number;
 }) {
   const [days, setDays] = useState<DayFormState[]>(() =>
     buildInitialDays(initialHours)
   );
   const [duration, setDuration] = useState(initialDuration);
   const [emergencyMode, setEmergencyMode] = useState(initialEmergencyMode);
+  const [maxConcurrentBookings, setMaxConcurrentBookings] = useState(
+    initialMaxConcurrentBookings
+  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -63,7 +98,19 @@ export default function HoursForm({
     );
   }
 
+  const dayErrors = emergencyMode ? days.map(() => null) : days.map(validateDay);
+  const capacityError =
+    Number.isInteger(maxConcurrentBookings) && maxConcurrentBookings >= 1
+      ? null
+      : "Must be a whole number of at least 1.";
+  const hasErrors = dayErrors.some(Boolean) || !!capacityError;
+
   async function handleSave() {
+    if (hasErrors) {
+      setSaveError("Please fix the errors below before saving.");
+      return;
+    }
+
     setSaving(true);
     setSaveError(null);
 
@@ -94,6 +141,7 @@ export default function HoursForm({
       .update({
         appointment_duration_minutes: duration,
         emergency_mode_enabled: emergencyMode,
+        max_concurrent_bookings: maxConcurrentBookings,
       })
       .eq("id", orgId);
 
@@ -158,6 +206,27 @@ export default function HoursForm({
           onChange={(e) => setDuration(Number(e.target.value))}
           className={`${inputCls} w-32`}
         />
+      </div>
+
+      {/* Max concurrent bookings */}
+      <div className="mb-6 rounded-xl border border-slate-800 bg-slate-800/50 p-4">
+        <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-400">
+          Max Concurrent Bookings
+        </label>
+        <p className="mb-2 text-xs text-slate-500">
+          How many appointments Remy can book into the same time slot.
+        </p>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={maxConcurrentBookings}
+          onChange={(e) => setMaxConcurrentBookings(Number(e.target.value))}
+          className={`${inputCls} w-32`}
+        />
+        {capacityError && (
+          <p className="mt-2 text-xs text-red-400">{capacityError}</p>
+        )}
       </div>
 
       {/* Weekday rows */}
@@ -229,6 +298,9 @@ export default function HoursForm({
                 />
               </div>
             </div>
+            {dayErrors[index] && (
+              <p className="mt-2 text-xs text-red-400">{dayErrors[index]}</p>
+            )}
           </div>
         ))}
       </div>
@@ -237,7 +309,7 @@ export default function HoursForm({
       <div className="mt-8 flex items-center gap-4">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || hasErrors}
           className="rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50 transition"
         >
           {saving ? "Saving…" : "Save changes"}
