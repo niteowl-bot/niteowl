@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
+import { parseDatetimeToIso } from "@/lib/parseDatetime";
 
 export const runtime = "nodejs";
 
@@ -359,6 +360,7 @@ interface LeadRow {
   phone: string | null;
   service_needed: string | null;
   preferred_datetime: string | null;
+  appointment_datetime: string | null;
   message: string | null;
   status: string;
   conversation_id: string | null;
@@ -452,14 +454,22 @@ async function findOpenLeadForCapture(
 
 function isBookingConfirmed(
   intent: LeadIntent,
-  preferredDatetime: string | null,
+  appointmentIso: string | null,
   phone: string | null,
   email: string | null
 ): boolean {
   if (intent !== "new_booking" && intent !== "reschedule") return false;
   const hasContact = Boolean(phone || email);
-  const hasTime = Boolean(preferredDatetime);
-  return hasContact && hasTime;
+  const hasConfirmedTime = Boolean(appointmentIso);
+  return hasContact && hasConfirmedTime;
+}
+
+// ── Parse free-text datetime into ISO timestamp ──────────────────
+
+async function resolveAppointmentDatetime(
+  preferredDatetime: string | null
+): Promise<{ iso: string | null; failed: boolean }> {
+  return parseDatetimeToIso(preferredDatetime, "Europe/London");
 }
 
 
@@ -476,6 +486,14 @@ async function capturePartialLead(
       : null;
 
   console.log("[lead capture] intent:", extracted.intent, "| conversationId:", safeConversationId);
+  const { iso: resolvedIso, failed: datetimeParseFailed } =
+    await resolveAppointmentDatetime(extracted.preferred_datetime);
+
+  if (datetimeParseFailed) {
+    console.error("[lead capture] datetime parsing failed for:", extracted.preferred_datetime);
+  }
+
+  
 
   const existing = await findOpenLeadForCapture(
     supabase,
@@ -494,13 +512,18 @@ async function capturePartialLead(
     const mergedEmail = extracted.email ?? existing.email;
     const mergedPhone = extracted.phone ?? existing.phone;
 
+    const updatedAppointmentIso =
+      extracted.intent === "reschedule" && extracted.preferred_datetime
+        ? resolvedIso
+        : resolvedIso ?? existing.appointment_datetime;
+
     const nextStatus: LeadStatus =
       PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
       existing.status === "booked"
         ? (existing.status as LeadStatus)
         : isBookingConfirmed(
             extracted.intent,
-            updatedDatetime,
+            updatedAppointmentIso,
             mergedPhone,
             mergedEmail
           )
@@ -517,11 +540,13 @@ async function capturePartialLead(
         extracted.intent
       ),
       preferred_datetime: updatedDatetime,
+      appointment_datetime: updatedAppointmentIso,
       message: deduplicateMessage(existing.message, userMessage),
       status: nextStatus,
       ai_confidence: extracted.confidence,
       ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
     };
+
 
 
     const { error: updateError } = await supabase
@@ -539,6 +564,15 @@ async function capturePartialLead(
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
+  const insertStatus: LeadStatus = isBookingConfirmed(
+    extracted.intent,
+    resolvedIso,
+    extracted.phone,
+    extracted.email
+  )
+    ? "booked"
+    : "new";
+
   const { data: inserted, error: insertError } = await supabase
     .from("leads")
     .insert({
@@ -550,12 +584,14 @@ async function capturePartialLead(
       phone: extracted.phone,
       service_needed: extracted.service ?? userMessage,
       preferred_datetime: extracted.preferred_datetime,
+      appointment_datetime: resolvedIso,
       message: userMessage,
       ai_confidence: extracted.confidence,
-      status: "new",
+      status: insertStatus,
     })
     .select("id")
     .single();
+
 
   if (insertError) {
     console.error("[lead capture] insert failed:", insertError.message);

@@ -25,11 +25,13 @@ export default async function CalendarPage() {
   const { data: leads } = await supabase
     .from("leads")
     .select(
-      "id, name, phone, email, service_needed, preferred_datetime, message, source, status, ai_confidence, notes, created_at"
+      "id, name, phone, email, service_needed, preferred_datetime, appointment_datetime, message, source, status, ai_confidence, notes, created_at"
     )
     .eq("org_id", org.id)
-    .not("preferred_datetime", "is", null)
-    .order("created_at", { ascending: false });
+    .not("appointment_datetime", "is", null)
+    .order("appointment_datetime", { ascending: true });
+
+
 
   return (
     <CalendarView

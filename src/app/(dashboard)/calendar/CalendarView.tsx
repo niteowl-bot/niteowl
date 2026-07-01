@@ -13,6 +13,7 @@ export type CalendarLead = {
   email: string | null;
   service_needed: string | null;
   preferred_datetime: string | null;
+  appointment_datetime: string | null;
   message: string | null;
   source: string | null;
   status: string | null;
@@ -334,7 +335,7 @@ function MonthView({
   function leadsForDay(day: number) {
     const d = new Date(year, month, day);
     return leads.filter((l) => {
-      const parsed = parseAppointmentDate(l.preferred_datetime);
+      const parsed = parseAppointmentDate(l.appointment_datetime);
       return parsed && isSameDay(parsed, d);
     });
   }
@@ -425,7 +426,7 @@ function WeekView({
       <div className="grid grid-cols-7 divide-x divide-slate-800">
         {days.map((d, i) => {
           const dayLeads = leads.filter((l) => {
-            const parsed = parseAppointmentDate(l.preferred_datetime);
+            const parsed = parseAppointmentDate(l.appointment_datetime);
             return parsed && isSameDay(parsed, d);
           });
           return (
@@ -453,7 +454,7 @@ function DayView({
   onSelect: (lead: CalendarLead) => void;
 }) {
   const dayLeads = leads.filter((l) => {
-    const parsed = parseAppointmentDate(l.preferred_datetime);
+    const parsed = parseAppointmentDate(l.appointment_datetime);
     return parsed && isSameDay(parsed, date);
   });
 
@@ -499,9 +500,15 @@ function DayView({
                     <p className="mt-0.5 text-sm opacity-90">
                       {l.service_needed ?? "Appointment"}
                     </p>
-                    {l.preferred_datetime && (
-                      <p className="mt-1 text-xs opacity-75">{l.preferred_datetime}</p>
-                    )}
+{l.appointment_datetime && (
+  <p className="mt-1 text-xs opacity-75">
+    {new Intl.DateTimeFormat("en-IE", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(l.appointment_datetime))}
+  </p>
+)}
+   
                   </div>
                   <span className="shrink-0 rounded-full bg-white/20 px-2.5 py-0.5 text-xs capitalize">
                     {l.status}
@@ -540,7 +547,7 @@ export default function CalendarView({
 
   // Parseable leads only (those with a date we can actually position)
   const parseableLeads = useMemo(
-    () => leads.filter((l) => parseAppointmentDate(l.preferred_datetime) !== null),
+    () => leads.filter((l) => parseAppointmentDate(l.appointment_datetime) !== null),
     [leads]
   );
 
