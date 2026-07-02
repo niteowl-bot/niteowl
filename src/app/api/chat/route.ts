@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
 import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { sendBookingConfirmationEmails } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -483,6 +485,39 @@ async function resolveAppointmentDatetime(
   return parseDatetimeToIso(preferredDatetime, "Europe/London");
 }
 
+async function getOrgOwnerEmail(
+  orgId: string
+): Promise<{ email: string; businessName: string } | null> {
+
+  try {
+    const admin = createAdminClient();
+
+    const { data: org, error: orgError } = await admin
+      .from("organisations")
+      .select("owner_id, business_name")
+      .eq("id", orgId)
+      .single();
+
+    if (orgError || !org?.owner_id) {
+      console.error("[email] Could not resolve org owner:", orgError?.message);
+      return null;
+    }
+
+    const { data: userData, error: userError } =
+      await admin.auth.admin.getUserById(org.owner_id);
+
+    if (userError || !userData?.user?.email) {
+      console.error("[email] Could not resolve owner email:", userError?.message);
+      return null;
+    }
+
+    return { email: userData.user.email, businessName: org.business_name ?? "the business" };
+  } catch (err) {
+    console.error("[email] Unexpected error resolving owner email:", err);
+    return null;
+  }
+}
+
 
 async function capturePartialLead(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -600,6 +635,21 @@ async function capturePartialLead(
       console.error("[lead capture] update failed:", updateError.message);
     } else {
       console.log("[lead capture] updated existing lead:", existing.id);
+      if (nextStatus === "booked" && existing.status !== "booked") {
+      const ownerInfo = await getOrgOwnerEmail(orgId);
+      sendBookingConfirmationEmails({
+        customerName: extracted.name ?? existing.name,
+        customerEmail: mergedEmail,
+        businessName: ownerInfo?.businessName ?? "the business",
+        businessOwnerEmail: ownerInfo?.email ?? null,
+        appointmentDatetime: updatedAppointmentIso ?? existing.appointment_datetime ?? "",
+        bookingReference: existing.id.slice(0, 8).toUpperCase(),
+        serviceNeeded: existing.service_needed,
+      }).catch((err) =>
+        console.error("[email] Failed to send booking confirmation:", err)
+      );
+    }
+
     }
 
     return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
@@ -642,6 +692,21 @@ async function capturePartialLead(
     console.error("[lead capture] insert failed:", insertError.message);
   } else {
     console.log("[lead capture] inserted new lead:", inserted?.id);
+    if (insertStatus === "booked") {
+      const ownerInfo = await getOrgOwnerEmail(orgId);
+      sendBookingConfirmationEmails({
+        customerName: extracted.name,
+        customerEmail: extracted.email,
+        businessName: ownerInfo?.businessName ?? "the business",
+        businessOwnerEmail: ownerInfo?.email ?? null,
+        appointmentDatetime: resolvedIso ?? "",
+        bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
+        serviceNeeded: extracted.service ?? userMessage,
+      }).catch((err) =>
+        console.error("[email] Failed to send booking confirmation:", err)
+      );
+    }
+
   }
 return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
 }
