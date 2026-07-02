@@ -97,7 +97,7 @@ export default async function DashboardPage() {
         </div>
 {/* Add to the grid of InfoCards, or below the existing cards */}
 <a
-  href="/dashboard/chat"
+  href="/chat"
   className="col-span-full mt-2 flex items-center gap-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 transition hover:border-blue-500/40 hover:bg-blue-500/8 group"
 >
   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600/20 text-blue-400 group-hover:bg-blue-600/30 transition">

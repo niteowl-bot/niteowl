@@ -383,8 +383,10 @@ async function findOpenLeadForCapture(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
   conversationId: string | null,
-  extracted: ExtractedLead
+  extracted: ExtractedLead,
+  leadSource: string
 ): Promise<LeadRow | null> {
+
   // ── Layer 1: exact conversation_id match on a mergeable lead ─────
   if (conversationId) {
     const { data, error } = await supabase
@@ -446,7 +448,7 @@ async function findOpenLeadForCapture(
     .from("leads")
     .select(LEAD_SELECT_COLUMNS)
     .eq("org_id", orgId)
-    .eq("source", "chat")
+    .eq("source", leadSource)
     .in("status", MERGEABLE_STATUSES)
     .gte("created_at", thirtyMinutesAgo)
     .order("created_at", { ascending: false })
@@ -524,8 +526,10 @@ async function capturePartialLead(
   orgId: string,
   conversationId: string | null | undefined,
   userMessage: string,
-  extracted: ExtractedLead
+  extracted: ExtractedLead,
+  leadSource: string = "chat"
 ): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null }> {
+
   const safeConversationId =
     typeof conversationId === "string" && conversationId.trim().length > 0
       ? conversationId.trim()
@@ -575,8 +579,10 @@ async function capturePartialLead(
     supabase,
     orgId,
     safeConversationId,
-    extracted
+    extracted,
+    leadSource
   );
+
 
   if (existing) {
     // ── Update path — merge into the existing open lead ───────────
@@ -673,7 +679,7 @@ async function capturePartialLead(
     .insert({
       org_id: orgId,
       ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
-      source: "chat",
+      source: leadSource,
       name: extracted.name,
       email: extracted.email,
       phone: extracted.phone,
@@ -867,7 +873,14 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { messages, conversationId, orgId } = await req.json();
+const { messages, conversationId, orgId, source } = await req.json();
+
+  if (!messages || !conversationId || !orgId) {
+    return new Response("Missing required fields", { status: 400 });
+  }
+
+  const leadSource = source === "dashboard_preview" ? "dashboard_preview" : "chat";
+
 
   if (!messages || !conversationId || !orgId) {
     return new Response("Missing required fields", { status: 400 });
@@ -897,8 +910,10 @@ let outsideBusinessHours = false;
           orgId,
           conversationId,
           latestUserMessage,
-          extracted
+          extracted,
+          leadSource
         );
+
         outsideBusinessHours = captureResult.outsideBusinessHours;
         suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
         unavailableReason = captureResult.unavailableReason;

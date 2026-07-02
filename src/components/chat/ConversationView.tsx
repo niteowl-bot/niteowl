@@ -179,11 +179,13 @@ export default function ConversationView({
     setStreaming(true);
     setStreamingContent("");
 
-    await streamChat({
-      messages: context,
-      conversationId: convoId,
-      orgId,
-      onToken: (token) => {
+   await streamChat({
+        messages: context,
+        conversationId: convoId,
+        orgId,
+        source: "dashboard_preview",
+        onToken: (token) => {
+
         setStreamingContent((prev) => prev + token);
       },
       onDone: async (fullText) => {

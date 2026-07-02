@@ -11,6 +11,7 @@ export async function streamChat({
   messages,
   conversationId,
   orgId,
+  source,
   onToken,
   onDone,
   onError,
@@ -18,14 +19,16 @@ export async function streamChat({
   messages: ChatMessage[];
   conversationId: string;
   orgId: string;
+  source?: string;
   onToken: (token: string) => void;
   onDone: (fullText: string) => void;
   onError: (err: string) => void;
 }) {
+
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, conversationId, orgId }),
+    body: JSON.stringify({ messages, conversationId, orgId, source }),
   });
 
   if (!res.ok || !res.body) {
