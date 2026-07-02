@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import SetupChecklist from "./SetupChecklist";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export default async function DashboardPage() {
 
   const { data: org, error: orgError } = await supabase
     .from("organisations")
-    .select("business_name, business_type, primary_goal, website, description")
+    .select("id, business_name, business_type, primary_goal, website, description")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false })
 .limit(1)
@@ -66,6 +67,8 @@ export default async function DashboardPage() {
             Here's what Remy knows about your business.
           </p>
         </div>
+{/* Setup checklist */}
+<SetupChecklist orgId={org.id} />
 
         {/* Detail cards grid */}
         <div className="grid gap-4 sm:grid-cols-2">

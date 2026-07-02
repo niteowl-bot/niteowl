@@ -51,6 +51,156 @@ const CATEGORY_ORDER = [
   "custom_instruction",
 ];
 
+// ── Reusable form (used for both Add and Edit) ─────────────────────
+
+interface RecordFormValues {
+  category: string;
+  title: string;
+  content: string;
+}
+
+function RecordForm({
+  initialValues,
+  submitLabel,
+  onSubmit,
+  onCancel,
+  isPending,
+}: {
+  initialValues: RecordFormValues;
+  submitLabel: string;
+  onSubmit: (values: RecordFormValues) => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const [form, setForm] = useState<RecordFormValues>(initialValues);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const inputBase =
+    "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 hover:border-white/20";
+
+  const labelBase =
+    "mb-1.5 block text-xs font-medium uppercase tracking-wide text-white/40";
+
+  function handleFormChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setFormError(null);
+  }
+
+  function handleSubmit() {
+    if (!form.title.trim() || !form.content.trim()) {
+      setFormError("Title and content are both required.");
+      return;
+    }
+    onSubmit({
+      category: form.category,
+      title: form.title.trim(),
+      content: form.content.trim(),
+    });
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.07] bg-[#13151c] p-6">
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="category" className={labelBase}>
+            Category
+          </label>
+          <div className="relative">
+            <select
+              id="category"
+              name="category"
+              value={form.category}
+              onChange={handleFormChange}
+              className={`${inputBase} appearance-none pr-9`}
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value} className="bg-[#13151c] text-white">
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            <ChevronIcon />
+          </div>
+          <p className="mt-1.5 text-xs text-white/25">
+            {CATEGORY_DESCRIPTIONS[form.category]}
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="title" className={labelBase}>
+            Title
+          </label>
+          <input
+            id="title"
+            name="title"
+            type="text"
+            placeholder={
+              form.category === "faq"
+                ? "e.g. What are your call-out fees?"
+                : form.category === "opening_hours"
+                ? "e.g. Monday to Friday"
+                : "e.g. Emergency Plumbing"
+            }
+            value={form.title}
+            onChange={handleFormChange}
+            className={inputBase}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="content" className={labelBase}>
+            Content
+          </label>
+          <textarea
+            id="content"
+            name="content"
+            rows={4}
+            placeholder={
+              form.category === "faq"
+                ? "e.g. Our call-out fee is £75 within a 10-mile radius."
+                : form.category === "opening_hours"
+                ? "e.g. 8am – 6pm"
+                : form.category === "custom_instruction"
+                ? "e.g. Always end responses by asking if there is anything else you can help with."
+                : "Describe this in detail…"
+            }
+            value={form.content}
+            onChange={handleFormChange}
+            className={`${inputBase} resize-none leading-relaxed`}
+          />
+        </div>
+      </div>
+
+      {formError && <p className="mt-3 text-xs text-red-400">{formError}</p>}
+
+      <div className="mt-5 flex items-center justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="rounded-lg px-4 py-2 text-sm text-white/40 transition hover:text-white/70"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={isPending}
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          {isPending ? (
+            <>
+              <SpinnerIcon />
+              Saving…
+            </>
+          ) : (
+            submitLabel
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────
 
 export default function KnowledgeClient({
@@ -63,18 +213,10 @@ export default function KnowledgeClient({
   initialRecords: KnowledgeRecord[];
 }) {
   const [records, setRecords] = useState<KnowledgeRecord[]>(initialRecords);
-  const [showForm, setShowForm] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  const [form, setForm] = useState({
-    category: "faq",
-    title: "",
-    content: "",
-  });
-
-  // ── Group records by category ──────────────────────────────────
 
   const grouped = CATEGORY_ORDER.reduce<Record<string, KnowledgeRecord[]>>(
     (acc, cat) => {
@@ -86,53 +228,55 @@ export default function KnowledgeClient({
 
   const totalCount = records.length;
 
-  // ── Handlers ───────────────────────────────────────────────────
-
-  function handleFormChange(
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
-  ) {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setFormError(null);
-  }
-
-  async function handleCreate() {
-    if (!form.title.trim() || !form.content.trim()) {
-      setFormError("Title and content are both required.");
-      return;
-    }
-
+  async function handleCreate(values: RecordFormValues) {
     startTransition(async () => {
-      setFormError(null);
       const supabase = createClient();
 
       const { data, error } = await supabase
         .from("business_knowledge")
         .insert({
           org_id: orgId,
-          category: form.category,
-          title: form.title.trim(),
-          content: form.content.trim(),
-          display_order: grouped[form.category]?.length ?? 0,
+          category: values.category,
+          title: values.title,
+          content: values.content,
+          display_order: grouped[values.category]?.length ?? 0,
         })
-        .select(
-          "id, category, title, content, display_order, is_active, created_at"
-        )
+        .select("id, category, title, content, display_order, is_active, created_at")
         .single();
 
       if (error || !data) {
-  console.error("SUPABASE INSERT ERROR:", error);
-  alert(JSON.stringify(error, null, 2));
-  setFormError(error?.message ?? "Failed to save.");
-  return;
-}
-
-
+        console.error("SUPABASE INSERT ERROR:", error);
+        return;
+      }
 
       setRecords((prev) => [...prev, data as KnowledgeRecord]);
-      setForm({ category: "faq", title: "", content: "" });
-      setShowForm(false);
+      setShowAddForm(false);
+    });
+  }
+
+  async function handleUpdate(id: string, values: RecordFormValues) {
+    startTransition(async () => {
+      const supabase = createClient();
+
+      const { data, error } = await supabase
+        .from("business_knowledge")
+        .update({
+          category: values.category,
+          title: values.title,
+          content: values.content,
+        })
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .select("id, category, title, content, display_order, is_active, created_at")
+        .single();
+
+      if (error || !data) {
+        console.error("SUPABASE UPDATE ERROR:", error);
+        return;
+      }
+
+      setRecords((prev) => prev.map((r) => (r.id === id ? (data as KnowledgeRecord) : r)));
+      setEditingId(null);
     });
   }
 
@@ -140,10 +284,7 @@ export default function KnowledgeClient({
     setDeleteError(null);
     const supabase = createClient();
 
-    const { error } = await supabase
-      .from("business_knowledge")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("business_knowledge").delete().eq("id", id);
 
     if (error) {
       setDeleteError("Failed to delete record. Please try again.");
@@ -153,46 +294,25 @@ export default function KnowledgeClient({
     setRecords((prev) => prev.filter((r) => r.id !== id));
   }
 
-  // ── Shared styles ──────────────────────────────────────────────
-
-  const inputBase =
-    "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-white/25 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 hover:border-white/20";
-
-  const labelBase =
-    "mb-1.5 block text-xs font-medium uppercase tracking-wide text-white/40";
-
-  // ── Render ─────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-[#0d0f14] px-4 py-10 md:px-8">
-      {/* Ambient glow */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 left-1/2 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-blue-600/8 blur-3xl" />
       </div>
 
       <div className="relative mx-auto max-w-3xl">
-        {/* Header */}
         <header className="mb-8 flex items-start justify-between gap-4">
           <div>
             <div className="mb-1 flex items-center gap-2">
-              <a
-                href="/dashboard"
-                className="text-xs text-white/30 transition hover:text-white/60"
-              >
+              <a href="/dashboard" className="text-xs text-white/30 transition hover:text-white/60">
                 Dashboard
               </a>
               <span className="text-white/15">/</span>
               <span className="text-xs text-white/50">Knowledge Base</span>
             </div>
-            <h1 className="text-xl font-semibold text-white">
-              Knowledge Base
-            </h1>
+            <h1 className="text-xl font-semibold text-white">Knowledge Base</h1>
             <p className="mt-1 text-sm text-white/40">
-              Everything Remy knows about{" "}
-              <span className="text-white/60">{orgName}</span>.{" "}
+              Everything Remy knows about <span className="text-white/60">{orgName}</span>.{" "}
               {totalCount > 0 && (
                 <span>{totalCount} record{totalCount !== 1 ? "s" : ""} active.</span>
               )}
@@ -201,156 +321,46 @@ export default function KnowledgeClient({
 
           <button
             onClick={() => {
-              setShowForm((s) => !s);
-              setFormError(null);
+              setShowAddForm((s) => !s);
+              setEditingId(null);
             }}
             className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             <PlusIcon />
-            {showForm ? "Cancel" : "Add record"}
+            {showAddForm ? "Cancel" : "Add record"}
           </button>
         </header>
 
-        {/* Delete error */}
         {deleteError && (
           <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {deleteError}
           </div>
         )}
 
-        {/* Add form */}
-        {showForm && (
-          <div className="mb-8 rounded-2xl border border-white/[0.07] bg-[#13151c] p-6">
-            <h2 className="mb-5 text-sm font-semibold text-white">
-              New knowledge record
-            </h2>
-
-            <div className="space-y-4">
-              {/* Category */}
-              <div>
-                <label htmlFor="category" className={labelBase}>
-                  Category
-                </label>
-                <div className="relative">
-                  <select
-                    id="category"
-                    name="category"
-                    value={form.category}
-                    onChange={handleFormChange}
-                    className={`${inputBase} appearance-none pr-9`}
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option
-                        key={c.value}
-                        value={c.value}
-                        className="bg-[#13151c] text-white"
-                      >
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronIcon />
-                </div>
-                <p className="mt-1.5 text-xs text-white/25">
-                  {CATEGORY_DESCRIPTIONS[form.category]}
-                </p>
-              </div>
-
-              {/* Title */}
-              <div>
-                <label htmlFor="title" className={labelBase}>
-                  Title
-                </label>
-                <input
-                  id="title"
-                  name="title"
-                  type="text"
-                  placeholder={
-                    form.category === "faq"
-                      ? "e.g. What are your call-out fees?"
-                      : form.category === "opening_hours"
-                      ? "e.g. Monday to Friday"
-                      : "e.g. Emergency Plumbing"
-                  }
-                  value={form.title}
-                  onChange={handleFormChange}
-                  className={inputBase}
-                />
-              </div>
-
-              {/* Content */}
-              <div>
-                <label htmlFor="content" className={labelBase}>
-                  Content
-                </label>
-                <textarea
-                  id="content"
-                  name="content"
-                  rows={4}
-                  placeholder={
-                    form.category === "faq"
-                      ? "e.g. Our call-out fee is £75 within a 10-mile radius."
-                      : form.category === "opening_hours"
-                      ? "e.g. 8am – 6pm"
-                      : form.category === "custom_instruction"
-                      ? "e.g. Always end responses by asking if there is anything else you can help with."
-                      : "Describe this in detail…"
-                  }
-                  value={form.content}
-                  onChange={handleFormChange}
-                  className={`${inputBase} resize-none leading-relaxed`}
-                />
-              </div>
-            </div>
-
-            {formError && (
-              <p className="mt-3 text-xs text-red-400">{formError}</p>
-            )}
-
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowForm(false);
-                  setFormError(null);
-                  setForm({ category: "faq", title: "", content: "" });
-                }}
-                className="rounded-lg px-4 py-2 text-sm text-white/40 transition hover:text-white/70"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={isPending}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                {isPending ? (
-                  <>
-                    <SpinnerIcon />
-                    Saving…
-                  </>
-                ) : (
-                  "Save record"
-                )}
-              </button>
-            </div>
+        {showAddForm && (
+          <div className="mb-8">
+            <h2 className="mb-3 text-sm font-semibold text-white">New knowledge record</h2>
+            <RecordForm
+              initialValues={{ category: "faq", title: "", content: "" }}
+              submitLabel="Save record"
+              onSubmit={handleCreate}
+              onCancel={() => setShowAddForm(false)}
+              isPending={isPending}
+            />
           </div>
         )}
 
-        {/* Empty state */}
-        {totalCount === 0 && !showForm && (
+        {totalCount === 0 && !showAddForm && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 py-16 text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-white/5 text-white/20">
               <BookIcon />
             </div>
-            <p className="text-sm font-medium text-white/40">
-              No knowledge records yet
-            </p>
+            <p className="text-sm font-medium text-white/40">No knowledge records yet</p>
             <p className="mt-1 max-w-xs text-xs leading-relaxed text-white/25">
-              Add FAQs, services, pricing, and more so Remy can answer
-              customer questions accurately.
+              Add FAQs, services, pricing, and more so Remy can answer customer questions accurately.
             </p>
             <button
-              onClick={() => setShowForm(true)}
+              onClick={() => setShowAddForm(true)}
               className="mt-5 flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500"
             >
               <PlusIcon />
@@ -359,7 +369,6 @@ export default function KnowledgeClient({
           </div>
         )}
 
-        {/* Records grouped by category */}
         {totalCount > 0 && (
           <div className="space-y-6">
             {CATEGORY_ORDER.map((cat) => {
@@ -368,28 +377,44 @@ export default function KnowledgeClient({
 
               return (
                 <section key={cat}>
-                  {/* Category heading */}
                   <div className="mb-3 flex items-center gap-3">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-blue-600/15 text-blue-400">
                       <CategoryIcon category={cat} />
                     </span>
-                    <h2 className="text-sm font-semibold text-white">
-                      {CATEGORY_LABELS[cat]}
-                    </h2>
+                    <h2 className="text-sm font-semibold text-white">{CATEGORY_LABELS[cat]}</h2>
                     <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-white/30">
                       {items.length}
                     </span>
                   </div>
 
-                  {/* Records */}
                   <ul className="space-y-2">
-                    {items.map((record) => (
-                      <RecordRow
-                        key={record.id}
-                        record={record}
-                        onDelete={handleDelete}
-                      />
-                    ))}
+                    {items.map((record) =>
+                      editingId === record.id ? (
+                        <li key={record.id}>
+                          <RecordForm
+                            initialValues={{
+                              category: record.category,
+                              title: record.title,
+                              content: record.content,
+                            }}
+                            submitLabel="Save changes"
+                            onSubmit={(values) => handleUpdate(record.id, values)}
+                            onCancel={() => setEditingId(null)}
+                            isPending={isPending}
+                          />
+                        </li>
+                      ) : (
+                        <RecordRow
+                          key={record.id}
+                          record={record}
+                          onDelete={handleDelete}
+                          onEdit={() => {
+                            setEditingId(record.id);
+                            setShowAddForm(false);
+                          }}
+                        />
+                      )
+                    )}
                   </ul>
                 </section>
               );
@@ -406,9 +431,11 @@ export default function KnowledgeClient({
 function RecordRow({
   record,
   onDelete,
+  onEdit,
 }: {
   record: KnowledgeRecord;
   onDelete: (id: string) => void;
+  onEdit: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -424,19 +451,11 @@ function RecordRow({
   return (
     <li className="rounded-xl border border-white/[0.07] bg-[#13151c] transition hover:border-white/10">
       <div className="flex items-start gap-3 px-4 py-3.5">
-        {/* Text */}
         <div className="min-w-0 flex-1">
-          <button
-            onClick={() => setExpanded((e) => !e)}
-            className="w-full text-left"
-          >
-            <p className="truncate text-sm font-medium text-white/80">
-              {record.title}
-            </p>
+          <button onClick={() => setExpanded((e) => !e)} className="w-full text-left">
+            <p className="truncate text-sm font-medium text-white/80">{record.title}</p>
             {!expanded && (
-              <p className="mt-0.5 truncate text-xs text-white/30">
-                {record.content}
-              </p>
+              <p className="mt-0.5 truncate text-xs text-white/30">{record.content}</p>
             )}
           </button>
           {expanded && (
@@ -446,7 +465,6 @@ function RecordRow({
           )}
         </div>
 
-        {/* Actions */}
         <div className="flex shrink-0 items-center gap-1 pt-0.5">
           <button
             onClick={() => setExpanded((e) => !e)}
@@ -454,6 +472,14 @@ function RecordRow({
             aria-label={expanded ? "Collapse" : "Expand"}
           >
             <ChevronDownIcon expanded={expanded} />
+          </button>
+
+          <button
+            onClick={onEdit}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/20 transition hover:bg-white/5 hover:text-white/50"
+            aria-label="Edit record"
+          >
+            <EditIcon />
           </button>
 
           {confirming ? (
@@ -503,6 +529,14 @@ function TrashIcon() {
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
       <path d="M2 3.5h9M5 3.5V2.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5v1M5.5 6v3.5M7.5 6v3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       <path d="M3 3.5l.5 7a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5l.5-7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+      <path d="M9.5 1.5l2 2-7 7H2.5v-2l7-7Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
     </svg>
   );
 }
