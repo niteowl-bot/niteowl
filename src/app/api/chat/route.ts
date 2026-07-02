@@ -50,13 +50,15 @@ type LeadStatus =
   | "qualified"
   | "booked"
   | "lost"
-  | "cancelled";
+  | "cancelled"
+  | "needs_review";
+
 
 // Open statuses are eligible to receive merged updates from ongoing
 // conversation. Closed statuses (booked/lost/cancelled) represent a
 // concluded enquiry — any further contact starts a fresh lead.
 // "Open" describes dashboard/reporting semantics — an enquiry not yet booked.
-const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "awaiting_confirmation", "contacted", "qualified"];
+const OPEN_LEAD_STATUSES: LeadStatus[] = ["new", "awaiting_confirmation", "contacted", "qualified", "needs_review"];
 
 // "Mergeable" describes which leads can still receive updates from
 // follow-up messages in the same chat session. A booked appointment
@@ -68,7 +70,9 @@ const MERGEABLE_STATUSES: LeadStatus[] = [
   "contacted",
   "qualified",
   "booked",
+  "needs_review",
 ];
+
 
 // Statuses that must never be silently overwritten by the merge logic
 const PROTECTED_STATUSES: LeadStatus[] = ["contacted", "qualified"];
@@ -353,6 +357,99 @@ ${message}
     return { ...EMPTY_LEAD, confidence: 0.5 };
   }
 }
+// ── assessAnswerConfidence ────────────────────────────────────────
+
+interface ConfidenceAssessment {
+  needsReview: boolean;
+  reason: string | null;
+}
+
+/**
+ * Runs a lightweight, isolated check on whether the customer's message
+ * can be confidently answered using the business's knowledge base.
+ * This never touches booking, availability, or lead-merge logic — it
+ * only informs whether a "needs_review" lead should be created for
+ * question/unknown intents that fall outside what Remy actually knows.
+ */
+async function assessAnswerConfidence(
+  message: string,
+  knowledgeSummary: string
+): Promise<ConfidenceAssessment> {
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) return { needsReview: false, reason: null };
+
+  const prompt = `You are a confidence-checking assistant for a business AI receptionist.
+
+Given the business's available knowledge and a customer message, decide
+ONLY whether the knowledge base contains enough information to answer
+the customer confidently and accurately.
+
+Return ONLY a valid JSON object in this exact shape:
+{"needsReview": boolean, "reason": string or null}
+
+Rules:
+- needsReview is true ONLY if the message asks something the knowledge
+  base does not cover, or requires a judgement call outside general
+  business facts (e.g. a specific policy exception, a complaint, a
+  legal question, a request the business hasn't documented).
+- needsReview is false for greetings, small talk, questions clearly
+  answered by the knowledge below, and any booking-related message.
+- reason is a short (under 12 words) internal note for the business
+  explaining what the customer needs help with, or null if needsReview
+  is false.
+- Do not guess an answer. Only assess confidence.
+
+## Business knowledge available
+${knowledgeSummary || "No knowledge records configured."}
+
+## Customer message
+"""
+${message}
+"""
+
+Return ONLY the JSON object — no markdown, no explanation.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${openaiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 100,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[assessAnswerConfidence] OpenAI error:", res.status);
+      return { needsReview: false, reason: null };
+    }
+
+    const json = await res.json();
+    const raw: string = json.choices?.[0]?.message?.content ?? "";
+    const cleaned = raw
+      .trim()
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned) as Partial<ConfidenceAssessment>;
+
+    return {
+      needsReview: parsed.needsReview === true,
+      reason:
+        typeof parsed.reason === "string" ? parsed.reason.trim() || null : null,
+    };
+  } catch (err) {
+    console.error("[assessAnswerConfidence] parse error:", err);
+    return { needsReview: false, reason: null };
+  }
+}
 
 // ── capturePartialLead ───────────────────────────────────────────
 
@@ -527,8 +624,10 @@ async function capturePartialLead(
   conversationId: string | null | undefined,
   userMessage: string,
   extracted: ExtractedLead,
-  leadSource: string = "chat"
+  leadSource: string = "chat",
+  needsReview: boolean = false
 ): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null }> {
+
 
   const safeConversationId =
     typeof conversationId === "string" && conversationId.trim().length > 0
@@ -611,7 +710,10 @@ async function capturePartialLead(
           ) && !outsideBusinessHours
 
         ? "booked"
+        : needsReview
+        ? "needs_review"
         : "new";
+
 
     const updatePayload = {
       name: shouldUpdateName(extracted.name, existing.name),
@@ -671,7 +773,10 @@ async function capturePartialLead(
   ? "booked"
   : suggestedAlternativeIso
   ? "awaiting_confirmation"
+  : needsReview
+  ? "needs_review"
   : "new";
+
 
 
   const { data: inserted, error: insertError } = await supabase
@@ -919,8 +1024,42 @@ let outsideBusinessHours = false;
         unavailableReason = captureResult.unavailableReason;
 
       } else {
-        console.log("[post handler] intent not actionable — skipping lead capture");
+        console.log("[post handler] intent not actionable — checking answer confidence");
+
+        try {
+          const knowledgeResultForCheck = await supabase
+            .from("business_knowledge")
+            .select("category, title, content")
+            .eq("org_id", orgId)
+            .eq("is_active", true);
+
+          const knowledgeSummary = (knowledgeResultForCheck.data ?? [])
+            .map((r) => `- ${r.title}: ${r.content}`)
+            .join("\n");
+
+          const assessment = await assessAnswerConfidence(
+            latestUserMessage,
+            knowledgeSummary
+          );
+
+          if (assessment.needsReview) {
+            console.log("[post handler] low confidence — flagging for review:", assessment.reason);
+            await capturePartialLead(
+              supabase,
+              orgId,
+              conversationId,
+              latestUserMessage,
+              extracted,
+              leadSource,
+              true
+            );
+          }
+        } catch (err) {
+          console.error("[post handler] confidence check error:", err);
+        }
       }
+
+
     } catch (err) {
       console.error("[post handler] lead extraction/capture error:", err);
     }
