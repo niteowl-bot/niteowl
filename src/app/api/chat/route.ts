@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
 import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { sendBookingConfirmationEmails } from "@/lib/email";
+import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -584,7 +584,7 @@ async function resolveAppointmentDatetime(
   return parseDatetimeToIso(preferredDatetime, "Europe/London");
 }
 
-async function getOrgOwnerEmail(
+export async function getOrgOwnerEmail(
   orgId: string
 ): Promise<{ email: string; businessName: string } | null> {
 
@@ -626,7 +626,7 @@ async function capturePartialLead(
   extracted: ExtractedLead,
   leadSource: string = "chat",
   needsReview: boolean = false
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null; leadId: string | null }> {
 
 
   const safeConversationId =
@@ -760,7 +760,7 @@ async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: null };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
@@ -819,7 +819,7 @@ async function capturePartialLead(
     }
 
   }
-return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason };
+return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: inserted?.id ?? null };
 }
 
 
@@ -1043,17 +1043,30 @@ let outsideBusinessHours = false;
           );
 
           if (assessment.needsReview) {
-            console.log("[post handler] low confidence — flagging for review:", assessment.reason);
-            await capturePartialLead(
-              supabase,
-              orgId,
-              conversationId,
-              latestUserMessage,
-              extracted,
-              leadSource,
-              true
-            );
-          }
+  console.log("[post handler] low confidence — flagging for review:", assessment.reason);
+  const reviewResult = await capturePartialLead(
+    supabase,
+    orgId,
+    conversationId,
+    latestUserMessage,
+    extracted,
+    leadSource,
+    true
+  );
+
+  const ownerInfo = await getOrgOwnerEmail(orgId);
+  await sendNeedsReviewNotification({
+    businessOwnerEmail: ownerInfo?.email ?? null,
+    businessName: ownerInfo?.businessName ?? "the business",
+    customerName: extracted.name,
+    customerEmail: extracted.email,
+    customerPhone: extracted.phone,
+    question: latestUserMessage,
+    conversationContext: null,
+    leadId: reviewResult.leadId,
+  });
+}
+
         } catch (err) {
           console.error("[post handler] confidence check error:", err);
         }

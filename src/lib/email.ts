@@ -99,3 +99,59 @@ export async function sendBookingConfirmationEmails(
     );
   }
 }
+interface NeedsReviewNotificationParams {
+  businessOwnerEmail: string | null;
+  businessName: string;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  question: string;
+  conversationContext?: string | null;
+  leadId: string | null;
+}
+
+export async function sendNeedsReviewNotification(
+  params: NeedsReviewNotificationParams
+): Promise<void> {
+  const {
+    businessOwnerEmail,
+    businessName,
+    customerName,
+    customerEmail,
+    customerPhone,
+    question,
+    conversationContext,
+    leadId,
+  } = params;
+
+  if (!businessOwnerEmail) {
+    console.error(
+      "[email] No business owner email available — skipped needs-review notification."
+    );
+    return;
+  }
+
+  const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/leads`;
+  const displayName = customerName?.trim() || "A customer";
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: businessOwnerEmail,
+      subject: "Customer enquiry requires review",
+      html: `
+        <p>Customer enquiry requires review.</p>
+        <p>
+          <strong>From:</strong> ${displayName}<br/>
+          ${customerEmail ? `<strong>Email:</strong> ${customerEmail}<br/>` : ""}
+          ${customerPhone ? `<strong>Phone:</strong> ${customerPhone}<br/>` : ""}
+        </p>
+        <p><strong>Question:</strong> ${question}</p>
+        ${conversationContext ? `<p><strong>Context:</strong> ${conversationContext}</p>` : ""}
+        <p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>
+      `,
+    });
+  } catch (err) {
+    console.error("[email] Failed to send needs-review notification:", err);
+  }
+}
