@@ -618,6 +618,75 @@ export async function getOrgOwnerEmail(
 }
 
 
+// ── Needs-review notification dedup ──────────────────────────────
+// The needs-review notification must only be sent once per review
+// episode, scoped by conversation: leads are merged across
+// conversations by contact details, so a lead-lifetime flag would
+// permanently silence notifications for returning customers. The flag
+// lives in the leads.metadata JSONB column as
+// needs_review_notification_sent = true plus the conversation it was
+// sent for. On any read/write failure we fall back to sending rather
+// than risk losing the notification entirely.
+
+async function hasNeedsReviewNotificationBeenSent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leadId: string | null,
+  conversationId: string | null
+): Promise<boolean> {
+  if (!leadId || !conversationId) return false;
+
+  try {
+    const { data } = await supabase
+      .from("leads")
+      .select("metadata")
+      .eq("id", leadId)
+      .maybeSingle();
+
+    const metadata = (data?.metadata ?? {}) as Record<string, unknown>;
+    return (
+      metadata.needs_review_notification_sent === true &&
+      metadata.needs_review_notified_conversation_id === conversationId
+    );
+  } catch (err) {
+    console.error("[needs-review] Failed to read notification flag:", err);
+    return false;
+  }
+}
+
+async function markNeedsReviewNotificationSent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  leadId: string | null,
+  conversationId: string | null
+): Promise<void> {
+  if (!leadId) return;
+
+  try {
+    const { data } = await supabase
+      .from("leads")
+      .select("metadata")
+      .eq("id", leadId)
+      .maybeSingle();
+
+    const metadata = {
+      ...((data?.metadata as Record<string, unknown>) ?? {}),
+      needs_review_notification_sent: true,
+      needs_review_notified_conversation_id: conversationId,
+    };
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ metadata })
+      .eq("id", leadId);
+
+    if (error) {
+      console.error("[needs-review] Failed to set notification flag:", error.message);
+    }
+  } catch (err) {
+    console.error("[needs-review] Failed to set notification flag:", err);
+  }
+}
+
+
 async function capturePartialLead(
   supabase: Awaited<ReturnType<typeof createClient>>,
   orgId: string,
@@ -760,7 +829,7 @@ async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: null };
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
@@ -857,7 +926,8 @@ function buildSystemPrompt(
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
   unavailableReason: "hours" | "capacity" | null = null,
-  handoffAskContact: boolean = false
+  handoffAskContact: boolean = false,
+  handoffContactCaptured: boolean = false
 ): string {
 
   const sections: string[] = [];
@@ -976,6 +1046,21 @@ unavailableReason === "capacity"
     );
   }
 
+  if (handoffContactCaptured) {
+    sections.push(
+      [
+        "IMPORTANT — HUMAN HANDOFF MODE (contact details already provided):",
+        "You could not confidently answer the customer's last question. A team member will personally review it and be in touch shortly using the contact details the customer has already provided.",
+        "These instructions override every rule above for this reply:",
+        "- Do NOT attempt to answer the original question yourself.",
+        "- Do NOT confirm or deny that the business provides the service they asked about.",
+        "- Do NOT treat this as a booking. Do NOT ask for a preferred time, date, or appointment details.",
+        "- Do NOT ask for contact details again.",
+        "In your reply: thank them, confirm a team member will review their enquiry and be in touch shortly. Keep it warm and brief.",
+      ].join("\n")
+    );
+  }
+
 return sections.join("\n\n");
 }
 
@@ -1015,6 +1100,7 @@ let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
   let unavailableReason: "hours" | "capacity" | null = null;
   let handoffAskContact = false;
+  let handoffContactCaptured = false;
 
       if (latestUserMessage) {
     try {
@@ -1073,17 +1159,38 @@ let outsideBusinessHours = false;
 
       if (hasContact) {
 
-  const ownerInfo = await getOrgOwnerEmail(orgId);
-  await sendNeedsReviewNotification({
-    businessOwnerEmail: ownerInfo?.email ?? null,
-    businessName: ownerInfo?.businessName ?? "the business",
-    customerName: extracted.name,
-    customerEmail: extracted.email,
-    customerPhone: extracted.phone,
-    question: latestUserMessage,
-    conversationContext: null,
-    leadId: reviewResult.leadId,
-  });
+  // Contact details already provided — reply must be a human handoff,
+  // whether or not the owner notification was deduplicated.
+  handoffContactCaptured = true;
+
+  const alreadyNotified = await hasNeedsReviewNotificationBeenSent(
+    supabase,
+    reviewResult.leadId,
+    conversationId
+  );
+
+  if (alreadyNotified) {
+    console.log(
+      "[post handler] needs-review notification already sent for lead:",
+      reviewResult.leadId
+    );
+  } else {
+    const ownerInfo = await getOrgOwnerEmail(orgId);
+    const notificationSent = await sendNeedsReviewNotification({
+      businessOwnerEmail: ownerInfo?.email ?? null,
+      businessName: ownerInfo?.businessName ?? "the business",
+      customerName: extracted.name,
+      customerEmail: extracted.email,
+      customerPhone: extracted.phone,
+      question: latestUserMessage,
+      conversationContext: null,
+      leadId: reviewResult.leadId,
+    });
+
+    if (notificationSent) {
+      await markNeedsReviewNotificationSent(supabase, reviewResult.leadId, conversationId);
+    }
+  }
 } else {
         handoffAskContact = true;
       }
@@ -1123,7 +1230,7 @@ let outsideBusinessHours = false;
   const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
 
   const systemPrompt = org
-    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact)
+    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured)
     : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────

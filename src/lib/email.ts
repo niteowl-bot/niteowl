@@ -110,9 +110,13 @@ interface NeedsReviewNotificationParams {
   leadId: string | null;
 }
 
+/**
+ * Returns true only when the email was accepted by Resend, so callers
+ * can safely record that the notification has been sent.
+ */
 export async function sendNeedsReviewNotification(
   params: NeedsReviewNotificationParams
-): Promise<void> {
+): Promise<boolean> {
   const {
     businessOwnerEmail,
     businessName,
@@ -128,7 +132,7 @@ export async function sendNeedsReviewNotification(
     console.error(
       "[email] No business owner email available — skipped needs-review notification."
     );
-    return;
+    return false;
   }
 
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/leads`;
@@ -151,7 +155,9 @@ export async function sendNeedsReviewNotification(
         <p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>
       `,
     });
+    return true;
   } catch (err) {
     console.error("[email] Failed to send needs-review notification:", err);
+    return false;
   }
 }
