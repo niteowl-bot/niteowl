@@ -695,7 +695,7 @@ async function capturePartialLead(
   extracted: ExtractedLead,
   leadSource: string = "chat",
   needsReview: boolean = false
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null; leadId: string | null }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null; leadId: string | null; needsReviewContactCaptured?: boolean }> {
 
 
   const safeConversationId =
@@ -781,6 +781,8 @@ async function capturePartialLead(
         ? "booked"
         : needsReview
         ? "needs_review"
+        : existing.status === "needs_review"
+        ? "needs_review"
         : "new";
 
 
@@ -808,10 +810,52 @@ async function capturePartialLead(
       .update(updatePayload)
       .eq("id", existing.id);
 
+    // A lead under review that just gained contact details (actionable
+    // intents only — the low-confidence flow handles its own notification)
+    // must trigger the pending owner notification and a handoff reply.
+    let needsReviewContactCaptured = false;
+
     if (updateError) {
       console.error("[lead capture] update failed:", updateError.message);
     } else {
       console.log("[lead capture] updated existing lead:", existing.id);
+
+      if (
+        !needsReview &&
+        nextStatus === "needs_review" &&
+        Boolean(mergedEmail || mergedPhone)
+      ) {
+        needsReviewContactCaptured = true;
+
+        const alreadyNotified = await hasNeedsReviewNotificationBeenSent(
+          supabase,
+          existing.id,
+          safeConversationId
+        );
+
+        if (alreadyNotified) {
+          console.log(
+            "[needs-review] notification already sent for this conversation — skipping (contact capture path)"
+          );
+        } else {
+          const ownerInfo = await getOrgOwnerEmail(orgId);
+          const notificationSent = await sendNeedsReviewNotification({
+            businessOwnerEmail: ownerInfo?.email ?? null,
+            businessName: ownerInfo?.businessName ?? "the business",
+            customerName: extracted.name ?? existing.name,
+            customerEmail: mergedEmail,
+            customerPhone: mergedPhone,
+            question: existing.message ?? userMessage,
+            conversationContext: null,
+            leadId: existing.id,
+          });
+
+          if (notificationSent) {
+            await markNeedsReviewNotificationSent(supabase, existing.id, safeConversationId);
+          }
+        }
+      }
+
       if (nextStatus === "booked" && existing.status !== "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
       sendBookingConfirmationEmails({
@@ -829,7 +873,7 @@ async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id };
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
@@ -1123,6 +1167,10 @@ let outsideBusinessHours = false;
         outsideBusinessHours = captureResult.outsideBusinessHours;
         suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
         unavailableReason = captureResult.unavailableReason;
+
+        if (captureResult.needsReviewContactCaptured) {
+          handoffContactCaptured = true;
+        }
 
       } else {
         console.log("[post handler] intent not actionable — checking answer confidence");
