@@ -857,6 +857,7 @@ function buildSystemPrompt(
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
   unavailableReason: "hours" | "capacity" | null = null,
+  handoffAskContact: boolean = false
 ): string {
 
   const sections: string[] = [];
@@ -962,6 +963,19 @@ unavailableReason === "capacity"
       ].join("\n")
     );
   }
+  if (handoffAskContact) {
+    sections.push(
+      [
+        "IMPORTANT — HUMAN HANDOFF MODE:",
+        "You could not confidently answer the customer's last question. A team member will follow up personally.",
+        "In your reply: politely let the customer know a team member will help with their question.",
+        "Ask for their name and the best email address or phone number to reach them on, if they have not already provided one.",
+        "Do NOT attempt to answer the original question yourself.",
+        "Reassure them someone will be in touch shortly. Keep it warm and brief.",
+      ].join("\n")
+    );
+  }
+
 return sections.join("\n\n");
 }
 
@@ -1000,6 +1014,7 @@ let detectedIntent: LeadIntent = "unknown";
 let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
   let unavailableReason: "hours" | "capacity" | null = null;
+  let handoffAskContact = false;
 
       if (latestUserMessage) {
     try {
@@ -1054,6 +1069,10 @@ let outsideBusinessHours = false;
     true
   );
 
+  const hasContact = Boolean(extracted.email || extracted.phone);
+
+      if (hasContact) {
+
   const ownerInfo = await getOrgOwnerEmail(orgId);
   await sendNeedsReviewNotification({
     businessOwnerEmail: ownerInfo?.email ?? null,
@@ -1065,7 +1084,11 @@ let outsideBusinessHours = false;
     conversationContext: null,
     leadId: reviewResult.leadId,
   });
-}
+} else {
+        handoffAskContact = true;
+      }
+    }
+
 
         } catch (err) {
           console.error("[post handler] confidence check error:", err);
@@ -1100,7 +1123,7 @@ let outsideBusinessHours = false;
   const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
 
   const systemPrompt = org
-    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason)
+    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact)
     : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────
