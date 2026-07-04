@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-04 (basic monitoring: error tracking + uptime health check)
+
+### Added
+- `@sentry/nextjs` wired up with the built-in `captureConsoleIntegration`, which reports every existing `console.error(...)` call across the codebase as a Sentry event with email alerting — no changes needed at any of the 28+ existing call sites in `leadCapture.ts`, `email.ts`, `availability.ts`, etc. Kept intentionally minimal: `tracesSampleRate: 0` (error tracking only, no performance tracing), console capture restricted to the `"error"` level so informational logs don't burn through the free-tier event quota
+- Public `/api/health` endpoint that checks real database connectivity (not just "the Next.js process is up"), meant to be pinged by an external uptime monitor (e.g. UptimeRobot, Better Uptime — free tier, external signup, not something committed to the repo)
+
+### Verified
+- Triggered a real `console.error` path locally (an invalid widget key) and confirmed the Sentry alert arrived
+- `tsc --noEmit` and `next build` pass
+
+### Action needed (outside this repo)
+- `NEXT_PUBLIC_SENTRY_DSN` must be added to Vercel's production environment variables for alerting to work there — it's in `.env.local` for dev only, not committed
+- An external uptime pinger should be pointed at `/api/health` for the "alerts" half of monitoring to actually notify anyone
+
 ## 2026-07-04 (customer cancellation/reschedule links)
 
 ### Added

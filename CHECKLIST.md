@@ -7,7 +7,7 @@
 - [x] Run one complete production signup → onboarding → widget → booking flow
 - [ ] Email booking confirmations (code path fixed and correct 2026-07-04; blocked on Resend custom domain — see below, real customers won't receive these until it's verified)
 - [x] Customer cancellation/reschedule links
-- [ ] Basic monitoring (logs and alerts)
+- [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
 
 ## 🟡 Business onboarding
 - [ ] Widget installation guide (WordPress, Wix, Squarespace, HTML)
