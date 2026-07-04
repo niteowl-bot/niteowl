@@ -1,4 +1,16 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+// Every function here is called from both authenticated contexts (the
+// dashboard preview chat) and fully unauthenticated ones (the public
+// website widget, and the public booking-manage page). The RLS-scoped
+// server client only works when there's a logged-in session — with no
+// session, RLS silently returns zero rows rather than an error, and
+// every check below fails open on empty data (no hours configured →
+// treat as always open; no leads found → treat as always available).
+// That means business hours and capacity limits were never actually
+// enforced for the widget. Every query here already manually scopes by
+// an explicit orgId parameter (never derived from a session), so the
+// admin client is safe and correctly scoped either way.
 
 const TIMEZONE = "Europe/London";
 const SEARCH_WINDOW_DAYS = 14;
@@ -50,7 +62,7 @@ function timeStringToMinutes(time: string | null): number | null {
 }
 
 async function getBusinessHoursForOrg(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   orgId: string
 ): Promise<BusinessHoursRow[]> {
   const { data, error } = await supabase
@@ -66,7 +78,7 @@ async function getBusinessHoursForOrg(
 }
 
 async function getOrgSettings(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   orgId: string
 ): Promise<{ appointmentDurationMinutes: number; emergencyModeEnabled: boolean }> {
   const { data } = await supabase
@@ -91,7 +103,7 @@ export async function isWithinBusinessHours(
   orgId: string,
   isoDatetime: string
 ): Promise<AvailabilityResult> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { emergencyModeEnabled } = await getOrgSettings(supabase, orgId);
   if (emergencyModeEnabled) {
@@ -142,7 +154,7 @@ export async function findNextAvailableSlot(
   orgId: string,
   isoDatetime: string
 ): Promise<string | null> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { emergencyModeEnabled, appointmentDurationMinutes } = await getOrgSettings(supabase, orgId);
   if (emergencyModeEnabled) {
@@ -201,7 +213,7 @@ export async function isSlotAvailable(
   orgId: string,
   isoDatetime: string
 ): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: orgData } = await supabase
     .from("organisations")
