@@ -275,7 +275,7 @@ interface LeadRow {
 }
 
 const LEAD_SELECT_COLUMNS =
-  "id, name, email, phone, service_needed, preferred_datetime, message, status, conversation_id";
+  "id, name, email, phone, service_needed, preferred_datetime, appointment_datetime, message, status, conversation_id";
 
 /**
  * Resolves the correct open lead for this message using a layered
