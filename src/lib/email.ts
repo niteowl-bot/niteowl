@@ -11,6 +11,7 @@ interface BookingConfirmationParams {
   appointmentDatetime: string; // ISO string
   bookingReference: string;
   serviceNeeded?: string | null;
+  manageToken?: string | null;
 }
 
 function formatAppointmentDate(iso: string): string {
@@ -40,10 +41,14 @@ export async function sendBookingConfirmationEmails(
     appointmentDatetime,
     bookingReference,
     serviceNeeded,
+    manageToken,
   } = params;
 
   const formattedDate = formatAppointmentDate(appointmentDatetime);
   const displayName = customerName?.trim() || "there";
+  const manageUrl = manageToken
+    ? `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/booking/manage?token=${manageToken}`
+    : null;
 
   // Customer confirmation
   if (customerEmail) {
@@ -60,7 +65,11 @@ export async function sendBookingConfirmationEmails(
             ${serviceNeeded ? `<strong>Service:</strong> ${serviceNeeded}<br/>` : ""}
             <strong>Booking reference:</strong> ${bookingReference}
           </p>
-          <p>If you need to make any changes, please contact ${businessName} directly.</p>
+          ${
+            manageUrl
+              ? `<p>Need to make changes? <a href="${manageUrl}">Cancel or reschedule your booking</a>.</p>`
+              : `<p>If you need to make any changes, please contact ${businessName} directly.</p>`
+          }
         `,
       });
     } catch (err) {
@@ -158,6 +167,82 @@ export async function sendNeedsReviewNotification(
     return true;
   } catch (err) {
     console.error("[email] Failed to send needs-review notification:", err);
+    return false;
+  }
+}
+
+interface BookingSelfServiceChangeParams {
+  businessOwnerEmail: string | null;
+  customerName: string | null;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  serviceNeeded?: string | null;
+  bookingReference: string;
+  action: "cancelled" | "rescheduled";
+  previousDatetime: string;
+  newDatetime?: string; // required when action is "rescheduled"
+}
+
+/**
+ * Notifies the business owner when a customer cancels or reschedules
+ * their own booking via the self-service manage-booking link, so the
+ * owner's calendar change isn't a surprise they only discover by
+ * checking the dashboard.
+ */
+export async function sendBookingSelfServiceChangeNotification(
+  params: BookingSelfServiceChangeParams
+): Promise<boolean> {
+  const {
+    businessOwnerEmail,
+    customerName,
+    customerEmail,
+    customerPhone,
+    serviceNeeded,
+    bookingReference,
+    action,
+    previousDatetime,
+    newDatetime,
+  } = params;
+
+  if (!businessOwnerEmail) {
+    console.error(
+      "[email] No business owner email available — skipped self-service change notification."
+    );
+    return false;
+  }
+
+  const displayName = customerName?.trim() || "A customer";
+  const formattedPrevious = formatAppointmentDate(previousDatetime);
+  const subject =
+    action === "cancelled"
+      ? `Booking cancelled: ${displayName} — ${formattedPrevious}`
+      : `Booking rescheduled: ${displayName}`;
+
+  const bodyDetail =
+    action === "cancelled"
+      ? `<p><strong>${displayName}</strong> has cancelled their booking for <strong>${formattedPrevious}</strong>.</p>`
+      : `<p><strong>${displayName}</strong> has rescheduled their booking from <strong>${formattedPrevious}</strong> to <strong>${formatAppointmentDate(
+          newDatetime ?? previousDatetime
+        )}</strong>.</p>`;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: businessOwnerEmail,
+      subject,
+      html: `
+        ${bodyDetail}
+        <p>
+          ${customerEmail ? `<strong>Email:</strong> ${customerEmail}<br/>` : ""}
+          ${customerPhone ? `<strong>Phone:</strong> ${customerPhone}<br/>` : ""}
+          ${serviceNeeded ? `<strong>Service:</strong> ${serviceNeeded}<br/>` : ""}
+          <strong>Booking reference:</strong> ${bookingReference}
+        </p>
+      `,
+    });
+    return true;
+  } catch (err) {
+    console.error("[email] Failed to send self-service change notification:", err);
     return false;
   }
 }

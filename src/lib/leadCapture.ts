@@ -272,10 +272,11 @@ interface LeadRow {
   message: string | null;
   status: string;
   conversation_id: string | null;
+  manage_token: string | null;
 }
 
 const LEAD_SELECT_COLUMNS =
-  "id, name, email, phone, service_needed, preferred_datetime, appointment_datetime, message, status, conversation_id";
+  "id, name, email, phone, service_needed, preferred_datetime, appointment_datetime, message, status, conversation_id, manage_token";
 
 /**
  * Resolves the correct open lead for this message using a layered
@@ -620,6 +621,12 @@ export async function capturePartialLead(
         : "new";
 
 
+    // Every lead gets a manage_token so a booking-confirmation email can
+    // always link to the self-service cancel/reschedule page, even for
+    // leads that started life before reaching "booked" (e.g. a "new" lead
+    // that only becomes a real booking once contact details arrive later).
+    const manageToken = existing.manage_token ?? crypto.randomUUID();
+
     const updatePayload = {
       name: shouldUpdateName(extracted.name, existing.name),
       email: mergedEmail,
@@ -634,6 +641,7 @@ export async function capturePartialLead(
       message: deduplicateMessage(existing.message, userMessage),
       status: nextStatus,
       ai_confidence: extracted.confidence,
+      manage_token: manageToken,
       ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
     };
 
@@ -700,6 +708,7 @@ export async function capturePartialLead(
         appointmentDatetime: updatedAppointmentIso ?? existing.appointment_datetime ?? "",
         bookingReference: existing.id.slice(0, 8).toUpperCase(),
         serviceNeeded: existing.service_needed,
+        manageToken,
       }).catch((err) =>
         console.error("[email] Failed to send booking confirmation:", err)
       );
@@ -726,6 +735,8 @@ export async function capturePartialLead(
 
 
 
+  const manageToken = crypto.randomUUID();
+
   const { data: inserted, error: insertError } = await supabase
     .from("leads")
     .insert({
@@ -741,6 +752,7 @@ export async function capturePartialLead(
       message: userMessage,
       ai_confidence: extracted.confidence,
       status: insertStatus,
+      manage_token: manageToken,
     })
     .select("id")
     .single();
@@ -760,6 +772,7 @@ export async function capturePartialLead(
         appointmentDatetime: resolvedIso ?? "",
         bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
         serviceNeeded: extracted.service ?? userMessage,
+        manageToken,
       }).catch((err) =>
         console.error("[email] Failed to send booking confirmation:", err)
       );
