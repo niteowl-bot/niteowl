@@ -382,6 +382,27 @@ function isBookingConfirmed(
   return hasContact && hasConfirmedTime;
 }
 
+// A booking often completes over two turns: one message states the
+// requested time (intent: new_booking), a later one — in reply to Remy
+// asking for details — supplies only contact info (intent: contact_update).
+// extractLeadData() classifies intent per-message with no conversation
+// history, so that second turn never looks like a booking on its own.
+// This only fires once a time was already confirmed on the existing lead,
+// so it can't mark an unrelated contact-info correction as booked.
+function isBookingCompletedByContactUpdate(
+  intent: LeadIntent,
+  hadAppointmentAlready: boolean,
+  appointmentIso: string | null,
+  phone: string | null,
+  email: string | null
+): boolean {
+  if (intent !== "contact_update") return false;
+  if (!hadAppointmentAlready) return false;
+  const hasContact = Boolean(phone || email);
+  const hasConfirmedTime = Boolean(appointmentIso);
+  return hasContact && hasConfirmedTime;
+}
+
 // ── Parse free-text datetime into ISO timestamp ──────────────────
 
 async function resolveAppointmentDatetime(
@@ -577,12 +598,19 @@ export async function capturePartialLead(
       PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
       existing.status === "booked"
         ? (existing.status as LeadStatus)
-        : isBookingConfirmed(
+        : (isBookingConfirmed(
             extracted.intent,
             updatedAppointmentIso,
             mergedPhone,
             mergedEmail
-          ) && !outsideBusinessHours
+          ) ||
+            isBookingCompletedByContactUpdate(
+              extracted.intent,
+              Boolean(existing.appointment_datetime),
+              updatedAppointmentIso,
+              mergedPhone,
+              mergedEmail
+            )) && !outsideBusinessHours
 
         ? "booked"
         : needsReview
