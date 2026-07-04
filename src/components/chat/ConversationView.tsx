@@ -227,7 +227,7 @@ export default function ConversationView({
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/15 text-blue-400">
             <WelcomeIcon />
           </div>
-          <h2 className="text-lg font-semibold text-white">Hi, I'm Remy</h2>
+          <h2 className="text-lg font-semibold text-white">Hi, I&apos;m Remy</h2>
           <p className="mt-2 max-w-xs text-sm leading-relaxed text-white/40">
             Your AI assistant for{" "}
             <span className="text-white/60">{orgName}</span>. Ask me anything

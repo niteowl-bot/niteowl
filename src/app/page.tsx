@@ -82,13 +82,13 @@ export default function Home() {
                 📞 Missed call from +44 7700 900123
               </div>
               <div className="bg-indigo-600 text-white rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%] ml-auto text-right">
-                Hi! Sorry we missed your call to City Plumbing. How can we help? Reply and we'll get right back to you 👋
+                Hi! Sorry we missed your call to City Plumbing. How can we help? Reply and we&apos;ll get right back to you 👋
               </div>
               <div className="bg-slate-800 text-slate-300 rounded-xl rounded-tl-sm px-3 py-2 max-w-[85%]">
                 Hi, I need an emergency boiler repair today
               </div>
               <div className="bg-indigo-600 text-white rounded-xl rounded-tr-sm px-3 py-2 max-w-[85%] ml-auto text-right">
-                Got it — we cover emergency boiler repairs same day. What's your postcode? I'll check availability now.
+                Got it — we cover emergency boiler repairs same day. What&apos;s your postcode? I&apos;ll check availability now.
               </div>
             </div>
             <p className="text-slate-600 text-xs text-center mt-4">
@@ -173,13 +173,13 @@ export default function Home() {
       <section className="bg-slate-50 border-y border-slate-200 py-20 px-6">
         <div className="max-w-4xl mx-auto text-center">
           <p className="text-indigo-600 text-sm font-semibold uppercase tracking-widest mb-3">
-            Who it's for
+            Who it&apos;s for
           </p>
           <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4">
             Built for businesses that answer the phone
           </h2>
           <p className="text-slate-500 text-lg mb-12 max-w-xl mx-auto">
-            If you run a service business and miss calls when you're busy, Remy
+            If you run a service business and miss calls when you&apos;re busy, Remy
             pays for itself with the first job it saves.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

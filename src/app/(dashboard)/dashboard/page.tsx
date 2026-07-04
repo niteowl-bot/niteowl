@@ -64,7 +64,7 @@ export default async function DashboardPage() {
             <span className="text-blue-400">{org.business_name}</span>
           </h1>
           <p className="mt-1 text-sm text-white/40">
-            Here's what Remy knows about your business.
+            Here&apos;s what Remy knows about your business.
           </p>
         </div>
 {/* Setup checklist */}

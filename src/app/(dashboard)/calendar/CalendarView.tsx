@@ -679,7 +679,7 @@ export default function CalendarView({
         {/* Unscheduled appointments note */}
         {leads.length > parseableLeads.length && (
           <div className="shrink-0 border-t border-slate-800 px-6 py-3 text-xs text-slate-500">
-            {leads.length - parseableLeads.length} lead(s) have free-text appointment times that cannot be placed on the calendar (e.g. "tomorrow at 4pm"). Update them in the{" "}
+            {leads.length - parseableLeads.length} lead(s) have free-text appointment times that cannot be placed on the calendar (e.g. &quot;tomorrow at 4pm&quot;). Update them in the{" "}
             <Link href="/leads" className="text-blue-400 hover:underline">Leads page</Link> to show here.
           </div>
         )}

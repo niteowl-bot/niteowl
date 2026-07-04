@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import KnowledgeClient from "./KnowledgeClient";
+import KnowledgeClient, { type KnowledgeRecord } from "./KnowledgeClient";
 
 export default async function KnowledgePage() {
   const supabase = await createClient();
@@ -34,7 +34,7 @@ export default async function KnowledgePage() {
     <KnowledgeClient
       orgId={org.id}
       orgName={org.business_name}
-      initialRecords={(records ?? []) as any}
+      initialRecords={(records ?? []) as KnowledgeRecord[]}
     />
   );
 }

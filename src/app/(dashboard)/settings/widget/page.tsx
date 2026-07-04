@@ -41,7 +41,7 @@ export default async function WidgetSettingsPage() {
         <h1 className="mb-1 text-xl font-semibold text-white">Website Widget</h1>
         <p className="mb-8 text-sm text-white/40">
           Widget settings coming soon — configuration options like colors,
-          position, and greeting message will live here. For now, here's
+          position, and greeting message will live here. For now, here&apos;s
           your embed code.
         </p>
 
