@@ -1,11 +1,11 @@
 # 🚀 Alpha Launch Readiness
 
 ## 🔴 Critical (must complete before first business)
-- [ ] Deploy to production (Vercel + production Supabase)
+- [x] Deploy to production (Vercel + production Supabase)
 - [ ] Connect a custom domain
-- [ ] Configure production environment variables
-- [ ] Run one complete production signup → onboarding → widget → booking flow
-- [ ] Email booking confirmations
+- [x] Configure production environment variables
+- [x] Run one complete production signup → onboarding → widget → booking flow
+- [ ] Email booking confirmations (trigger bug fixed 2026-07-04; owner-inbox delivery still to be confirmed)
 - [ ] Customer cancellation/reschedule links
 - [ ] Basic monitoring (logs and alerts)
 
