@@ -57,6 +57,7 @@ function formatDate(value: string | null) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/London",
   }).format(new Date(value));
 }
 

@@ -79,7 +79,27 @@ function formatDate(value: string | null) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/London",
   }).format(new Date(value));
+}
+
+// "Today" must resolve identically on the server render and the client
+// hydration pass, regardless of which timezone each machine's runtime
+// defaults to — otherwise the isToday highlight (and the SSR'd date
+// text above) can disagree between the two, which React reports as a
+// hydration mismatch. Pin it to the business's timezone, matching the
+// booking logic in src/lib/availability.ts.
+function getLondonToday(): Date {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/London",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+  return new Date(year, month - 1, day);
 }
 
 /**
@@ -330,7 +350,7 @@ function MonthView({
   // Pad to full weeks
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const today = new Date();
+  const today = getLondonToday();
 
   function leadsForDay(day: number) {
     const d = new Date(year, month, day);
@@ -401,7 +421,7 @@ function WeekView({
   onSelect: (lead: CalendarLead) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const today = new Date();
+  const today = getLondonToday();
 
   return (
     <div className="flex-1 overflow-auto">
@@ -458,7 +478,7 @@ function DayView({
     return parsed && isSameDay(parsed, date);
   });
 
-  const isToday = isSameDay(date, new Date());
+  const isToday = isSameDay(date, getLondonToday());
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -505,6 +525,7 @@ function DayView({
     {new Intl.DateTimeFormat("en-IE", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: "Europe/London",
     }).format(new Date(l.appointment_datetime))}
   </p>
 )}
@@ -535,7 +556,7 @@ export default function CalendarView({
   leads: CalendarLead[];
   businessName: string | null;
 }) {
-  const today = new Date();
+  const today = getLondonToday();
   const [view, setView] = useState<View>("month");
   const [currentDate, setCurrentDate] = useState(today);
   const [leads, setLeads] = useState<CalendarLead[]>(initialLeads);
