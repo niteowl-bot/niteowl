@@ -1,7 +1,13 @@
 import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseDatetimeToIso } from "@/lib/parseDatetime";
-import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
+import {
+  assessAnswerConfidence,
+  capturePartialLead,
+  getOrgOwnerEmail,
+  hasNeedsReviewNotificationBeenSent,
+  markNeedsReviewNotificationSent,
+} from "@/lib/leadCapture";
+import { sendNeedsReviewNotification } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -127,7 +133,9 @@ function buildSystemPrompt(
   knowledge: KnowledgeRecord[],
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
-  unavailableReason: "hours" | "capacity" | null = null
+  unavailableReason: "hours" | "capacity" | null = null,
+  handoffAskContact: boolean = false,
+  handoffContactCaptured: boolean = false
 ): string {
   const sections: string[] = [];
 
@@ -201,7 +209,83 @@ function buildSystemPrompt(
     );
   }
 
+  if (handoffAskContact) {
+    sections.push(
+      [
+        "IMPORTANT — HUMAN HANDOFF MODE:",
+        "You could not confidently answer the customer's last question. A team member will follow up personally.",
+        "In your reply: politely let the customer know a team member will help with their question.",
+        "Ask for their name and the best email address or phone number to reach them on, if they have not already provided one.",
+        "Do NOT attempt to answer the original question yourself.",
+        "Reassure them someone will be in touch shortly. Keep it warm and brief.",
+      ].join("\n")
+    );
+  }
+
+  if (handoffContactCaptured) {
+    sections.push(
+      [
+        "IMPORTANT — HUMAN HANDOFF MODE (contact details already provided):",
+        "You could not confidently answer the customer's last question. A team member will personally review it and be in touch shortly using the contact details the customer has already provided.",
+        "These instructions override every rule above for this reply:",
+        "- Do NOT attempt to answer the original question yourself.",
+        "- Do NOT confirm or deny that the business provides the service they asked about.",
+        "- Do NOT treat this as a booking. Do NOT ask for a preferred time, date, or appointment details.",
+        "- Do NOT ask for contact details again.",
+        "In your reply: thank them, confirm a team member will review their enquiry and be in touch shortly. Keep it warm and brief.",
+      ].join("\n")
+    );
+  }
+
   return sections.join("\n\n");
+}
+
+// ── Widget conversation linking ────────────────────────────────────
+// leads.conversation_id has an FK to conversations, and lead merging
+// matches by conversation id. The widget's conversation id is a
+// client-generated UUID from an unauthenticated, public surface, so it
+// must be validated and org-scoped before use: an id that exists but
+// belongs to another org is discarded rather than linked.
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function ensureWidgetConversation(
+  supabase: ReturnType<typeof createAdminClient>,
+  orgId: string,
+  conversationId: unknown,
+  firstMessage: string
+): Promise<string | null> {
+  if (typeof conversationId !== "string" || !UUID_PATTERN.test(conversationId)) {
+    return null;
+  }
+
+  try {
+    const { data: existing } = await supabase
+      .from("conversations")
+      .select("id, org_id")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (existing) {
+      return existing.org_id === orgId ? conversationId : null;
+    }
+
+    const title = `Website: ${firstMessage.slice(0, 40)}${firstMessage.length > 40 ? "…" : ""}`;
+    const { error: insertError } = await supabase
+      .from("conversations")
+      .insert({ id: conversationId, org_id: orgId, title });
+
+    if (insertError) {
+      console.error("[widget] conversation insert failed:", insertError.message);
+      return null;
+    }
+
+    return conversationId;
+  } catch (err) {
+    console.error("[widget] conversation linking error:", err);
+    return null;
+  }
 }
 
 // ── POST handler ───────────────────────────────────────────────────
@@ -231,56 +315,107 @@ export async function POST(req: NextRequest) {
 
   const orgId = org.id;
 
-  // ── Lead extraction ────────────────────────────────────────────
+  // ── Lead extraction — same engine as /api/chat ─────────────────
   const latestUserMessage: string =
     [...messages].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "";
 
   let detectedIntent: LeadIntent = "unknown";
   let suggestedAlternativeIso: string | null = null;
   let unavailableReason: "hours" | "capacity" | null = null;
+  let handoffAskContact = false;
+  let handoffContactCaptured = false;
 
   if (latestUserMessage) {
     try {
+      const linkedConversationId = await ensureWidgetConversation(
+        supabase,
+        orgId,
+        conversationId,
+        latestUserMessage
+      );
+
       const extracted = await extractLeadData(latestUserMessage);
       detectedIntent = extracted.intent;
 
-      console.log("[widget] extracted intent:", extracted.intent, "| full extraction:", JSON.stringify(extracted));
+      console.log("[widget] extracted intent:", extracted.intent, "| conversation:", linkedConversationId);
+
       if (ACTIONABLE_INTENTS.includes(extracted.intent)) {
-        const { iso: resolvedIso } = await parseDatetimeToIso(extracted.preferred_datetime, "Europe/London");
+        const captureResult = await capturePartialLead(
+          supabase,
+          orgId,
+          linkedConversationId,
+          latestUserMessage,
+          extracted,
+          "web_widget"
+        );
 
-        let outsideBusinessHours = false;
+        suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
+        unavailableReason = captureResult.unavailableReason;
 
-        if (resolvedIso) {
-          const availability = await isWithinBusinessHours(orgId, resolvedIso);
-          const slotAvailable = availability.isAvailable ? await isSlotAvailable(orgId, resolvedIso) : true;
+        if (captureResult.needsReviewContactCaptured) {
+          handoffContactCaptured = true;
+        }
+      } else {
+        // ── Confidence check — mirrors /api/chat ──────────────────
+        const knowledgeResultForCheck = await supabase
+          .from("business_knowledge")
+          .select("category, title, content")
+          .eq("org_id", orgId)
+          .eq("is_active", true);
 
-          if (!availability.isAvailable || !slotAvailable) {
-            outsideBusinessHours = true;
-            unavailableReason = !availability.isAvailable ? "hours" : "capacity";
-            suggestedAlternativeIso = await findNextAvailableSlot(orgId, resolvedIso);
+        const knowledgeSummary = (knowledgeResultForCheck.data ?? [])
+          .map((r) => `- ${r.title}: ${r.content}`)
+          .join("\n");
+
+        const assessment = await assessAnswerConfidence(latestUserMessage, knowledgeSummary);
+
+        if (assessment.needsReview) {
+          console.log("[widget] low confidence — flagging for review:", assessment.reason);
+
+          const reviewResult = await capturePartialLead(
+            supabase,
+            orgId,
+            linkedConversationId,
+            latestUserMessage,
+            extracted,
+            "web_widget",
+            true
+          );
+
+          const hasContact = Boolean(extracted.email || extracted.phone);
+
+          if (hasContact) {
+            handoffContactCaptured = true;
+
+            const alreadyNotified = await hasNeedsReviewNotificationBeenSent(
+              supabase,
+              reviewResult.leadId,
+              linkedConversationId
+            );
+
+            if (alreadyNotified) {
+              console.log("[widget] needs-review notification already sent for this conversation");
+            } else {
+              const ownerInfo = await getOrgOwnerEmail(orgId);
+              const notificationSent = await sendNeedsReviewNotification({
+                businessOwnerEmail: ownerInfo?.email ?? null,
+                businessName: ownerInfo?.businessName ?? "the business",
+                customerName: extracted.name,
+                customerEmail: extracted.email,
+                customerPhone: extracted.phone,
+                question: latestUserMessage,
+                conversationContext: null,
+                leadId: reviewResult.leadId,
+              });
+
+              if (notificationSent) {
+                await markNeedsReviewNotificationSent(supabase, reviewResult.leadId, linkedConversationId);
+              }
+            }
+          } else {
+            handoffAskContact = true;
           }
         }
-
-        // ── Insert lead — source is "web_widget", distinct from dashboard chat ──
-        const { error: leadInsertError } = await supabase.from("leads").insert({
-  org_id: orgId,
-  source: "web_widget",
-  name: extracted.name,
-  email: extracted.email,
-  phone: extracted.phone,
-  service_needed: extracted.service ?? latestUserMessage,
-  preferred_datetime: extracted.preferred_datetime,
-  appointment_datetime: resolvedIso,
-  message: latestUserMessage,
-  ai_confidence: extracted.confidence,
-  status: outsideBusinessHours ? "awaiting_confirmation" : "new",
-});
-
-if (leadInsertError) {
-  console.error("[widget] lead insert FAILED:", leadInsertError.message);
-} else {
-  console.log("[widget] lead insert SUCCESS");
-}
       }
     } catch (err) {
       console.error("[widget POST] lead extraction/capture error:", err);
@@ -298,7 +433,7 @@ if (leadInsertError) {
 
   const knowledge: KnowledgeRecord[] = knowledgeData ?? [];
 
-  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason);
+  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured);
 
   // ── Streaming response (identical pattern to chat/route.ts) ─────
   const encoder = new TextEncoder();
