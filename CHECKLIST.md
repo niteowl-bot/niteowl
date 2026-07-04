@@ -5,15 +5,15 @@
 - [ ] Connect a custom domain
 - [x] Configure production environment variables
 - [x] Run one complete production signup → onboarding → widget → booking flow
-- [ ] Email booking confirmations (trigger bug fixed 2026-07-04; owner-inbox delivery still to be confirmed)
-- [ ] Customer cancellation/reschedule links
+- [ ] Email booking confirmations (code path fixed and correct 2026-07-04; blocked on Resend custom domain — see below, real customers won't receive these until it's verified)
+- [x] Customer cancellation/reschedule links
 - [ ] Basic monitoring (logs and alerts)
 
 ## 🟡 Business onboarding
 - [ ] Widget installation guide (WordPress, Wix, Squarespace, HTML)
 - [ ] Dashboard "Getting Started" guide
 - [ ] Test the widget on several real websites
-- [ ] Verify email deliverability
+- [ ] Verify email deliverability (blocked: Resend is still on the unverified `onboarding@resend.dev` sandbox sender, which redirects every send to the account owner regardless of recipient — needs a verified custom sending domain, likely alongside the custom domain work above)
 
 ## 🟡 Admin
 - [ ] Business management view

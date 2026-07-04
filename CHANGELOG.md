@@ -2,6 +2,26 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-04 (customer cancellation/reschedule links)
+
+### Added
+- Every booking now gets a `manage_token` (random UUID), and the customer confirmation email links to `/booking/manage?token=...` instead of just saying "contact the business directly." The page is public (no login), following the same identity-via-opaque-secret pattern as the widget's `widget_key`: view the booking, cancel it, or reschedule via a structured date/time picker (deterministic, not free-text/AI-parsed, so it doesn't depend on OpenAI for a self-service write action)
+- New `/api/bookings/manage` route: `GET` returns the booking plus business hours for the picker; `POST action=cancel` sets status to `cancelled`; `POST action=reschedule` re-validates the new time against the same business-hours and capacity checks a new booking goes through, offering the next available slot if the requested time is full
+- Either action emails the business owner (`sendBookingSelfServiceChangeNotification`) so a change the customer makes themself isn't a surprise they only discover by checking the dashboard
+- Scoped to `status="booked"` leads only; an already-cancelled booking shows a read-only "already cancelled" state if the link is reused
+
+### Fixed
+- **Critical, found while testing the above**: `src/lib/availability.ts` created its own RLS-scoped (session-cookie) Supabase client internally, regardless of caller. That's fine from an authenticated context (the dashboard preview chat), but the public website widget has no logged-in session — RLS silently returns zero rows rather than an error, and every check failed open on empty data. **Business hours and capacity limits were never actually enforced for real widget bookings** — every request was silently approved regardless of day, time, or existing capacity. Undetected until now because every prior verification of these checks ran through the authenticated dashboard preview chat, which masked the bug. Switched to the admin (service-role) client, which every query already scopes manually by an explicit `orgId` parameter
+- The multi-turn booking-status fix from earlier today (`isBookingCompletedByContactUpdate`) could never actually fire: `LEAD_SELECT_COLUMNS` never included `appointment_datetime`, so `existing.appointment_datetime` was always `undefined` at runtime despite the `LeadRow` type claiming otherwise. Added the missing column to the select
+
+### Investigated, not a code bug
+- Real production emails (booking confirmation, owner notification, self-service change) currently only ever reach the Resend account owner's own inbox, regardless of the intended recipient — confirmed via Resend's dashboard logs. Root cause: `RESEND_FROM_EMAIL` is still the shared, unverified `onboarding@resend.dev` sandbox sender; Resend redirects all sends to the account owner until a custom sending domain is verified. **No real customer will receive a booking email until a custom domain is verified in Resend and set as the sender.** This is why "Verify email deliverability" was still unchecked on the launch checklist — tracked there, not something to fix in code
+
+### Verified
+- Tested locally end-to-end against the dev database: book via widget → manage page shows the correct booking → reschedule to a valid slot succeeds and updates `appointment_datetime` → reschedule to a closed day is correctly rejected → reschedule to a fully-booked slot is correctly rejected and offers the next slot → cancel works and is idempotent on reload
+- Re-verified the business-hours/capacity fix directly against the live widget: a closed day is now rejected, and double-booking the same slot now correctly offers the next available time instead of silently succeeding
+- `tsc --noEmit` and `next build` pass
+
 ## 2026-07-04 (critical: business hours/capacity never enforced on the widget)
 
 ### Fixed
