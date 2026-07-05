@@ -2,6 +2,19 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (human handoff now keeps the lead instead of redirecting the customer)
+
+### Changed
+- When a customer asks to speak to a person, a team member, or for the business's contact details, Remy no longer deflects ("suggest the customer contacts the team", which the model was free to phrase as "check our website") — it now behaves like a receptionist taking a message: offers a callback and collects name, phone, email, and preferred contact time directly in the chat. Added as a new standing rule in `buildSystemPrompt` (both `/api/chat` and `/api/widget/chat`), since tracing showed this exact phrasing ("Can I speak to someone?") is usually classified as an answerable `question` intent and never reaches the low-confidence handoff path at all — the old generic "contact the team" rule was the only thing governing it
+- Also hardened the existing low-confidence `HUMAN HANDOFF MODE` prompt block (used when the confidence gate does flag a message) to ask for a preferred contact time alongside name/email/phone, and to explicitly forbid pointing the customer elsewhere for contact details, for consistency with the new standing rule
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+- Traced the exact reported case first: "Can I speak to someone?" extracts as `question` intent and the confidence gate does not flag it for review, so it was governed only by the generic deflect-to-contacts rule — confirming this needed a standing-rule fix, not a change to intent classification or lead capture
+- Re-tested against a disposable test org (real auth, real OpenAI, dev DB): "Can I speak to someone?", "I'd like to talk to a real person please", and "Can you give me your phone number?" all now offer a callback and ask for the customer's name instead of deflecting
+- Multi-turn check: after the handoff offer, supplying "I'm John Smith, call me on 07911223344, best time is tomorrow afternoon" correctly created a real lead row (name, phone, status `new`) — confirms the existing `contact_update` capture path (unchanged) still works once details are given
+- Applied identically to both `/api/chat` and `/api/widget/chat`; test org/user/leads/conversations deleted afterward
+
 ## 2026-07-05 (business profile: website field, and a still-incomplete confidence check)
 
 ### Fixed
