@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (removed stray internal Next.js import)
+
+### Fixed
+- Removed an unused `import { loadComponents } from "next/dist/server/load-components"` from `src/app/(dashboard)/chat/page.tsx` — present since the file was created (2026-06-29), never called anywhere. Reaching into Next.js internals like this isn't something legitimate app code does; flagged as suspicious given it lines up with the planted prompt-injection already found in `node_modules/next/dist/docs`. No behaviour change — the import had no effect either way
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+
 ## 2026-07-05 (critical: business identity questions wrongly routed to human handoff)
 
 ### Fixed

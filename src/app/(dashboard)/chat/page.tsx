@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ChatShell from "@/components/chat/ChatShell";
-import { loadComponents } from "next/dist/server/load-components";
 
 export default async function ChatPage() {
   const supabase = await createClient();
