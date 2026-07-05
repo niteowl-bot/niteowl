@@ -2,6 +2,13 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (investigated: sales FAQ escalation)
+
+### Investigated, not a code bug
+- Reported: Remy escalates standard sales questions ("How much does it cost?", "Is there a free trial?", "Can I cancel anytime?", "Can Remy integrate with my website?", "How long does setup take?", "Do I need technical knowledge?") for the "NiteOwl Test" dogfooding business instead of answering directly. Set up a disposable test org locally with knowledge base entries covering half these topics and confirmed Remy answers confidently and correctly once matching content exists — the confidence gate and system prompt already work as designed; there was no remaining code gap like the earlier business-identity/website ones
+- Root cause is a content gap, not a code gap: the business's Knowledge Base has no entries for these topics, so Remy correctly declines to invent pricing/policy answers (per the "never invent prices, hours, services, or policies not listed" rule) and escalates instead
+- Drafted and verified all six answers end-to-end against a disposable test org (real auth, real OpenAI, dev DB, deleted afterward) — three from the actual product (embed-script integration, ~15 min onboarding wizard, no technical knowledge needed) and three confirmed with the business owner (free during Alpha, no formal trial, no contract to cancel). Provided as ready-to-paste Knowledge Base entries since this session has no write access to the production database — added via Settings → Knowledge Base by the business owner, not via a code change
+
 ## 2026-07-05 (human handoff now keeps the lead instead of redirecting the customer)
 
 ### Changed
