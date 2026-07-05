@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const SETTINGS_TABS = [
   { href: "/settings/hours", label: "Business Hours" },
+  { href: "/settings/billing", label: "Billing" },
   // Future tabs — add one line each, no other changes needed:
   // { href: "/settings/ai-behaviour", label: "AI Behaviour" },
   // { href: "/settings/services", label: "Services" },

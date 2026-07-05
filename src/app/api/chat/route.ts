@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest } from "next/server";
 import { sendNeedsReviewNotification } from "@/lib/email";
+import { hasActiveAccess } from "@/lib/billing/access";
+import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
 import {
   type LeadIntent,
   type ExtractedLead,
@@ -427,9 +429,17 @@ const { messages, conversationId, orgId, source } = await req.json();
   // treated as outside the knowledge base ─────────────────────────
   const { data: org } = await supabase
     .from("organisations")
-    .select("business_name, business_type, primary_goal, description, website")
+    .select(
+      "business_name, business_type, primary_goal, description, website, subscription_status, trial_ends_at"
+    )
     .eq("id", orgId)
     .maybeSingle();
+
+  // ── Billing gate — a lapsed trial/subscription stops Remy from
+  // answering entirely, before any lead capture or OpenAI call ──────
+  if (org && !hasActiveAccess(org)) {
+    return buildPausedChatResponse();
+  }
 
   // ── Lead extraction — every message, no keyword filter ───────────
   const latestUserMessage: string =

@@ -2,6 +2,29 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (Stripe subscription billing — Phase 1, provider-agnostic)
+
+### Added
+- Recurring billing for Remy itself. Ranked against acquiring/converting/retaining paying customers, this came ahead of a business management dashboard, widget install guide, and CSV export because none of those generate revenue — without billing, there is no way to charge anyone at all
+- **14-day free trial, no card required**, tracked entirely in our own database (`organisations.trial_ends_at`, defaulted at row creation) rather than via Stripe's trial mechanism — this keeps the trial provider-agnostic by construction, since it has nothing to do with which payment processor (if any) is eventually used
+- Provider-agnostic billing architecture so PayPal (or any other processor) can be added later without touching checkout routes, webhook plumbing, or gating logic:
+  - `src/lib/billing/access.ts` — `hasActiveAccess()`, the single function every gate checks; it only reads DB columns, never which provider is behind them
+  - `src/lib/billing/provider.ts` — a `PaymentProvider` interface + factory; only `stripe` is registered in Phase 1
+  - `src/lib/billing/stripe.ts` — the Stripe implementation (customer/checkout/portal session creation, webhook signature verification, event → org-row mapping) — the only file that knows Stripe exists
+  - `src/lib/billing/pausedReply.ts` — shared "Remy is paused" streamed reply, matching the existing chunked `\n__DONE__` wire format both `/api/chat` and `/api/widget/chat` already use
+- Stripe Checkout (hosted) for the actual subscription — cards (Visa/Mastercard/Amex/debit) and Apple Pay/Google Pay are enabled automatically with no extra code, controlled entirely by the payment methods turned on in the Stripe Dashboard
+- New routes: `POST /api/billing/checkout`, `POST /api/billing/portal` (both authed, org-scoped), `POST /api/webhooks/stripe` (public, signature-verified)
+- `/settings/billing` — trial countdown / subscription status, "Subscribe now" or "Manage billing" button
+- Hard-block enforcement once a trial/subscription lapses: `middleware.ts` redirects dashboard routes to `/settings/billing`; `/api/chat` and `/api/widget/chat` reply with a paused message instead of calling OpenAI. Existing pilot businesses are grandfathered to `active` by the migration below so none of them are affected
+
+### Database (must be run manually — no migrations folder in this repo, same convention as prior schema changes)
+- `organisations` gains `subscription_status`, `trial_ends_at`, `payment_provider`, `stripe_customer_id`, `stripe_subscription_id`, `current_period_end`. SQL is additive plus one grandfathering `UPDATE` — provided separately, not committed, since it must be run in the Supabase SQL editor before this code can work at all
+
+### Not yet verified — blocked on setup outside this repo
+- **This must not be deployed before the migration SQL runs on the production database.** `/api/widget/chat` already treats a query error as an invalid widget key, so a missing column would 401 every real widget request until the columns exist
+- No Stripe API keys exist in this project yet (test or live) — `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`STRIPE_PRICE_ID` placeholders added to `.env.local`, but checkout/portal/webhook have not been exercised against a real Stripe test account
+- `tsc --noEmit`, `next build`, and `npm run lint` all pass with zero new errors/warnings beyond the existing documented baseline (1 pre-existing lint error, 5 pre-existing warnings)
+
 ## 2026-07-05 (Knowledge Base wasn't reachable after onboarding)
 
 ### Fixed

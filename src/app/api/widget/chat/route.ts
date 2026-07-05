@@ -8,6 +8,8 @@ import {
   markNeedsReviewNotificationSent,
 } from "@/lib/leadCapture";
 import { sendNeedsReviewNotification } from "@/lib/email";
+import { hasActiveAccess } from "@/lib/billing/access";
+import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
 
 export const runtime = "nodejs";
 
@@ -305,7 +307,9 @@ export async function POST(req: NextRequest) {
   // ── Resolve org by widget_key — the ONLY identity check here ────
   const { data: org, error: orgError } = await supabase
     .from("organisations")
-    .select("id, business_name, business_type, primary_goal, description, website")
+    .select(
+      "id, business_name, business_type, primary_goal, description, website, subscription_status, trial_ends_at"
+    )
     .eq("widget_key", widgetKey)
     .maybeSingle();
 
@@ -315,6 +319,11 @@ export async function POST(req: NextRequest) {
 
   }
 
+  // ── Billing gate — a lapsed trial/subscription stops Remy from
+  // answering entirely, before any lead capture or OpenAI call ──────
+  if (!hasActiveAccess(org)) {
+    return buildPausedChatResponse({ "Access-Control-Allow-Origin": "*" });
+  }
 
   const orgId = org.id;
 
