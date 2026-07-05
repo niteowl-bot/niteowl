@@ -249,6 +249,7 @@ function buildSystemPrompt(
     business_type: string;
     primary_goal: string;
     description: string | null;
+    website: string | null;
   },
   knowledge: KnowledgeRecord[],
   intent: LeadIntent = "unknown",
@@ -267,6 +268,7 @@ function buildSystemPrompt(
       `Business type: ${org.business_type}.`,
       `Primary goal: ${org.primary_goal}.`,
       org.description ? `About the business: ${org.description}` : null,
+      org.website ? `Website: ${org.website}` : null,
     ]
       .filter(Boolean)
       .join("\n")
@@ -423,7 +425,7 @@ const { messages, conversationId, orgId, source } = await req.json();
   // treated as outside the knowledge base ─────────────────────────
   const { data: org } = await supabase
     .from("organisations")
-    .select("business_name, business_type, primary_goal, description")
+    .select("business_name, business_type, primary_goal, description, website")
     .eq("id", orgId)
     .maybeSingle();
 
@@ -476,7 +478,15 @@ let outsideBusinessHours = false;
             .eq("is_active", true);
 
           const identitySummary = org
-            ? `- Business name: ${org.business_name}\n- Business type: ${org.business_type}${org.description ? `\n- About: ${org.description}` : ""}`
+            ? [
+                `- Business name: ${org.business_name}`,
+                `- Business type: ${org.business_type}`,
+                `- Primary goal: ${org.primary_goal}`,
+                org.description ? `- About: ${org.description}` : null,
+                org.website ? `- Website: ${org.website}` : null,
+              ]
+                .filter(Boolean)
+                .join("\n")
             : "";
 
           const knowledgeSummary = [

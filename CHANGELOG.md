@@ -2,6 +2,17 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (business profile: website field, and a still-incomplete confidence check)
+
+### Fixed
+- **Remy couldn't answer "What is my website?"** — the org's `website` column was never selected in either `/api/chat` or `/api/widget/chat`, so it was absent from both the system prompt's identity block and the confidence-check's identity summary (the same class of gap fixed for business name/type/description earlier today, just not fully closed). Added `website` to both routes' org `select()`, `buildSystemPrompt`'s identity section, and the confidence-check identity summary
+- While fixing this, found the earlier identity-summary fix was also incomplete: it included business name/type/description but not `primary_goal`, meaning "What is my primary goal?" would have hit the same handoff bug. Added it alongside `website` so the confidence check now sees every identity field the main system prompt does, rather than fixing them one report at a time
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+- Ran all five business-profile questions end-to-end against a disposable test org (real auth, real OpenAI, dev DB, then deleted): business name, business type, website, a full description, and primary goal all now answer directly and correctly instead of escalating to human handoff
+- Applied identically to both `/api/chat` and `/api/widget/chat`
+
 ## 2026-07-05 (removed stray internal Next.js import)
 
 ### Fixed

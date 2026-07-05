@@ -129,7 +129,7 @@ ${message}
 // ── System prompt builder (identical to chat/route.ts) ────────────
 
 function buildSystemPrompt(
-  org: { business_name: string; business_type: string; primary_goal: string; description: string | null },
+  org: { business_name: string; business_type: string; primary_goal: string; description: string | null; website: string | null },
   knowledge: KnowledgeRecord[],
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
@@ -145,6 +145,7 @@ function buildSystemPrompt(
       `Business type: ${org.business_type}.`,
       `Primary goal: ${org.primary_goal}.`,
       org.description ? `About the business: ${org.description}` : null,
+      org.website ? `Website: ${org.website}` : null,
     ].filter(Boolean).join("\n")
   );
 
@@ -302,7 +303,7 @@ export async function POST(req: NextRequest) {
   // ── Resolve org by widget_key — the ONLY identity check here ────
   const { data: org, error: orgError } = await supabase
     .from("organisations")
-    .select("id, business_name, business_type, primary_goal, description")
+    .select("id, business_name, business_type, primary_goal, description, website")
     .eq("widget_key", widgetKey)
     .maybeSingle();
 
@@ -363,7 +364,15 @@ export async function POST(req: NextRequest) {
           .eq("org_id", orgId)
           .eq("is_active", true);
 
-        const identitySummary = `- Business name: ${org.business_name}\n- Business type: ${org.business_type}${org.description ? `\n- About: ${org.description}` : ""}`;
+        const identitySummary = [
+          `- Business name: ${org.business_name}`,
+          `- Business type: ${org.business_type}`,
+          `- Primary goal: ${org.primary_goal}`,
+          org.description ? `- About: ${org.description}` : null,
+          org.website ? `- Website: ${org.website}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n");
 
         const knowledgeSummary = [
           identitySummary,
