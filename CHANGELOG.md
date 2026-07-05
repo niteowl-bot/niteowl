@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (Knowledge Base wasn't reachable after onboarding)
+
+### Fixed
+- Reported as "does the Knowledge Base management page exist?" — it already did (`src/app/(dashboard)/knowledge`, full create/edit/delete UI, matching the exact categories the AI prompt reads: FAQ, Service, Pricing, Opening Hours, Policy, Custom Instruction), so no new page or CRUD logic was built. The real gap: the *only* link to it was inside `SetupChecklist.tsx` on the main dashboard, which does `if (allComplete) return null` — once onboarding is finished, that checklist (and its only link to `/knowledge`) disappears. There is no persistent sidebar/nav anywhere in the dashboard; every page is a standalone screen with just a "back to Dashboard" breadcrumb
+- Added a permanent "Knowledge Base" card to the main dashboard (`dashboard/page.tsx`), styled to match the existing "Chat with Remy" card, so it's reachable at any time regardless of onboarding-checklist state
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+- Fetched the rendered `/dashboard` HTML for a disposable test account and confirmed the Knowledge Base card renders with the correct link, alongside the existing Chat card; test user/org deleted afterward
+
 ## 2026-07-05 (investigated: sales FAQ escalation)
 
 ### Investigated, not a code bug

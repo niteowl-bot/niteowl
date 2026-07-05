@@ -96,32 +96,52 @@ export default async function DashboardPage() {
           />
         </div>
 {/* Add to the grid of InfoCards, or below the existing cards */}
-<a
-  href="/chat"
-  className="col-span-full mt-2 flex items-center gap-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 transition hover:border-blue-500/40 hover:bg-blue-500/8 group"
->
-  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600/20 text-blue-400 group-hover:bg-blue-600/30 transition">
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
-      <path
-        d="M10 2C5.58 2 2 5.58 2 10c0 1.96.71 3.76 1.88 5.17L2 18l2.9-1.96A7.96 7.96 0 0 0 10 18c4.42 0 8-3.58 8-8s-3.58-8-8-8Z"
-        fill="currentColor"
-        opacity=".25"
-      />
-      <circle cx="7" cy="10" r="1.2" fill="currentColor" />
-      <circle cx="10" cy="10" r="1.2" fill="currentColor" />
-      <circle cx="13" cy="10" r="1.2" fill="currentColor" />
+<div className="col-span-full mt-2 grid gap-3 sm:grid-cols-2">
+  <a
+    href="/chat"
+    className="flex items-center gap-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 transition hover:border-blue-500/40 hover:bg-blue-500/8 group"
+  >
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600/20 text-blue-400 group-hover:bg-blue-600/30 transition">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+        <path
+          d="M10 2C5.58 2 2 5.58 2 10c0 1.96.71 3.76 1.88 5.17L2 18l2.9-1.96A7.96 7.96 0 0 0 10 18c4.42 0 8-3.58 8-8s-3.58-8-8-8Z"
+          fill="currentColor"
+          opacity=".25"
+        />
+        <circle cx="7" cy="10" r="1.2" fill="currentColor" />
+        <circle cx="10" cy="10" r="1.2" fill="currentColor" />
+        <circle cx="13" cy="10" r="1.2" fill="currentColor" />
+      </svg>
+    </span>
+    <div>
+      <p className="text-sm font-medium text-white">Chat with Remy</p>
+      <p className="mt-0.5 text-xs text-white/40">
+        Ask your AI assistant anything about your business
+      </p>
+    </div>
+    <svg className="ml-auto text-white/20 group-hover:text-white/40 transition" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M4 8h8M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  </span>
-  <div>
-    <p className="text-sm font-medium text-white">Chat with Remy</p>
-    <p className="mt-0.5 text-xs text-white/40">
-      Ask your AI assistant anything about your business
-    </p>
-  </div>
-  <svg className="ml-auto text-white/20 group-hover:text-white/40 transition" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-    <path d="M4 8h8M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-</a>
+  </a>
+
+  <a
+    href="/knowledge"
+    className="flex items-center gap-4 rounded-xl border border-blue-500/20 bg-blue-500/5 p-5 transition hover:border-blue-500/40 hover:bg-blue-500/8 group"
+  >
+    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600/20 text-blue-400 group-hover:bg-blue-600/30 transition">
+      <DocumentIcon />
+    </span>
+    <div>
+      <p className="text-sm font-medium text-white">Knowledge Base</p>
+      <p className="mt-0.5 text-xs text-white/40">
+        Add, edit, or remove FAQ, pricing, and policy entries
+      </p>
+    </div>
+    <svg className="ml-auto text-white/20 group-hover:text-white/40 transition" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M4 8h8M8.5 4.5 12 8l-3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  </a>
+</div>
 
 
         {/* Description — full width */}
