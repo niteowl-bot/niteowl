@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (www redirect + critical dashboard chat fix)
+
+### Added
+- `www.niteowlhq.com` now permanently redirects (308) to `niteowlhq.com` via a host-matched redirect in `next.config.ts`, rather than relying on dashboard-only Vercel config — keeps the canonical domain in code
+
+### Fixed
+- **Critical: the dashboard preview chat (`/chat`) never showed Remy's reply for some messages.** Root cause in `src/lib/chat.ts`'s `streamChat()`: the client reads the response body in raw chunks and watches for a trailing `\n__DONE__` marker the server appends after the last token. If a chunk contained the marker, the code called `onDone(fullText)` using only the text accumulated from *previous* chunks — any of the assistant's reply text that arrived in the same chunk as the marker was silently dropped. Short replies (e.g. the low-confidence "a team member will follow up" handoff message) are the most likely to be fully flushed in a single chunk over Vercel's network, which is exactly the path seen in production logs right before this was reported. `public/widget.js`'s equivalent client-side logic already handled this correctly (`fullText += chunk.split("__DONE__")[0]`) — `chat.ts` now matches that proven pattern instead of dropping the pre-marker text
+- Traced end-to-end before fixing: confirmed `/api/chat` auth, lead extraction, and OpenAI streaming all work correctly server-side (verified against the dev DB with a real authenticated session and real OpenAI streaming, both under `next dev` and a local production build) — the bug was isolated to this one client-side parsing gap, not the API route, Supabase, or OpenAI
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+- Reproduced the real `/api/chat` request/response end-to-end locally (real auth cookie, real org, real OpenAI streaming) and confirmed the server always sends the final token(s) and `\n__DONE__` correctly — confirms the fix in `chat.ts` (not a server-side change) is the correct and sufficient repair
+- Test user/org created for this verification were deleted afterward; no leftover data
+
 ## 2026-07-05 (custom domain connected)
 
 ### Added

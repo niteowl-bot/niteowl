@@ -47,6 +47,11 @@ export async function streamChat({
     const chunk = decoder.decode(value, { stream: true });
 
     if (chunk.includes("__DONE__")) {
+      const before = chunk.split("__DONE__")[0];
+      if (before) {
+        fullText += before;
+        onToken(before);
+      }
       onDone(fullText);
       return;
     }
