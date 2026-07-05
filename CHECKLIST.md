@@ -2,7 +2,7 @@
 
 ## 🔴 Critical (must complete before first business)
 - [x] Deploy to production (Vercel + production Supabase)
-- [ ] Connect a custom domain
+- [x] Connect a custom domain
 - [x] Configure production environment variables
 - [x] Run one complete production signup → onboarding → widget → booking flow
 - [ ] Email booking confirmations (code path fixed and correct 2026-07-04; blocked on Resend custom domain — see below, real customers won't receive these until it's verified)

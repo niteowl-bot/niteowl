@@ -2,6 +2,17 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (custom domain connected)
+
+### Added
+- `niteowlhq.com` and `www.niteowlhq.com` added to the `niteowl` Vercel project (DNS: two `A` records at Porkbun pointing to Vercel's edge, `76.76.21.21`), certs issued and auto-renewing. Production `NEXT_PUBLIC_APP_URL` updated from the `niteowl-pi.vercel.app` placeholder to `https://niteowlhq.com`, followed by a redeploy (no code changes) so the new value takes effect — this is what the widget embed snippet and any server-side links derive from
+- Supabase Auth Site URL and Redirect URLs updated to `niteowlhq.com` (previously only `localhost`/the `.vercel.app` URL were allow-listed) — same class of bug as the 2026-07-04 production-deployment entry, where Supabase silently falls back to the Site URL whenever the app's requested `redirectTo` isn't in the allow-list
+
+### Verified
+- `/api/health`, `/widget.js`, `/`, `/login`, `/signup`, `/auth/callback` all return correct responses over HTTPS on both `niteowlhq.com` and `www.niteowlhq.com`; plain HTTP correctly 308s to HTTPS
+- Confirmed via code (`signup/page.tsx`, `login/page.tsx`) that `emailRedirectTo`/`redirectTo` are built from `window.location.origin`, so a visitor on the new domain automatically requests the correct redirect target — not independently verified by reading an actual confirmation email (no inbox access from this session); a real signup on `https://niteowlhq.com` should be done once to confirm the email link lands on the new domain
+- `www` currently has no redirect to/from apex configured (both serve the site directly) — deliberately left both live rather than pick a primary; can add a redirect either direction on request
+
 ## 2026-07-04 (basic monitoring: error tracking + uptime health check)
 
 ### Added
