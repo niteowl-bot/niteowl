@@ -194,6 +194,10 @@ Return ONLY a valid JSON object in this exact shape:
 {"needsReview": boolean, "reason": string or null}
 
 Rules:
+- The customer is chatting with Remy, the AI receptionist FOR the
+  business described in the knowledge below. Any question about the
+  business itself (its name, type, or what it does) is always
+  answerable from that identity info — never treat these as unclear.
 - needsReview is true ONLY if the message asks something the knowledge
   base does not cover, or requires a judgement call outside general
   business facts (e.g. a specific policy exception, a complaint, a

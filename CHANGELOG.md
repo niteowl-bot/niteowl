@@ -2,6 +2,21 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-05 (critical: business identity questions wrongly routed to human handoff)
+
+### Fixed
+- **Remy couldn't answer basic questions about the business itself** (e.g. "What is my business called?") — always replied as if it had no idea and handed off to a human, even though the business name/type/description are injected into the main system prompt. Root cause was two-layered in `assessAnswerConfidence()` (`src/lib/leadCapture.ts`), the low-confidence gate that runs before the real reply is generated:
+  1. The gate only ever saw `business_knowledge` (FAQ/pricing/hours/policy) rows — never the org's own identity fields (name, type, description) — so it had no way to know those were answerable. Fixed by fetching the org row earlier in both `/api/chat` and `/api/widget/chat` (previously fetched only afterward, purely for the final system prompt) and folding business name/type/description into the same knowledge summary the confidence check reads
+  2. Even after adding identity info to the summary, the gate's prompt still misfired — it's framed around "the customer's question," and a question phrased as "my business" was interpreted by the model as the *customer's own business* rather than the business Remy represents, so it stayed classified as unanswerable. Added an explicit rule clarifying Remy is the receptionist *for* the business described, so questions about that business's own identity are always answerable
+- Traced end-to-end before touching anything: confirmed via direct OpenAI calls that the first fix alone (identity data present in the knowledge summary) was not sufficient — the gate still returned `needsReview: true` for "What is my business called?" — before finding the actual framing issue in the prompt wording itself
+
+### Verified
+- `tsc --noEmit` and `next build` pass
+- Reproduced the exact broken reply locally against a disposable test org (real auth, real OpenAI, dev DB), confirmed the fix resolves it ("Your business is called Claude Debug Co Two.") and confirmed the underlying business-type question also now answers correctly
+- Regression-checked that genuinely undocumented questions (e.g. an unlisted discount policy) still correctly trigger the human-handoff path — the confidence gate's core purpose is intact, only the business-identity blind spot was fixed
+- Applied identically to both `/api/chat` and `/api/widget/chat` per the project rule that dashboard preview and the website widget must share identical AI behaviour
+- Test user/org used for verification deleted afterward; no leftover data
+
 ## 2026-07-05 (www redirect + critical dashboard chat fix)
 
 ### Added

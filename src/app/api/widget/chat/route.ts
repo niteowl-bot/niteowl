@@ -363,8 +363,15 @@ export async function POST(req: NextRequest) {
           .eq("org_id", orgId)
           .eq("is_active", true);
 
-        const knowledgeSummary = (knowledgeResultForCheck.data ?? [])
-          .map((r) => `- ${r.title}: ${r.content}`)
+        const identitySummary = `- Business name: ${org.business_name}\n- Business type: ${org.business_type}${org.description ? `\n- About: ${org.description}` : ""}`;
+
+        const knowledgeSummary = [
+          identitySummary,
+          ...(knowledgeResultForCheck.data ?? []).map(
+            (r) => `- ${r.title}: ${r.content}`
+          ),
+        ]
+          .filter(Boolean)
           .join("\n");
 
         const assessment = await assessAnswerConfidence(latestUserMessage, knowledgeSummary);

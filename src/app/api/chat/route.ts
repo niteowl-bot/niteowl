@@ -418,6 +418,15 @@ const { messages, conversationId, orgId, source } = await req.json();
     return new Response("Missing required fields", { status: 400 });
   }
 
+  // ── Fetch org early — also needed by the confidence check below,
+  // so identity questions ("what's my business called") aren't
+  // treated as outside the knowledge base ─────────────────────────
+  const { data: org } = await supabase
+    .from("organisations")
+    .select("business_name, business_type, primary_goal, description")
+    .eq("id", orgId)
+    .maybeSingle();
+
   // ── Lead extraction — every message, no keyword filter ───────────
   const latestUserMessage: string =
     [...messages]
@@ -466,8 +475,17 @@ let outsideBusinessHours = false;
             .eq("org_id", orgId)
             .eq("is_active", true);
 
-          const knowledgeSummary = (knowledgeResultForCheck.data ?? [])
-            .map((r) => `- ${r.title}: ${r.content}`)
+          const identitySummary = org
+            ? `- Business name: ${org.business_name}\n- Business type: ${org.business_type}${org.description ? `\n- About: ${org.description}` : ""}`
+            : "";
+
+          const knowledgeSummary = [
+            identitySummary,
+            ...(knowledgeResultForCheck.data ?? []).map(
+              (r) => `- ${r.title}: ${r.content}`
+            ),
+          ]
+            .filter(Boolean)
             .join("\n");
 
           const assessment = await assessAnswerConfidence(
@@ -541,25 +559,16 @@ let outsideBusinessHours = false;
   }
 
 
-  // ── Fetch org + knowledge in parallel ───────────────────────────
-  const [orgResult, knowledgeResult] = await Promise.all([
-    supabase
-      .from("organisations")
-      .select("business_name, business_type, primary_goal, description")
-      .eq("id", orgId)
-      .maybeSingle(),
+  // ── Fetch knowledge (org was already fetched above) ──────────────
+  const { data: knowledgeData } = await supabase
+    .from("business_knowledge")
+    .select("category, title, content, display_order")
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .order("category", { ascending: true })
+    .order("display_order", { ascending: true });
 
-    supabase
-      .from("business_knowledge")
-      .select("category, title, content, display_order")
-      .eq("org_id", orgId)
-      .eq("is_active", true)
-      .order("category", { ascending: true })
-      .order("display_order", { ascending: true }),
-  ]);
-
-  const org = orgResult.data;
-  const knowledge: KnowledgeRecord[] = knowledgeResult.data ?? [];
+  const knowledge: KnowledgeRecord[] = knowledgeData ?? [];
 
   const systemPrompt = org
     ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured)
