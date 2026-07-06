@@ -2,6 +2,17 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Widget installation guide)
+
+### Added
+- Professional widget installation guide at `Settings → Website Widget` (`src/app/(dashboard)/settings/widget/WidgetInstallGuide.tsx`), covering WordPress, Wix, Squarespace, Shopify, Webflow, plain HTML, and Google Tag Manager — each with copy-paste-ready numbered steps and a shared embed snippet with a one-click copy button
+- Troubleshooting accordion covering the most likely install failure modes: forgetting to republish (Webflow/Wix/Squarespace/GTM all require a separate publish step), page-level vs site-wide placement, ad blockers, and CSP restrictions
+- **Live "verify installation" check**: enter a URL and the server fetches that page and confirms whether the widget script and the correct widget key are actually present, rather than the business owner having to guess or wait for a customer to report it broken. New endpoint: `POST /api/widget/verify-install` — authenticated, derives the org strictly from the session (never a client-supplied org id), and rejects localhost/private-IP targets to keep this from becoming an open fetch proxy
+
+### Verified
+- End-to-end against a disposable test org (real signup, onboarding, Supabase, deleted afterward): all 7 platform tabs render with correct content, copy button works, troubleshooting accordion expands, and the verify check correctly reports "not confirmed" for a real external page with no widget installed
+- `tsc --noEmit`, `next build`, and `npm run lint` all pass with zero new errors/warnings beyond the existing documented baseline (1 pre-existing lint error, 5 pre-existing warnings)
+
 ## 2026-07-06 (Stripe migration applied to production; full-app adoption review)
 
 ### Database

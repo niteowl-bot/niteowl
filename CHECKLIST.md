@@ -19,7 +19,7 @@
 - [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
 
 ## 🟡 Business onboarding
-- [ ] Widget installation guide (WordPress, Wix, Squarespace, HTML)
+- [x] Widget installation guide (WordPress, Wix, Squarespace, Shopify, Webflow, HTML, Google Tag Manager) — `Settings → Website Widget`, 2026-07-06, includes a live "verify installation" check
 - [ ] Dashboard "Getting Started" guide
 - [ ] Test the widget on several real websites
 - [ ] Verify email deliverability (blocked: Resend is still on the unverified `onboarding@resend.dev` sandbox sender, which redirects every send to the account owner regardless of recipient — needs a verified custom sending domain, likely alongside the custom domain work above)
