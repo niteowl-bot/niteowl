@@ -48,3 +48,6 @@
 - [ ] Collect feedback
 - [ ] Fix reported issues
 
+## ⚪ Known issues (low priority, deferred — not blockers)
+- [ ] **Dashboard preview chat swallows the error toast on a failed first message in a brand-new conversation.** `ChatShell.tsx` remounts `ConversationView` (via `key={activeId ?? "empty"}`) the instant a new conversation is created. If the AI call fails on that exact first message, `onError` fires after the remount and sets state on an already-unmounted instance, so no error message renders. The input is never stuck — the freshly-mounted instance starts clean and works immediately — this is a missed notification, not a crash or dead-end. Any later message in an established conversation shows errors correctly. Root cause and full detail in CHANGELOG.md, 2026-07-06 (AI-call reliability bundle). Deliberately not fixed yet — the real fix means revisiting `ChatShell`'s remount-on-conversation-switch strategy, which deserves its own deliberate pass rather than being folded into a reliability bugfix bundle.
+
