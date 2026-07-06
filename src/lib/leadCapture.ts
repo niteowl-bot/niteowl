@@ -706,15 +706,13 @@ export async function capturePartialLead(
 
       if (nextStatus === "booked" && existing.status !== "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
-      console.log("[email diagnostic] registering after() for booking confirmation (update path)");
       // Not awaited on the request's own critical path — but a bare
       // fire-and-forget promise here is unsafe on Vercel's serverless
       // runtime, which can freeze the function immediately after the
       // response is sent, killing any still-pending work. after()
       // guarantees this runs to completion regardless.
-      after(() => {
-        console.log("[email diagnostic] after() callback started (update path)");
-        return sendBookingConfirmationEmails({
+      after(() =>
+        sendBookingConfirmationEmails({
           customerName: extracted.name ?? existing.name,
           customerEmail: mergedEmail,
           businessName: ownerInfo?.businessName ?? "the business",
@@ -723,12 +721,10 @@ export async function capturePartialLead(
           bookingReference: existing.id.slice(0, 8).toUpperCase(),
           serviceNeeded: existing.service_needed,
           manageToken,
-        })
-          .then(() => console.log("[email diagnostic] sendBookingConfirmationEmails resolved (update path)"))
-          .catch((err) =>
-            console.error("[email] Failed to send booking confirmation:", err)
-          );
-      });
+        }).catch((err) =>
+          console.error("[email] Failed to send booking confirmation:", err)
+        )
+      );
     }
 
     }
@@ -781,10 +777,8 @@ export async function capturePartialLead(
     console.log("[lead capture] inserted new lead:", inserted?.id);
     if (insertStatus === "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
-      console.log("[email diagnostic] registering after() for booking confirmation (insert path)");
-      after(() => {
-        console.log("[email diagnostic] after() callback started (insert path)");
-        return sendBookingConfirmationEmails({
+      after(() =>
+        sendBookingConfirmationEmails({
           customerName: extracted.name,
           customerEmail: extracted.email,
           businessName: ownerInfo?.businessName ?? "the business",
@@ -793,12 +787,10 @@ export async function capturePartialLead(
           bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
           serviceNeeded: extracted.service ?? userMessage,
           manageToken,
-        })
-          .then(() => console.log("[email diagnostic] sendBookingConfirmationEmails resolved (insert path)"))
-          .catch((err) =>
-            console.error("[email] Failed to send booking confirmation:", err)
-          );
-      });
+        }).catch((err) =>
+          console.error("[email] Failed to send booking confirmation:", err)
+        )
+      );
     }
 
   }
