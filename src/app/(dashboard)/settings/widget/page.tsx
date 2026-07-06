@@ -28,34 +28,24 @@ export default async function WidgetSettingsPage() {
     : null;
 
   return (
-    <div className="min-h-screen bg-[#0d0f14] px-4 py-10 md:px-8">
-      <div className="mx-auto max-w-2xl">
-        <div className="mb-1 flex items-center gap-2">
-          <a href="/dashboard" className="text-xs text-white/30 transition hover:text-white/60">
-            Dashboard
-          </a>
-          <span className="text-white/15">/</span>
-          <span className="text-xs text-white/50">Widget</span>
-        </div>
+    <div className="max-w-2xl">
+      <h1 className="mb-1 text-xl font-semibold text-white">Website Widget</h1>
+      <p className="mb-8 text-sm text-white/40">
+        Widget settings coming soon — configuration options like colors,
+        position, and greeting message will live here. For now, here&apos;s
+        your embed code.
+      </p>
 
-        <h1 className="mb-1 text-xl font-semibold text-white">Website Widget</h1>
-        <p className="mb-8 text-sm text-white/40">
-          Widget settings coming soon — configuration options like colors,
-          position, and greeting message will live here. For now, here&apos;s
-          your embed code.
-        </p>
-
-        <div className="rounded-2xl border border-white/[0.07] bg-[#13151c] p-6">
-          {snippet ? (
-            <pre className="overflow-x-auto rounded-lg bg-black/40 p-4 text-xs text-white/70">
-              {snippet}
-            </pre>
-          ) : (
-            <p className="text-sm text-white/40">
-              No widget key found for your organisation yet.
-            </p>
-          )}
-        </div>
+      <div className="rounded-2xl border border-white/[0.07] bg-[#13151c] p-6">
+        {snippet ? (
+          <pre className="overflow-x-auto rounded-lg bg-black/40 p-4 text-xs text-white/70">
+            {snippet}
+          </pre>
+        ) : (
+          <p className="text-sm text-white/40">
+            No widget key found for your organisation yet.
+          </p>
+        )}
       </div>
     </div>
   );

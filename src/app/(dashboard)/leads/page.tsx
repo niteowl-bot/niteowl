@@ -48,7 +48,7 @@ export default async function LeadsPage() {
   const { data: leads, error: leadsError } = await supabase
     .from("leads")
    .select(
-      "id, name, phone, email, service_needed, preferred_datetime, message, source, status, ai_confidence, notes, created_at"
+      "id, name, phone, email, service_needed, preferred_datetime, appointment_datetime, message, source, status, ai_confidence, notes, created_at"
     )
 
     .eq("org_id", org.id)

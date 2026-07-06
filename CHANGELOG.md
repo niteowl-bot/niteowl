@@ -2,6 +2,30 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Stripe migration applied to production; full-app adoption review)
+
+### Database
+- Applied the billing migration (`organisations.subscription_status`, `trial_ends_at`, `payment_provider`, `stripe_customer_id`, `stripe_subscription_id`, `current_period_end`) to Supabase via `supabase db push`. Confirmed via a live query that this is a single Supabase project shared by dev and production (real pilot business rows returned), and that all existing orgs were correctly grandfathered to `subscription_status = 'active'`
+- Pushed the Stripe billing commit to GitHub; Vercel production deploy built successfully. Smoke-tested: homepage 200, `/api/health` reports DB connectivity OK, `/settings/billing` correctly redirects unauthenticated visitors. Stripe test API keys still need to be added before checkout/portal/webhooks can be exercised (tracked in CHECKLIST.md)
+
+### Reviewed
+- Full-app review from a paying business's perspective (security/reliability + product/UX/adoption gaps), requested ahead of building the widget installation guide. Found the installation guide was no longer the single highest-priority item — three issues below outranked it and were fixed first
+
+### Added
+- **Persistent dashboard navigation** (`src/components/dashboard/DashboardNav.tsx`, `src/app/(dashboard)/layout.tsx`) — Dashboard, Chat Preview, Knowledge Base, Leads, Calendar, and Settings are now reachable from every page via a sidebar. Previously there was no persistent nav at all (each page was a standalone screen with only a "back to dashboard" breadcrumb), and Leads and Calendar specifically had **no link anywhere in the UI** — a business owner could not reach the CRM or Calendar without guessing the URL, directly undermining the "never miss an enquiry" pitch since the capture destination was invisible. This is the second time this exact bug shape was found (Knowledge Base was the first, patched 2026-07-05 with one dashboard card); the persistent nav closes the whole bug class instead of adding another one-off card
+  - Moved `onboarding` out of the `(dashboard)` route group (`src/app/onboarding/`, same URL) so the wizard stays nav-free, since a business mid-signup has no org yet
+  - `src/app/(dashboard)/settings/layout.tsx` restructured from a full-page shell with its own sidebar into slim in-page tabs (Business Hours, Website Widget, Billing — the widget embed page is now a proper settings tab instead of an orphaned page), since it now nests inside the new global nav instead of duplicating it
+- Rate limiting on the public `POST /api/widget/chat` (`src/lib/rateLimit.ts`) — 15 requests/60s per IP+widgetKey, 60 requests/60s per widgetKey alone. The widget is public and unauthenticated by design (`widgetKey` is visible in every customer site's HTML source), so a scripted client could bypass the widget UI, run up OpenAI costs (up to 3 calls per message), and flood a business's inbox with fake needs-review emails by minting a fresh client-supplied `conversationId` per request to dodge the per-conversation dedup. In-memory limiter, no new infra — sufficient to bound worst-case abuse cost for the current pilot scale
+
+### Fixed
+- **Appointment edits via the Leads/Calendar "Edit" panel silently did nothing.** Both `EditPanel` components (`src/app/(dashboard)/leads/LeadsTable.tsx`, `src/app/(dashboard)/calendar/CalendarView.tsx`) wrote a business owner's edited appointment time to `preferred_datetime`, but the Calendar's placement logic reads `appointment_datetime` exclusively — an owner correcting a booking got a "Saved ✓" confirmation while the calendar never moved. Now: once a lead has a confirmed `appointment_datetime`, the field edits that column via a proper `datetime-local` input (previously free text); leads with no confirmed appointment yet still edit `preferred_datetime` as before. Also fixed the same mislabeled read-only display (desktop table, mobile card, and Calendar's Contact section all showed `preferred_datetime` under an "Appointment" heading)
+
+### Verified
+- End-to-end against a disposable test org (real signup, real onboarding, real Supabase, deleted afterward): persistent nav renders correctly with no layout breakage (no double sidebars, no horizontal overflow, no console errors) across `/dashboard`, `/chat`, `/knowledge`, `/leads`, `/calendar`, `/settings/hours`, `/settings/billing`, `/settings/widget`
+- Seeded a confirmed booking directly, edited its time via the Calendar `EditPanel`, and confirmed `appointment_datetime` in the database changed to the new value and the appointment chip moved to the new day on the calendar
+- Hit `/api/widget/chat` 20 times in a row with the same widgetKey — first 15 returned 200, the remaining 5 returned 429
+- `tsc --noEmit`, `next build`, and `npm run lint` all pass with zero new errors/warnings beyond the existing documented baseline (1 pre-existing lint error, 5 pre-existing warnings)
+
 ## 2026-07-05 (Stripe subscription billing — Phase 1, provider-agnostic)
 
 ### Added

@@ -10,6 +10,7 @@ import {
 import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
 import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -300,6 +301,31 @@ export async function POST(req: NextRequest) {
 
   if (!messages || !conversationId || !widgetKey) {
     return new Response("Missing required fields", { status: 400 });
+  }
+
+  // ── Rate limiting ────────────────────────────────────────────────
+  // The widget is public and unauthenticated by design (widgetKey is
+  // visible in every customer site's HTML source), so a scripted
+  // client can bypass the widget UI and POST directly. Each message
+  // triggers up to 3 OpenAI calls, and conversationId is client-
+  // supplied, so an unbounded loop can both run up OpenAI costs and
+  // flood a business's inbox with fake needs-review notifications by
+  // minting a fresh conversationId per request. Two limits: a tight
+  // one per IP+widgetKey pair (stops a single scripted client), and a
+  // looser one per widgetKey alone (caps worst-case cost even if the
+  // same leaked key is hit from many IPs).
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+
+  const rateLimitHeaders = { "Access-Control-Allow-Origin": "*" };
+
+  if (!checkRateLimit(`widget-ip:${ip}:${widgetKey}`, 15, 60_000)) {
+    return new Response("Too many requests", { status: 429, headers: rateLimitHeaders });
+  }
+  if (!checkRateLimit(`widget-key:${widgetKey}`, 60, 60_000)) {
+    return new Response("Too many requests", { status: 429, headers: rateLimitHeaders });
   }
 
   const supabase = createAdminClient();

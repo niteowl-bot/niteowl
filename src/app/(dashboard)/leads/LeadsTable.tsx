@@ -13,6 +13,7 @@ export type Lead = {
   email: string | null;
   service_needed: string | null;
   preferred_datetime: string | null;
+  appointment_datetime: string | null;
   message: string | null;
   source: string | null;
   status: string | null;
@@ -65,6 +66,24 @@ function valueOrDash(value: string | null | undefined) {
   return value && value.trim() ? value : "—";
 }
 
+// Converts an ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a
+// <input type="datetime-local"> expects, in the browser's own timezone.
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Shows the confirmed appointment once one exists; falls back to the
+// customer's originally stated preference for leads not yet booked.
+function displayAppointment(lead: Lead) {
+  return lead.appointment_datetime
+    ? formatDate(lead.appointment_datetime)
+    : valueOrDash(lead.preferred_datetime);
+}
+
 // ── MessageCell ──────────────────────────────────────────────────
 
 function MessageCell({ message }: { message: string | null | undefined }) {
@@ -104,7 +123,15 @@ function EditPanel({
     (lead.status as LeadStatus) ?? "new"
   );
   const [service, setService] = useState(lead.service_needed ?? "");
-  const [datetime, setDatetime] = useState(lead.preferred_datetime ?? "");
+  // Once a booking is confirmed, the calendar reads appointment_datetime
+  // exclusively — editing must target that field, not preferred_datetime,
+  // or the change silently never shows up on the calendar.
+  const hasConfirmedAppointment = Boolean(lead.appointment_datetime);
+  const [datetime, setDatetime] = useState(
+    hasConfirmedAppointment
+      ? toDatetimeLocalValue(lead.appointment_datetime)
+      : lead.preferred_datetime ?? ""
+  );
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -114,12 +141,19 @@ function EditPanel({
     setSaveError(null);
 
     const supabase = createClient();
-    const updates = {
-      status,
-      service_needed: service.trim() || null,
-      preferred_datetime: datetime.trim() || null,
-      notes: notes.trim() || null,
-    };
+    const updates = hasConfirmedAppointment
+      ? {
+          status,
+          service_needed: service.trim() || null,
+          appointment_datetime: datetime ? new Date(datetime).toISOString() : null,
+          notes: notes.trim() || null,
+        }
+      : {
+          status,
+          service_needed: service.trim() || null,
+          preferred_datetime: datetime.trim() || null,
+          notes: notes.trim() || null,
+        };
 
     const { error } = await supabase
       .from("leads")
@@ -264,12 +298,14 @@ function EditPanel({
 
               {/* Appointment */}
               <div>
-                <label className={labelCls}>Appointment time</label>
+                <label className={labelCls}>
+                  {hasConfirmedAppointment ? "Appointment time" : "Preferred time"}
+                </label>
                 <input
-                  type="text"
+                  type={hasConfirmedAppointment ? "datetime-local" : "text"}
                   value={datetime}
                   onChange={(e) => setDatetime(e.target.value)}
-                  placeholder="e.g. Tomorrow at 4pm"
+                  placeholder={hasConfirmedAppointment ? undefined : "e.g. Tomorrow at 4pm"}
                   className={inputCls}
                 />
               </div>
@@ -436,7 +472,7 @@ export default function LeadsTable({
                           <td className="px-5 py-4">{valueOrDash(lead.phone)}</td>
                           <td className="px-5 py-4">{valueOrDash(lead.email)}</td>
                           <td className="px-5 py-4">{valueOrDash(lead.service_needed)}</td>
-                          <td className="px-5 py-4">{valueOrDash(lead.preferred_datetime)}</td>
+                          <td className="px-5 py-4">{displayAppointment(lead)}</td>
                           <td className="px-5 py-4">
                             <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusStyle}`}>
                               {valueOrDash(lead.status)}
@@ -497,7 +533,7 @@ export default function LeadsTable({
                         </div>
                         <div>
                           <p className="text-slate-500">Appointment time</p>
-                          <p className="text-slate-200">{valueOrDash(lead.preferred_datetime)}</p>
+                          <p className="text-slate-200">{displayAppointment(lead)}</p>
                         </div>
                         {lead.notes && (
                           <div>

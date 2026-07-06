@@ -1,12 +1,12 @@
 # 🚀 Alpha Launch Readiness
 
 ## 🔴 Billing (Phase 1 — Stripe, code complete, setup outstanding)
-- [ ] Run the billing migration SQL against the **dev** Supabase project (needed before any local testing of this feature)
+- [x] Run the billing migration SQL against Supabase (2026-07-06 — this project has a single Supabase instance for dev and production, confirmed via the real pilot business rows returned; migration applied and verified, all pre-existing orgs correctly grandfathered to `active`)
 - [ ] Add Stripe **test-mode** API keys to `.env.local` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`) and create a test Product/Price for the flat plan
 - [ ] Enable Card + Apple Pay + Google Pay under the Stripe Dashboard's payment methods so Checkout shows all of them
 - [ ] Add a test-mode webhook endpoint in Stripe pointing at `/api/webhooks/stripe`, copy the signing secret into `STRIPE_WEBHOOK_SECRET`
 - [ ] Verify end-to-end: subscribe via Checkout, confirm `organisations.subscription_status` flips to `active`; cancel via the billing portal, confirm it flips to `canceled` and Remy pauses
-- [ ] **Run the same migration SQL against the production Supabase project before this branch is ever deployed** — until then, the live widget will 401 every request the moment this code ships (see CHANGELOG 2026-07-05)
+- [x] Deployed to production (2026-07-06) — the billing gate is live; existing orgs are unaffected since they're grandfathered `active`, and new orgs get a 14-day trial by default
 - [ ] Swap to live Stripe keys + a live Product/Price only once ready to actually charge businesses
 
 ## 🔴 Critical (must complete before first business)

@@ -1,7 +1,11 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const SETTINGS_TABS = [
   { href: "/settings/hours", label: "Business Hours" },
+  { href: "/settings/widget", label: "Website Widget" },
   { href: "/settings/billing", label: "Billing" },
   // Future tabs — add one line each, no other changes needed:
   // { href: "/settings/ai-behaviour", label: "AI Behaviour" },
@@ -19,34 +23,32 @@ export default function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className="flex h-screen bg-slate-950 text-white overflow-hidden">
-      {/* Sidebar nav */}
-      <aside className="w-56 shrink-0 border-r border-slate-800 p-4">
-        <Link
-          href="/dashboard"
-          className="mb-6 block text-sm text-slate-400 hover:text-white transition"
-        >
-          ← Dashboard
-        </Link>
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Settings
-        </h2>
-        <nav className="space-y-1">
-          {SETTINGS_TABS.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className="block rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition"
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
+  const pathname = usePathname();
 
-      {/* Active tab content */}
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+  return (
+    <div className="min-h-full px-4 py-10 md:px-8">
+      <div className="mx-auto max-w-4xl">
+        <h1 className="mb-6 text-2xl font-semibold text-white">Settings</h1>
+        <nav className="mb-8 flex gap-1 border-b border-white/[0.07]">
+          {SETTINGS_TABS.map((tab) => {
+            const active = pathname === tab.href;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`border-b-2 px-4 py-2.5 text-sm transition ${
+                  active
+                    ? "border-blue-500 text-white"
+                    : "border-transparent text-slate-400 hover:text-white"
+                }`}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
+        {children}
+      </div>
     </div>
   );
 }

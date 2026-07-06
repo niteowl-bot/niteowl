@@ -114,6 +114,16 @@ function parseAppointmentDate(dt: string | null): Date | null {
   return null;
 }
 
+// Converts an ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a
+// <input type="datetime-local"> expects, in the browser's own timezone.
+function toDatetimeLocalValue(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function isSameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -150,7 +160,9 @@ function EditPanel({
     (lead.status as LeadStatus) ?? "new"
   );
   const [service, setService] = useState(lead.service_needed ?? "");
-  const [datetime, setDatetime] = useState(lead.preferred_datetime ?? "");
+  const [datetime, setDatetime] = useState(
+    toDatetimeLocalValue(lead.appointment_datetime)
+  );
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -163,7 +175,7 @@ function EditPanel({
     const updates = {
       status,
       service_needed: service.trim() || null,
-      preferred_datetime: datetime.trim() || null,
+      appointment_datetime: datetime ? new Date(datetime).toISOString() : null,
       notes: notes.trim() || null,
     };
 
@@ -231,7 +243,7 @@ function EditPanel({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Appointment</span>
-                <span className="text-slate-200">{valueOrDash(lead.preferred_datetime)}</span>
+                <span className="text-slate-200">{formatDate(lead.appointment_datetime)}</span>
               </div>
             </div>
           </section>
@@ -280,7 +292,7 @@ function EditPanel({
 
               <div>
                 <label className={labelCls}>Appointment time</label>
-                <input type="text" value={datetime} onChange={(e) => setDatetime(e.target.value)} placeholder="e.g. Tomorrow at 4pm" className={inputCls} />
+                <input type="datetime-local" value={datetime} onChange={(e) => setDatetime(e.target.value)} className={inputCls} />
               </div>
 
               <div>
