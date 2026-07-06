@@ -2,6 +2,23 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Resend custom domain live; critical booking-date bug found and fixed)
+
+### Fixed
+- **Critical: relative booking times ("tomorrow at 2pm", "next Friday") could be silently booked on the wrong date.** `src/app/api/widget/chat/route.ts`'s `extractLeadData()` prompt had drifted out of sync with `src/app/api/chat/route.ts`'s — despite a code comment claiming the two are identical, the widget's copy was missing the explicit `preferred_datetime: Return the value exactly as the customer said it` rule and all few-shot examples. Without that instruction, the model resolved relative phrases itself using its own internal (stale, training-data-anchored) sense of "today" *before* the value ever reached `parseDatetimeToIso()` — which correctly receives the real current date, but by then was just reformatting an already-wrong absolute timestamp. Reproduced directly: "tomorrow at 2pm" extracted as `2023-10-04T14:00:00`. Fixed by resyncing the widget's prompt to match the dashboard's (which already had the correct instruction). This is the customer-facing widget path — the one real pilot businesses' actual customers use — so this was live in production.
+- Switched the production email sender from Resend's `onboarding@resend.dev` sandbox (which silently redirected every send to the account owner regardless of recipient) to the newly verified `remy@mail.niteowlhq.com`. Registered a dedicated sending subdomain with Resend rather than the root `niteowlhq.com`, specifically to avoid conflicting with the root domain's existing live MX/SPF records for `hello@niteowlhq.com` forwarding.
+
+### Verified
+- Reproduced the datetime bug via a direct, isolated call to the exact extraction prompt before fixing it, then confirmed the fixed prompt correctly preserves the raw phrase; re-ran a full booking end-to-end through the live widget route post-fix and confirmed the stored `appointment_datetime` in Supabase resolved to the correct real date (2026-07-07 for "tomorrow" asked on 2026-07-06)
+- Audited all 18 existing production leads with a stored `appointment_datetime` for the same corruption pattern (appointment date earlier than the lead's creation date) — zero affected; the bug did not corrupt any live customer data before being caught
+- Domain verification: DNS records added at Porkbun for `mail.niteowlhq.com` (DKIM TXT, SPF TXT, SPF-feedback MX) took two attempts — the MX record didn't save correctly the first time. Confirmed live via `dig`-equivalent checks against all four of Porkbun's own authoritative nameservers plus Google/Cloudflare public resolvers, and empirically via a real end-to-end test send that arrived with both SPF and DKIM passing
+- Post-switch, re-ran a real booking through the live widget route and confirmed both the customer confirmation and business-owner notification emails were sent from `remy@mail.niteowlhq.com` (checked via the Resend API's own send log, not just assumed)
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All disposable test data (test org, test auth user, test leads/conversations) removed after verification
+
+### Requires action
+- `RESEND_FROM_EMAIL` updated in local `.env.local` only — **must be updated in Vercel's production environment variables** before this takes effect in production
+
 ## 2026-07-06 (Pre-alpha security & reliability audit)
 
 ### Fixed

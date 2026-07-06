@@ -14,10 +14,14 @@
 - [x] Connect a custom domain
 - [x] Configure production environment variables
 - [x] Run one complete production signup → onboarding → widget → booking flow
-- [ ] Email booking confirmations (code path fixed and correct 2026-07-04; blocked on Resend custom domain — see below, real customers won't receive these until it's verified)
+- [x] Email booking confirmations (code path fixed 2026-07-04; Resend custom domain verified and live 2026-07-06 — `remy@mail.niteowlhq.com`, confirmed via a real end-to-end booking with both SPF and DKIM passing)
 - [x] Customer cancellation/reschedule links
 - [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
-- [ ] **Add `ADMIN_EMAIL` and `SALES_NOTIFICATION_EMAIL` to Vercel's production environment variables** (2026-07-06 — currently local-only; without these, `/admin/sales-leads` denies everyone and sales lead notification emails silently no-op in production)
+- [ ] **Add `ADMIN_EMAIL`, `SALES_NOTIFICATION_EMAIL`, and the updated `RESEND_FROM_EMAIL` (`remy@mail.niteowlhq.com`) to Vercel's production environment variables** (2026-07-06 — currently local-only; without these, `/admin/sales-leads` denies everyone, sales lead notifications silently no-op, and production email still sends from the old sandbox address)
+
+## 🟢 Critical booking bug found and fixed (2026-07-06)
+- [x] **Relative booking times ("tomorrow at 2pm") could be silently booked on the wrong date** on the public widget (the real customer-facing path) — the widget's lead-extraction prompt had drifted out of sync with the dashboard's and was missing the "return the date exactly as the customer said it" instruction, so the model resolved it itself using a stale internal calendar before the real current date was ever applied. Fixed by resyncing the two prompts; re-verified a real booking now stores the correct date. Full detail in CHANGELOG.md.
+- [x] Audited all existing production leads with a stored appointment time for the same corruption pattern — zero affected, no live customer data was corrupted
 
 ## 🟢 Sales chat (marketing site conversion, 2026-07-06)
 - [x] Persuasive, outcomes-first sales chat on the landing page, separate persona/system from Remy-as-receptionist
@@ -41,7 +45,7 @@
 - [x] Widget installation guide (WordPress, Wix, Squarespace, Shopify, Webflow, HTML, Google Tag Manager) — `Settings → Website Widget`, 2026-07-06, includes a live "verify installation" check
 - [ ] Dashboard "Getting Started" guide
 - [ ] Test the widget on several real websites
-- [ ] Verify email deliverability (blocked: Resend is still on the unverified `onboarding@resend.dev` sandbox sender, which redirects every send to the account owner regardless of recipient — needs a verified custom sending domain, likely alongside the custom domain work above)
+- [x] Verify email deliverability (2026-07-06 — `mail.niteowlhq.com` verified with Resend, `RESEND_FROM_EMAIL` switched to `remy@mail.niteowlhq.com`; confirmed via a real end-to-end send with SPF/DKIM passing and a real booking's confirmation emails checked via Resend's own send log)
 
 ## 🟡 Admin
 - [ ] Business management view

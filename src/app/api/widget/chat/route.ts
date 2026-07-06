@@ -79,6 +79,106 @@ Analyse the customer message and return ONLY a valid JSON object.
   "confidence": number 0.0-1.0
 }
 
+## Intent definitions
+
+"new_booking"
+  Customer wants to book, schedule, get a quote, check availability, or request a service.
+  Triggers: "I'd like to book", "Can I make an appointment", "I need a quote",
+  "Are you available", "I want to arrange", "How much for", "Can you come out"
+
+"reschedule"
+  Customer wants to change, move, update, or correct an existing booking time or date.
+  Triggers: "change my booking", "update my appointment", "move it to", "make it",
+  "actually", "reschedule", "instead", "different time", "can we do", "how about",
+  "5pm instead", "tomorrow instead", "let's do Friday", "change the time",
+  "can you change", "I'd prefer", "switch to"
+
+"contact_update"
+  Customer is providing or correcting contact details only.
+  Triggers: "my email is", "my number is", "you can reach me at",
+  "my name is", "I'm called", "this is [name]", "my phone is"
+
+"question"
+  General question about the business — no booking action required.
+  Triggers: "what are your hours", "do you offer", "how much does",
+  "are you open", "what services", "where are you"
+
+"unknown"
+  Does not fit any category above.
+
+## Field rules
+
+intent
+  Choose the single best intent. When in doubt between new_booking and reschedule,
+  look for words like "change", "update", "move", "actually", "instead", "make it"
+  — those signal reschedule even without the word "reschedule".
+
+name
+  Extract from: "My name is X", "I'm X", "This is X", "call me X".
+  Return null if no name is clearly stated.
+
+email
+  Exact email address as written. Return null if none.
+
+phone
+  Any phone format. Return null if none.
+
+service
+  Short summary of the service or job the customer is requesting.
+  Examples: "Boiler repair", "Hair appointment", "Plumbing quote".
+  STRICT RULES:
+  - Return null if intent is "reschedule". Rescheduling is not a new service request.
+  - Return null if intent is "contact_update". Providing contact details is not a service request.
+  - Return null if intent is "question". Asking a question is not a service request.
+  - Return null if intent is "unknown".
+  - Only populate this field when intent is "new_booking" AND the customer is clearly requesting a specific job or service.
+  - Never copy a phone number, email address, or name into this field.
+  - Never use "phone update", "contact update", "reschedule", or similar administrative descriptions as the service.
+  - If in doubt, return null.
+
+preferred_datetime
+  Extract ANY time or date reference regardless of intent.
+  Covers new bookings, rescheduling, corrections, and relative times.
+  Examples: "5pm tomorrow", "Friday at 2pm", "next Monday morning",
+  "make it 3pm", "actually Tuesday", "morning would be better".
+  Return the value exactly as the customer said it.
+  Return null ONLY if the message contains zero time or date information.
+
+confidence
+  0.9-1.0 confirmed booking with contact details
+  0.7-0.89 booking or service request, details incomplete
+  0.5-0.69 reschedule or contact update
+  0.1-0.49 general question with mild intent signals
+  0.0 no lead intent
+
+## Examples
+
+"I'd like to book a plumber for tomorrow at 3pm, my name is James"
+{"intent":"new_booking","name":"James","email":null,"phone":null,"service":"Plumber booking","preferred_datetime":"tomorrow at 3pm","confidence":0.92}
+
+"Can you change my appointment to 5pm tomorrow?"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"5pm tomorrow","confidence":0.6}
+
+"Actually make it 3pm on Friday"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"3pm on Friday","confidence":0.6}
+
+"Reschedule to next Monday at 9am"
+{"intent":"reschedule","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":"next Monday at 9am","confidence":0.6}
+
+"My email is john@example.com"
+{"intent":"contact_update","name":null,"email":"john@example.com","phone":null,"service":null,"preferred_datetime":null,"confidence":0.55}
+
+"My name is Sarah and my number is 07911 123456"
+{"intent":"contact_update","name":"Sarah","email":null,"phone":"07911 123456","service":null,"preferred_datetime":null,"confidence":0.55}
+
+"What are your opening hours?"
+{"intent":"question","name":null,"email":null,"phone":null,"service":null,"preferred_datetime":null,"confidence":0.0}
+
+## Critical rules
+- Return ONLY the JSON object — no markdown, no explanation, no code fences
+- Never return preferred_datetime as null when any time or date is mentioned
+- For rescheduling messages always set intent to "reschedule" even if the word "reschedule" is not used
+
 Customer message:
 """
 ${message}
