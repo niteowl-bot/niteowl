@@ -3,6 +3,13 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
+console.log(
+  "[email diagnostic] RESEND_API_KEY suffix:",
+  process.env.RESEND_API_KEY?.slice(-6) ?? "(unset)",
+  "| RESEND_FROM_EMAIL:",
+  FROM_EMAIL
+);
+
 // All values below originate from customer/visitor chat input (directly
 // or via AI extraction) and are interpolated into HTML email bodies sent
 // to real business owners' inboxes — escape before interpolating, or a
