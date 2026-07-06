@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
 import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
+import { after } from "next/server";
 
 // ── Shared lead-capture engine ───────────────────────────────────
 // Moved verbatim from src/app/api/chat/route.ts so the public widget
@@ -705,17 +706,24 @@ export async function capturePartialLead(
 
       if (nextStatus === "booked" && existing.status !== "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
-      sendBookingConfirmationEmails({
-        customerName: extracted.name ?? existing.name,
-        customerEmail: mergedEmail,
-        businessName: ownerInfo?.businessName ?? "the business",
-        businessOwnerEmail: ownerInfo?.email ?? null,
-        appointmentDatetime: updatedAppointmentIso ?? existing.appointment_datetime ?? "",
-        bookingReference: existing.id.slice(0, 8).toUpperCase(),
-        serviceNeeded: existing.service_needed,
-        manageToken,
-      }).catch((err) =>
-        console.error("[email] Failed to send booking confirmation:", err)
+      // Not awaited on the request's own critical path — but a bare
+      // fire-and-forget promise here is unsafe on Vercel's serverless
+      // runtime, which can freeze the function immediately after the
+      // response is sent, killing any still-pending work. after()
+      // guarantees this runs to completion regardless.
+      after(() =>
+        sendBookingConfirmationEmails({
+          customerName: extracted.name ?? existing.name,
+          customerEmail: mergedEmail,
+          businessName: ownerInfo?.businessName ?? "the business",
+          businessOwnerEmail: ownerInfo?.email ?? null,
+          appointmentDatetime: updatedAppointmentIso ?? existing.appointment_datetime ?? "",
+          bookingReference: existing.id.slice(0, 8).toUpperCase(),
+          serviceNeeded: existing.service_needed,
+          manageToken,
+        }).catch((err) =>
+          console.error("[email] Failed to send booking confirmation:", err)
+        )
       );
     }
 
@@ -769,17 +777,19 @@ export async function capturePartialLead(
     console.log("[lead capture] inserted new lead:", inserted?.id);
     if (insertStatus === "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
-      sendBookingConfirmationEmails({
-        customerName: extracted.name,
-        customerEmail: extracted.email,
-        businessName: ownerInfo?.businessName ?? "the business",
-        businessOwnerEmail: ownerInfo?.email ?? null,
-        appointmentDatetime: resolvedIso ?? "",
-        bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
-        serviceNeeded: extracted.service ?? userMessage,
-        manageToken,
-      }).catch((err) =>
-        console.error("[email] Failed to send booking confirmation:", err)
+      after(() =>
+        sendBookingConfirmationEmails({
+          customerName: extracted.name,
+          customerEmail: extracted.email,
+          businessName: ownerInfo?.businessName ?? "the business",
+          businessOwnerEmail: ownerInfo?.email ?? null,
+          appointmentDatetime: resolvedIso ?? "",
+          bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
+          serviceNeeded: extracted.service ?? userMessage,
+          manageToken,
+        }).catch((err) =>
+          console.error("[email] Failed to send booking confirmation:", err)
+        )
       );
     }
 

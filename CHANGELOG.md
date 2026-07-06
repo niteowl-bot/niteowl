@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Critical: real production was a different, un-migrated Supabase project; fire-and-forget emails fixed)
+
+### Fixed
+- **Real production (niteowlhq.com) was running against an entirely different Supabase project (`sklcqvvnuigpewzarbiv`) than the one referenced everywhere in local `.env.local` and in every "verified against production" claim made earlier in this session (`kioljdihgbcboxlnwghv`).** Discovered while investigating why the newly-deployed sales chat couldn't write to `sales_leads` in production — confirmed decisively by creating a test org in the `.env.local` project and confirming the real widget route rejected its widget key outright. This means the billing migration (`organisations.subscription_status`, `trial_ends_at`, etc.) had also never reached real production — every widget/dashboard chat request was failing at the very first org lookup query, since it explicitly selects those columns. **The core product was completely non-functional in real production before this fix**, for any business that had tried to use it (though no real pilot businesses had onboarded yet — only 2 old verification/test orgs existed there). Reconstructed the billing migration directly from the application code (`src/lib/billing/access.ts`, `src/lib/billing/stripe.ts`) since no version-controlled migration file exists, and re-ran the `sales_leads` migration against the correct project. Both existing orgs grandfathered to `active`, matching the original migration's behaviour.
+- **Booking confirmation emails and self-service cancel/reschedule notifications were fire-and-forget (`.catch()` with no `await`), which is unsafe on Vercel's serverless runtime** — the function can freeze immediately after the response is sent, killing any still-pending unawaited work. This worked reliably in local `npm run dev` (a long-lived process) but silently failed in real production: a real end-to-end booking test correctly stored the right appointment date but never sent either confirmation email, with no error logged anywhere. Wrapped all four fire-and-forget call sites (`src/lib/leadCapture.ts` ×2, `src/app/api/bookings/manage/route.ts` ×2) in Next.js's `after()`, which guarantees the work completes regardless of when the response is returned. `sendNeedsReviewNotification` and `sendSalesLeadNotification` were already correctly `await`ed and were not at risk.
+
+### Verified
+- Confirmed which Supabase project production actually uses by extracting `NEXT_PUBLIC_SUPABASE_URL` directly from the compiled JS bundle served by the real login page — `NEXT_PUBLIC_*` vars are baked into client-side JS by design, so this needed no special access
+- Re-ran the full end-to-end booking test against the corrected production project post-migration: correct date stored, and (pending redeploy) confirmation emails now expected to send reliably via `after()`
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+
+### Process note
+- Vercel env vars marked "sensitive" cannot be read back via `vercel env pull` or the dashboard, even by the project owner — this is a deliberate write-only security feature, not a bug, but it means env var *values* can't be diffed this way; `vercel env ls` still shows names/scopes/last-modified times, which is how the fact that `RESEND_FROM_EMAIL` was never actually edited (only `ADMIN_EMAIL`/`SALES_NOTIFICATION_EMAIL` were new) was caught
+
 ## 2026-07-06 (Privacy Policy & Terms of Service)
 
 ### Added

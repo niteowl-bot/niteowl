@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgOwnerEmail } from "@/lib/leadCapture";
 import { sendBookingSelfServiceChangeNotification } from "@/lib/email";
@@ -154,17 +154,19 @@ export async function POST(req: NextRequest) {
     }
 
     const ownerInfo = await getOrgOwnerEmail(lead.org_id);
-    sendBookingSelfServiceChangeNotification({
-      businessOwnerEmail: ownerInfo?.email ?? null,
-      customerName: lead.name,
-      customerEmail: lead.email,
-      customerPhone: lead.phone,
-      serviceNeeded: lead.service_needed,
-      bookingReference,
-      action: "cancelled",
-      previousDatetime: lead.appointment_datetime ?? "",
-    }).catch((err) =>
-      console.error("[bookings/manage] Failed to send cancellation notification:", err)
+    after(() =>
+      sendBookingSelfServiceChangeNotification({
+        businessOwnerEmail: ownerInfo?.email ?? null,
+        customerName: lead.name,
+        customerEmail: lead.email,
+        customerPhone: lead.phone,
+        serviceNeeded: lead.service_needed,
+        bookingReference,
+        action: "cancelled",
+        previousDatetime: lead.appointment_datetime ?? "",
+      }).catch((err) =>
+        console.error("[bookings/manage] Failed to send cancellation notification:", err)
+      )
     );
 
     return NextResponse.json({ success: true, status: "cancelled" });
@@ -216,18 +218,20 @@ export async function POST(req: NextRequest) {
     }
 
     const ownerInfo = await getOrgOwnerEmail(lead.org_id);
-    sendBookingSelfServiceChangeNotification({
-      businessOwnerEmail: ownerInfo?.email ?? null,
-      customerName: lead.name,
-      customerEmail: lead.email,
-      customerPhone: lead.phone,
-      serviceNeeded: lead.service_needed,
-      bookingReference,
-      action: "rescheduled",
-      previousDatetime,
-      newDatetime: newIso,
-    }).catch((err) =>
-      console.error("[bookings/manage] Failed to send reschedule notification:", err)
+    after(() =>
+      sendBookingSelfServiceChangeNotification({
+        businessOwnerEmail: ownerInfo?.email ?? null,
+        customerName: lead.name,
+        customerEmail: lead.email,
+        customerPhone: lead.phone,
+        serviceNeeded: lead.service_needed,
+        bookingReference,
+        action: "rescheduled",
+        previousDatetime,
+        newDatetime: newIso,
+      }).catch((err) =>
+        console.error("[bookings/manage] Failed to send reschedule notification:", err)
+      )
     );
 
     return NextResponse.json({ success: true, status: "booked", appointmentDatetime: newIso });

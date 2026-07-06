@@ -1,7 +1,7 @@
 # 🚀 Alpha Launch Readiness
 
 ## 🔴 Billing (Phase 1 — Stripe, code complete, setup outstanding)
-- [x] Run the billing migration SQL against Supabase (2026-07-06 — this project has a single Supabase instance for dev and production, confirmed via the real pilot business rows returned; migration applied and verified, all pre-existing orgs correctly grandfathered to `active`)
+- [x] Run the billing migration SQL against Supabase (2026-07-06 — **correction, same day**: the "single Supabase instance for dev and production" claim below was wrong. The migration had actually only ever been applied to a separate dev/test project (`kioljdihgbcboxlnwghv`) referenced by `.env.local` — real production (`sklcqvvnuigpewzarbiv`) never had it, meaning every widget/dashboard chat request was failing outright. Re-applied directly to the real production project; both existing orgs there grandfathered to `active`. See CHANGELOG for how this was discovered and confirmed.)
 - [ ] Add Stripe **test-mode** API keys to `.env.local` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`) and create a test Product/Price for the flat plan
 - [ ] Enable Card + Apple Pay + Google Pay under the Stripe Dashboard's payment methods so Checkout shows all of them
 - [ ] Add a test-mode webhook endpoint in Stripe pointing at `/api/webhooks/stripe`, copy the signing secret into `STRIPE_WEBHOOK_SECRET`
@@ -12,16 +12,18 @@
 ## 🔴 Critical (must complete before first business)
 - [x] Deploy to production (Vercel + production Supabase)
 - [x] Connect a custom domain
-- [x] Configure production environment variables
-- [x] Run one complete production signup → onboarding → widget → booking flow
-- [x] Email booking confirmations (code path fixed 2026-07-04; Resend custom domain verified and live 2026-07-06 — `remy@mail.niteowlhq.com`, confirmed via a real end-to-end booking with both SPF and DKIM passing)
-- [x] Customer cancellation/reschedule links
+- [x] Configure production environment variables — **but see below**: `RESEND_FROM_EMAIL` specifically was never actually edited in Vercel (confirmed via `vercel env ls` last-modified timestamps — only `ADMIN_EMAIL`/`SALES_NOTIFICATION_EMAIL` are new); it likely still holds the old sandbox address in real production
+- [ ] **Re-verify a complete production signup → onboarding → widget → booking flow against the real production Supabase project** — the version originally checked off here was run against the wrong (dev/test) project (see CHANGELOG, 2026-07-06); needs redoing against `sklcqvvnuigpewzarbiv`
+- [x] Email booking confirmations — code path fixed 2026-07-04; Resend custom domain is genuinely live and verified (that check is account-level, not project-specific); **but** the confirmation email send itself was fire-and-forget and unsafe on Vercel's serverless runtime — fixed 2026-07-06 using `after()`. Combined with the `RESEND_FROM_EMAIL` item above, needs one more real end-to-end check post-redeploy before this is trustworthy
+- [x] Customer cancellation/reschedule links (self-service notification emails had the same fire-and-forget issue — fixed alongside booking confirmations)
 - [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
-- [ ] **Add `ADMIN_EMAIL`, `SALES_NOTIFICATION_EMAIL`, and the updated `RESEND_FROM_EMAIL` (`remy@mail.niteowlhq.com`) to Vercel's production environment variables** (2026-07-06 — currently local-only; without these, `/admin/sales-leads` denies everyone, sales lead notifications silently no-op, and production email still sends from the old sandbox address)
+- [ ] **Double-check `RESEND_FROM_EMAIL` in Vercel's production environment variables is actually set to `remy@mail.niteowlhq.com`** — it was added earlier assuming a simple "add", but it already existed as a variable and needed editing instead; `vercel env ls` shows it untouched
 
-## 🟢 Critical booking bug found and fixed (2026-07-06)
+## 🔴 Critical infrastructure bugs found and fixed (2026-07-06)
+- [x] **Real production was running against a completely different, un-migrated Supabase project than everything tested against all session** — discovered while investigating why sales chat capture failed in production. Confirmed by extracting the real project ref straight out of the production login page's compiled JS. The real project was missing both the billing migration and the new `sales_leads` table; the missing billing columns meant every widget/dashboard chat request was failing at the very first query. Both migrations re-applied to the correct project. Full detail in CHANGELOG.
+- [x] **Booking confirmation and self-service cancel/reschedule emails were fire-and-forget**, which is unsafe on Vercel's serverless runtime (the function can freeze right after the response is sent, killing unawaited work) — worked fine locally, silently failed in real production. Fixed using Next.js's `after()` across all 4 call sites.
 - [x] **Relative booking times ("tomorrow at 2pm") could be silently booked on the wrong date** on the public widget (the real customer-facing path) — the widget's lead-extraction prompt had drifted out of sync with the dashboard's and was missing the "return the date exactly as the customer said it" instruction, so the model resolved it itself using a stale internal calendar before the real current date was ever applied. Fixed by resyncing the two prompts; re-verified a real booking now stores the correct date. Full detail in CHANGELOG.md.
-- [x] Audited all existing production leads with a stored appointment time for the same corruption pattern — zero affected, no live customer data was corrupted
+- [x] Audited all existing leads (in the correct production project) with a stored appointment time for the same date-corruption pattern — zero affected, no live customer data was corrupted
 
 ## 🟢 Sales chat (marketing site conversion, 2026-07-06)
 - [x] Persuasive, outcomes-first sales chat on the landing page, separate persona/system from Remy-as-receptionist
