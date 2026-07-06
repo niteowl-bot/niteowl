@@ -97,6 +97,7 @@ ${message}
         max_tokens: 250,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) return { ...EMPTY_LEAD, confidence: 0.5 };
@@ -518,6 +519,7 @@ export async function POST(req: NextRequest) {
               ...messages.map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })),
             ],
           }),
+          signal: AbortSignal.timeout(30_000),
         });
 
         if (!openaiRes.ok || !openaiRes.body) throw new Error(`OpenAI error: ${openaiRes.status}`);

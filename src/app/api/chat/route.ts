@@ -160,6 +160,7 @@ ${message}
         max_tokens: 250,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
@@ -433,6 +434,7 @@ const { messages, conversationId, orgId, source } = await req.json();
       "business_name, business_type, primary_goal, description, website, subscription_status, trial_ends_at"
     )
     .eq("id", orgId)
+    .eq("owner_id", user.id)
     .maybeSingle();
 
   // ── Billing gate — a lapsed trial/subscription stops Remy from
@@ -646,6 +648,7 @@ let outsideBusinessHours = false;
                 })),
               ],
             }),
+            signal: AbortSignal.timeout(30_000),
           }
         );
 

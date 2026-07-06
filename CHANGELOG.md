@@ -2,6 +2,22 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (AI-call reliability bundle)
+
+### Fixed
+- **No OpenAI call anywhere had a timeout.** A hang or slow response from OpenAI (routine, not hypothetical) would previously leave a request running until the platform's own function timeout killed it, with no fallback message — directly threatening the "never miss a customer enquiry" promise. Added `AbortSignal.timeout()` to every OpenAI call: 15s on the quick lead-extraction/confidence/datetime-parsing calls (`src/app/api/chat/route.ts`, `src/app/api/widget/chat/route.ts`, `src/lib/leadCapture.ts`, `src/lib/parseDatetime.ts`), 30s on the two streaming reply calls. All of these already had `try/catch` with a graceful fallback (`EMPTY_LEAD`, `needsReview: false`, `iso: null`, or a streamed `__ERROR__` sentinel) — the timeout now actually triggers that existing fallback instead of hanging forever.
+- **Dashboard preview chat's `streamChat()` (`src/lib/chat.ts`) had no error handling at all**, unlike `public/widget.js` which already wrapped its fetch/stream loop in `try/catch/finally`. A dropped connection or timeout threw an unhandled rejection, leaving `streaming` stuck `true` and the input permanently disabled — violating the project's rule that dashboard preview and widget must behave identically. Now guarantees exactly one of `onDone`/`onError` fires, matching `widget.js`'s pattern; added a client-side 90s backstop timeout on the `/api/chat` fetch itself, set comfortably above the server's own ~60s worst-case sequential budget (15s extraction + 15s datetime parsing + 30s streaming) so it only fires on a genuine full-stack hang, not a slow-but-healthy request.
+- **`/api/chat` trusted a client-supplied `orgId` with no ownership check**, unlike every other authenticated route in the codebase. Added `.eq("owner_id", user.id)` to the org lookup — a spoofed `orgId` for another organisation now correctly resolves to no data instead of leaking that org's identity/knowledge into the reply or writing leads into their CRM.
+- Deleted the dead `/api/parse-datetime` route — unauthenticated, unrate-limited, called by nothing in the app, and calling OpenAI on every hit. The shared `parseDatetimeToIso()` function it wrapped is unaffected; server code already calls it directly.
+
+### Verified
+- End-to-end against two real disposable test orgs (real auth, real Supabase, deleted afterward): a spoofed cross-tenant `orgId` request no longer receives the target org's paused-billing behavior (proving the ownership check works); a legitimate same-org request is unaffected; the dead route now 404s; simulating a dropped `/api/chat` connection via network-level abort correctly re-enables the dashboard preview chat input with zero unhandled page errors (previously would have left it stuck)
+- A follow-up audit caught the client-side timeout (originally 45s) as too short relative to the server's own worst-case sequential latency (~60s), which could abort a legitimate slow request before the server's own graceful fallback ever got a chance to respond — corrected to 90s and re-verified
+- `tsc --noEmit`, `next build`, and `npm run lint` all pass with zero new errors/warnings beyond the existing documented baseline (1 pre-existing lint error, 5 pre-existing warnings)
+
+### Known residual (not fixed, low severity, deferred)
+- `ChatShell.tsx` remounts `ConversationView` (via `key={activeId ?? "empty"}`) the moment a brand-new conversation is created from the empty state. If the AI call fails on that very first message, `onError` fires after the remount and sets state on an already-unmounted instance, so the error toast silently doesn't render for that one specific case — the input still works fine (the fresh instance mounts clean), so there's no stuck state, just a missed notification. Fixing this properly means revisiting `ChatShell`'s remount-on-conversation-switch strategy, which is a small architectural decision better made deliberately than folded into this bundle.
+
 ## 2026-07-06 (Widget installation guide)
 
 ### Added

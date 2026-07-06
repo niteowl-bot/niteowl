@@ -5,8 +5,9 @@ export interface ParseDatetimeResult {
 
 /**
  * Uses GPT to convert free-text datetime expressions into ISO timestamps.
- * Shared by the /api/parse-datetime route and the chat lead-capture flow —
- * call this directly from server code instead of fetching the route.
+ * Called directly from server code (e.g. the chat lead-capture flow) —
+ * there is no HTTP route for this, to avoid an unauthenticated endpoint
+ * that does nothing but spend OpenAI budget.
  */
 export async function parseDatetimeToIso(
   text: string | null,
@@ -56,6 +57,7 @@ sometime next week → null
         max_tokens: 50,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {

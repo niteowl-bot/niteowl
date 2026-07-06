@@ -232,6 +232,7 @@ Return ONLY the JSON object — no markdown, no explanation.`;
         max_tokens: 100,
         messages: [{ role: "user", content: prompt }],
       }),
+      signal: AbortSignal.timeout(15_000),
     });
 
     if (!res.ok) {
