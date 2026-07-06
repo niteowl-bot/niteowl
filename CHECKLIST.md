@@ -51,8 +51,9 @@
 - [ ] Business management view
 - [ ] Verify backups
 - [ ] Export data capability
-- [ ] Privacy Policy
-- [ ] Terms of Service
+- [x] Privacy Policy (2026-07-06 — `/privacy`, tailored to what the app actually collects/processes; not a substitute for a real legal review, but a solid, specific draft rather than generic boilerplate)
+- [x] Terms of Service (2026-07-06 — `/terms`, same caveat)
+- [x] Linked from the footer (already referenced there), the signup page's existing agreement notice, the sales chat, and the embeddable customer-facing widget (absolute URL, since it renders on third-party sites)
 
 ## ⚪ Version 2
 - [ ] Voice AI

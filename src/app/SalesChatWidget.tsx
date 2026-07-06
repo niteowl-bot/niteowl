@@ -187,6 +187,13 @@ export default function SalesChatWidget() {
               Send
             </button>
           </div>
+          <p className="px-3 pb-2.5 text-[11px] text-slate-400 text-center">
+            By chatting, you agree to our{" "}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-slate-600">
+              Privacy Policy
+            </a>
+            .
+          </p>
         </div>
       )}
     </>

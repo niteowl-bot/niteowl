@@ -120,6 +120,10 @@
         style="background:#2563eb; color:white; border:none; border-radius:8px; padding:0 16px; font-size:14px; font-weight:600; cursor:pointer;"
       >Send</button>
     </div>
+    <p style="margin:0; padding:0 12px 10px; font-size:11px; color:#9ca3af; text-align:center;">
+      Powered by NiteOwl AI ·
+      <a href="${API_ORIGIN}/privacy" target="_blank" rel="noopener noreferrer" style="color:#9ca3af; text-decoration:underline;">Privacy Policy</a>
+    </p>
   `;
 
   document.body.appendChild(bubble);

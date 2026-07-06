@@ -2,6 +2,18 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Privacy Policy & Terms of Service)
+
+### Added
+- `/privacy` and `/terms` pages (`src/app/privacy/page.tsx`, `src/app/terms/page.tsx`) — tailored to what NiteOwl actually collects and processes (Customer accounts, End User chat/booking data, the OpenAI/Supabase/Resend/Stripe/Vercel/Sentry sub-processor list), not generic boilerplate. Matches the site's existing dark theme; not a substitute for a real legal review, but a specific, accurate first draft
+- Linked from the footer and the signup page's existing agreement notice (both already referenced `/privacy` and `/terms` before the pages existed — this closes that gap), plus two new placements: a small "By chatting, you agree to our Privacy Policy" notice in the NiteOwl sales chat (`SalesChatWidget.tsx`), and a "Powered by NiteOwl AI · Privacy Policy" line in the embeddable customer-facing widget (`public/widget.js`) — using an absolute URL there, since that widget renders on third-party business websites and a relative link would have pointed at the host site's own (nonexistent) `/privacy` page
+
+### Verified
+- Both pages render correctly and are reachable from the footer and signup notice
+- Sales chat privacy notice renders and links correctly
+- Widget.js privacy link resolves to an absolute `niteowlhq.com` URL even when embedded on a simulated third-party host page — confirmed via a standalone test host page
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+
 ## 2026-07-06 (Resend custom domain live; critical booking-date bug found and fixed)
 
 ### Fixed
