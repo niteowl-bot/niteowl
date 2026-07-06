@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Real root cause of the production email failure: RESEND_FROM_EMAIL was never actually updated)
+
+### Fixed
+- **Booking confirmation and sales lead notification emails were failing in real production with a Resend "testing mode" validation error, even after the Supabase-project fix and the `after()` fix.** Traced this precisely rather than guessing: added temporary logging of the Resend SDK's actual send outcome, which revealed `resend.emails.send()` resolves with `{ data, error }` on API-level failures instead of throwing — every call site's `try/catch` was blind to this, silently treating a rejected send as success. Fixed by checking the `error` field explicitly (`src/lib/email.ts`, new shared `sendChecked()` helper).
+- That fix surfaced the real underlying error message directly: `RESEND_API_KEY`'s account had no verified domain. Suspected (wrongly, at first) that Vercel's production key was for a different Resend account entirely, and updated it to match `.env.local`'s — this didn't fix it. Added one more round of minimal diagnostic logging (last 6 characters of the key, plus the resolved `FROM_EMAIL` — never the full secret) and found the real, much simpler cause: **`RESEND_FROM_EMAIL` in Vercel's production environment was still `onboarding@resend.dev`**, the Resend sandbox sender, which is always testing-mode-restricted regardless of which account or key sends from it. It had only ever been added as a sibling of the new `ADMIN_EMAIL`/`SALES_NOTIFICATION_EMAIL` variables, never actually edited itself — exactly the same class of mistake as the earlier "single Supabase instance" assumption. Updated directly in Vercel to `remy@mail.niteowlhq.com`.
+
+### Verified
+- Full real production end-to-end test, post-fix: a real widget booking correctly stored the right date (Next.js `after()` fix from earlier in the day) *and* both confirmation emails sent from `remy@mail.niteowlhq.com` and were confirmed `delivered` via Resend's own API (not just "accepted")
+- A full sales-chat demo capture also completed correctly end-to-end against real production: all 5 fields captured, `sales_leads` row landed with `status: complete`, and the team notification email delivered
+- All temporary diagnostic logging removed once each root cause was confirmed
+- All test leads/conversations/sales_leads created during this investigation removed from the real production database; the two pre-existing organisations (`Verification Plumbing Co`, `Niteowl Test`) and their prior history were left untouched
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- `/privacy`, `/terms`, `/admin/sales-leads` (unauthenticated redirect), and `/api/health` all confirmed live and correct on the current production deployment
+
 ## 2026-07-06 (Critical: real production was a different, un-migrated Supabase project; fire-and-forget emails fixed)
 
 ### Fixed
