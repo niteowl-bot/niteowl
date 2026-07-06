@@ -17,6 +17,21 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// The Resend SDK resolves with { data, error } on API-level failures
+// (invalid key, unverified sender, etc.) rather than throwing — a bare
+// `await resend.emails.send(...)` inside try/catch silently treats
+// those as success, since nothing ever throws. Every call site must
+// check `error` explicitly and surface it as a real thrown error so
+// the existing try/catch (and any caller relying on it) actually sees
+// the failure instead of assuming it was sent.
+async function sendChecked(params: Parameters<typeof resend.emails.send>[0]) {
+  const { data, error } = await resend.emails.send(params);
+  if (error) {
+    throw new Error(`Resend API error: ${error.name} — ${error.message}`);
+  }
+  return data;
+}
+
 interface BookingConfirmationParams {
   customerName: string | null;
   customerEmail: string | null;
@@ -70,7 +85,7 @@ export async function sendBookingConfirmationEmails(
   // Customer confirmation
   if (customerEmail) {
     try {
-      await resend.emails.send({
+      await sendChecked({
         from: FROM_EMAIL,
         to: customerEmail,
         subject: `Booking confirmed with ${businessName}`,
@@ -101,7 +116,7 @@ export async function sendBookingConfirmationEmails(
   // Business owner notification
   if (businessOwnerEmail) {
     try {
-      await resend.emails.send({
+      await sendChecked({
         from: FROM_EMAIL,
         to: businessOwnerEmail,
         subject: `New booking: ${displayName} — ${formattedDate}`,
@@ -167,7 +182,7 @@ export async function sendNeedsReviewNotification(
   const safeContext = conversationContext ? escapeHtml(conversationContext) : null;
 
   try {
-    await resend.emails.send({
+    await sendChecked({
       from: FROM_EMAIL,
       to: businessOwnerEmail,
       subject: "Customer enquiry requires review",
@@ -248,7 +263,7 @@ export async function sendBookingSelfServiceChangeNotification(
         )}</strong>.</p>`;
 
   try {
-    await resend.emails.send({
+    await sendChecked({
       from: FROM_EMAIL,
       to: businessOwnerEmail,
       subject,
@@ -303,7 +318,7 @@ export async function sendSalesLeadNotification(
   const safeDemoTime = preferredDemoTime ? escapeHtml(preferredDemoTime) : null;
 
   try {
-    await resend.emails.send({
+    await sendChecked({
       from: FROM_EMAIL,
       to: notifyEmail,
       subject: `New sales lead: ${name?.trim() || "A prospect"}${company ? ` — ${company}` : ""}`,
