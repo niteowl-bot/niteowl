@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgOwnerEmail } from "@/lib/leadCapture";
 import { sendBookingSelfServiceChangeNotification } from "@/lib/email";
+import { checkRateLimit } from "@/lib/rateLimit";
 import {
   isWithinBusinessHours,
   isSlotAvailable,
@@ -102,6 +103,23 @@ export async function POST(req: NextRequest) {
 
   if (!token || !action) {
     return NextResponse.json({ error: "Missing token or action" }, { status: 400 });
+  }
+
+  // Public, token-authenticated — a leaked or guessed manage_token could
+  // otherwise trigger unlimited reschedule/cancel notification emails to
+  // the business owner with no throttle. Two limits, same shape as the
+  // public widget route: one per IP (stops a scripted client), one per
+  // token (caps worst-case notification spam even across many IPs).
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+
+  if (!checkRateLimit(`bookings-manage-ip:${ip}`, 20, 60_000)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  if (!checkRateLimit(`bookings-manage-token:${token}`, 10, 60_000)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const supabase = createAdminClient();

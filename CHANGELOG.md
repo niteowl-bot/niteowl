@@ -2,6 +2,49 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-06 (Pre-alpha security & reliability audit)
+
+### Fixed
+- **HTML injection in every transactional email** (`src/lib/email.ts`, all four send functions). Customer/visitor-supplied text (chat questions, names, phone numbers, sales-lead fields) was interpolated directly into HTML email bodies with no escaping — a message like `Need a quote<a href="...">Sign in</a>` sent through the public widget chat would render as live HTML in the "Customer enquiry requires review" email landing in a real business owner's inbox, a phishing vector against NiteOwl's own notification system. Added a shared `escapeHtml()` helper, applied to every interpolated value across all four functions (booking confirmations, needs-review notifications, self-service cancel/reschedule notifications, sales lead notifications).
+- **`/api/chat` still wrote leads and read another org's knowledge base using the raw, unverified client-supplied `orgId`**, even though the 2026-07-06 "AI-call reliability bundle" entry below added an ownership check to the org *lookup*. That fix made `org` correctly resolve to `null` for a spoofed `orgId`, but nothing then stopped execution — the lead-capture block and `business_knowledge` query still ran against the raw `orgId`, relying entirely on Supabase RLS (not verifiable from this repo) as the only remaining defence. Gated the entire lead-capture/confidence-check block on `org` being non-null (`src/app/api/chat/route.ts`); the existing generic-assistant fallback reply for a missing org is unaffected.
+- **`/api/chat` (the authenticated dashboard preview chat) had no rate limiting**, unlike `/api/widget/chat` and `/api/sales/chat`. Since signup requires no card, a scripted loop against this route with a real session could run up unbounded OpenAI costs — the same abuse pattern the widget route was already hardened against. Added the same `checkRateLimit` pattern, keyed per user.
+- **No rate limiting on `/api/bookings/manage`** (public, token-authenticated). A leaked or guessed `manage_token` allowed unlimited reschedule/cancel calls, each firing an owner-notification email with no throttle. Added per-IP and per-token limits, matching the widget route's dual-key shape.
+- **SSRF hardening gap in `/api/widget/verify-install`**. The disallowed-host check only pattern-matched the literal hostname string against private IP ranges — it never resolved DNS before fetching (so a hostname that resolves to an internal address or the cloud metadata IP `169.254.169.254` via DNS rebinding sailed through), and `redirect: "follow"` meant a page that simply 302'd to an internal URL bypassed the check entirely regardless of the original host. Now resolves and checks every hop (initial host + each redirect, up to 3) against private/loopback/link-local ranges for both IPv4 and IPv6 (including the `::ffff:`-mapped IPv4 bypass), and caps the response body read at 2MB.
+
+### Verified
+- Full multi-file audit of `src/` (all API routes, lib helpers, dashboard/admin pages) run ahead of external alpha; findings cross-checked against CHANGELOG/CHECKLIST to exclude already-tracked issues (ChatShell remount, hydration #418, Resend sandbox sender)
+- Standalone test of the new SSRF logic against 10 cases (private ranges, cloud metadata address, the IPv4-mapped-IPv6 bypass attempt, and real public domains) — all correct
+- `/api/chat`, `/api/bookings/manage`, `/api/widget/chat` all still respond correctly (401/429 where expected) after the fixes; live-fired a 25-request burst at `/api/bookings/manage` and confirmed the rate limit engages after the 10th request for the same token
+- `/api/sales/chat` produces an unchanged, on-brand reply after the shared `email.ts` rewrite, confirming no regression to the unrelated sales chat feature
+- `tsc --noEmit` and `npm run lint` both pass with zero new errors/warnings beyond the existing documented baseline (`CalendarView.tsx` unused var, `api/chat/route.ts` unused var, `onboarding/page.tsx` unused var, `ConversationView.tsx`'s deliberately-deferred `react-hooks/set-state-in-effect`)
+
+### Not fixed (flagged, low priority)
+- `/api/leads` (GET/POST/PATCH) has zero callers anywhere in the app — `LeadsTable.tsx` updates leads via a direct RLS-scoped browser call instead — and its `PATCH` status whitelist is missing `needs_review`/`awaiting_confirmation`/`cancelled`. Unreviewed, unused attack surface; left in place pending a decision to wire it up properly or delete it.
+
+## 2026-07-06 (Sales chat assistant — Alpha conversion feature)
+
+### Added
+- New NiteOwl sales chat assistant on the marketing landing page (`src/app/SalesChatWidget.tsx`, `src/app/api/sales/chat/route.ts`) — a persuasive, outcomes-first sales conversation aimed at converting website visitors into signed-up businesses. Deliberately separate from Remy-as-receptionist (`/api/chat`, `/api/widget/chat`): different persona, different audience, no org/booking/knowledge-base involved
+- Dedicated objection handling for the five most common pushbacks ("I already have a receptionist", "we're too small", "it's too expensive", "we're too busy", "why not just hire a receptionist") — recognised even when paraphrased, each reframed into a reason to buy rather than deflected
+- Industry personalization: infers the visitor's trade from conversation, asks one clarifying question if genuinely unknown, then reasons out realistic industry-specific missed-enquiry examples — a reusable prompt structure, not a hardcoded per-industry script (verified against plumber, dentist, solicitor, electrician, accountant, restaurant, and an unlisted example — dog grooming — to confirm it generalises)
+- Structured, validated, one-field-at-a-time demo lead capture (name → email → phone → company → preferred demo time), backed by a new `sales_leads` table and `src/lib/salesLeadCapture.ts` — regex-validates each field before accepting it, re-asks on invalid input, allows corrections mid-flow, and merges by conversation then by contact details so a returning prospect in a new browser session never creates a duplicate row
+- `sendSalesLeadNotification()` (`src/lib/email.ts`) emails the NiteOwl team once a lead is complete, deduplicated via a `notification_sent` flag
+- New admin-only `/admin/sales-leads` page — gated by `user.email === process.env.ADMIN_EMAIL`, reads via the service-role client (the table has RLS enabled with zero policies, so no session can query it directly regardless of login)
+- Persistent "Start free trial" CTA inside the chat window; prompt logic distinguishes a visitor who's ready now (pointed straight at the trial, no lead form) from one who wants a demo first (routed into the field-collection flow above)
+
+### Fixed (caught during this feature's own testing)
+- A returning visitor in a new browser session who gave contact details matching an existing complete lead was getting a duplicate row instead of merging — the first message of any new conversation inserted a row immediately, which then shadowed the contact-based match on the next message. Fixed by not creating a row until a field is actually extracted.
+- The demo-detail collection previously also triggered on "I want to sign up" — sending a ready-to-buy visitor through five questions before pointing them at the (already available) self-serve trial. Scoped the five-field collection to genuine demo/contact requests only.
+
+### Verified
+- Multi-turn scripted conversations against the live API for every step: persuasive/outcome-first framing, all 5 objections, 6 industries plus one unlisted one, full sequential capture including a deliberately invalid email (rejected and re-asked) and a mid-flow name correction, cross-session duplicate merge (confirmed via direct DB query — exactly one row), and both CTA paths (ready-now vs. wants-a-demo)
+- Admin page's unauthenticated redirect confirmed directly; the authenticated render was verified via a Supabase-admin-API-minted session rather than the real password (which isn't available to the assistant) — owner should do one manual pass per the test steps already given
+- `tsc --noEmit` and `npm run lint` pass with no new errors/warnings
+
+### Requires action before deploy
+- `ADMIN_EMAIL` and `SALES_NOTIFICATION_EMAIL` were added to local `.env.local` only — must be added to Vercel's production environment variables or the admin page denies everyone and lead notifications silently no-op in production
+- Sales lead notification emails inherit the existing Resend sandbox-sender limitation (tracked below) — not a new issue, just not yet fixed for this path either
+
 ## 2026-07-06 (AI-call reliability bundle)
 
 ### Fixed

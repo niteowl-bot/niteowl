@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
 import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
+import { checkRateLimit } from "@/lib/rateLimit";
 import {
   type LeadIntent,
   type ExtractedLead,
@@ -412,6 +413,14 @@ export async function POST(req: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  // Authenticated, but each message can trigger up to 3 OpenAI calls —
+  // an unbounded loop against this route runs up OpenAI billing the
+  // same way the public widget route's rate limiting was added to
+  // prevent (see /api/widget/chat).
+  if (!checkRateLimit(`chat-user:${user.id}`, 20, 60_000)) {
+    return new Response("Too many requests", { status: 429 });
+  }
+
 const { messages, conversationId, orgId, source } = await req.json();
 
   if (!messages || !conversationId || !orgId) {
@@ -455,7 +464,7 @@ let outsideBusinessHours = false;
   let handoffAskContact = false;
   let handoffContactCaptured = false;
 
-      if (latestUserMessage) {
+      if (latestUserMessage && org) {
     try {
       const extracted = await extractLeadData(latestUserMessage);
       detectedIntent = extracted.intent;

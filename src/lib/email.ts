@@ -3,6 +3,20 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
+// All values below originate from customer/visitor chat input (directly
+// or via AI extraction) and are interpolated into HTML email bodies sent
+// to real business owners' inboxes — escape before interpolating, or a
+// message like `Need a quote<a href="...">Sign in</a>` renders as live
+// HTML in a notification email the recipient trusts.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 interface BookingConfirmationParams {
   customerName: string | null;
   customerEmail: string | null;
@@ -45,7 +59,10 @@ export async function sendBookingConfirmationEmails(
   } = params;
 
   const formattedDate = formatAppointmentDate(appointmentDatetime);
-  const displayName = customerName?.trim() || "there";
+  const displayName = escapeHtml(customerName?.trim() || "there");
+  const safeBusinessName = escapeHtml(businessName);
+  const safeService = serviceNeeded ? escapeHtml(serviceNeeded) : null;
+  const safeCustomerEmail = customerEmail ? escapeHtml(customerEmail) : null;
   const manageUrl = manageToken
     ? `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/booking/manage?token=${manageToken}`
     : null;
@@ -59,16 +76,16 @@ export async function sendBookingConfirmationEmails(
         subject: `Booking confirmed with ${businessName}`,
         html: `
           <p>Hi ${displayName},</p>
-          <p>Your booking with <strong>${businessName}</strong> is confirmed.</p>
+          <p>Your booking with <strong>${safeBusinessName}</strong> is confirmed.</p>
           <p>
             <strong>Date & time:</strong> ${formattedDate}<br/>
-            ${serviceNeeded ? `<strong>Service:</strong> ${serviceNeeded}<br/>` : ""}
+            ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
             <strong>Booking reference:</strong> ${bookingReference}
           </p>
           ${
             manageUrl
               ? `<p>Need to make changes? <a href="${manageUrl}">Cancel or reschedule your booking</a>.</p>`
-              : `<p>If you need to make any changes, please contact ${businessName} directly.</p>`
+              : `<p>If you need to make any changes, please contact ${safeBusinessName} directly.</p>`
           }
         `,
       });
@@ -92,9 +109,9 @@ export async function sendBookingConfirmationEmails(
           <p>You have a new booking.</p>
           <p>
             <strong>Customer:</strong> ${displayName}<br/>
-            ${customerEmail ? `<strong>Email:</strong> ${customerEmail}<br/>` : ""}
+            ${safeCustomerEmail ? `<strong>Email:</strong> ${safeCustomerEmail}<br/>` : ""}
             <strong>Date & time:</strong> ${formattedDate}<br/>
-            ${serviceNeeded ? `<strong>Service:</strong> ${serviceNeeded}<br/>` : ""}
+            ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
             <strong>Booking reference:</strong> ${bookingReference}
           </p>
         `,
@@ -128,13 +145,11 @@ export async function sendNeedsReviewNotification(
 ): Promise<boolean> {
   const {
     businessOwnerEmail,
-    businessName,
     customerName,
     customerEmail,
     customerPhone,
     question,
     conversationContext,
-    leadId,
   } = params;
 
   if (!businessOwnerEmail) {
@@ -145,7 +160,11 @@ export async function sendNeedsReviewNotification(
   }
 
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/leads`;
-  const displayName = customerName?.trim() || "A customer";
+  const displayName = escapeHtml(customerName?.trim() || "A customer");
+  const safeEmail = customerEmail ? escapeHtml(customerEmail) : null;
+  const safePhone = customerPhone ? escapeHtml(customerPhone) : null;
+  const safeQuestion = escapeHtml(question);
+  const safeContext = conversationContext ? escapeHtml(conversationContext) : null;
 
   try {
     await resend.emails.send({
@@ -156,11 +175,11 @@ export async function sendNeedsReviewNotification(
         <p>Customer enquiry requires review.</p>
         <p>
           <strong>From:</strong> ${displayName}<br/>
-          ${customerEmail ? `<strong>Email:</strong> ${customerEmail}<br/>` : ""}
-          ${customerPhone ? `<strong>Phone:</strong> ${customerPhone}<br/>` : ""}
+          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
+          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
         </p>
-        <p><strong>Question:</strong> ${question}</p>
-        ${conversationContext ? `<p><strong>Context:</strong> ${conversationContext}</p>` : ""}
+        <p><strong>Question:</strong> ${safeQuestion}</p>
+        ${safeContext ? `<p><strong>Context:</strong> ${safeContext}</p>` : ""}
         <p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>
       `,
     });
@@ -211,12 +230,15 @@ export async function sendBookingSelfServiceChangeNotification(
     return false;
   }
 
-  const displayName = customerName?.trim() || "A customer";
+  const displayName = escapeHtml(customerName?.trim() || "A customer");
+  const safeEmail = customerEmail ? escapeHtml(customerEmail) : null;
+  const safePhone = customerPhone ? escapeHtml(customerPhone) : null;
+  const safeService = serviceNeeded ? escapeHtml(serviceNeeded) : null;
   const formattedPrevious = formatAppointmentDate(previousDatetime);
   const subject =
     action === "cancelled"
-      ? `Booking cancelled: ${displayName} — ${formattedPrevious}`
-      : `Booking rescheduled: ${displayName}`;
+      ? `Booking cancelled: ${customerName?.trim() || "A customer"} — ${formattedPrevious}`
+      : `Booking rescheduled: ${customerName?.trim() || "A customer"}`;
 
   const bodyDetail =
     action === "cancelled"
@@ -233,9 +255,9 @@ export async function sendBookingSelfServiceChangeNotification(
       html: `
         ${bodyDetail}
         <p>
-          ${customerEmail ? `<strong>Email:</strong> ${customerEmail}<br/>` : ""}
-          ${customerPhone ? `<strong>Phone:</strong> ${customerPhone}<br/>` : ""}
-          ${serviceNeeded ? `<strong>Service:</strong> ${serviceNeeded}<br/>` : ""}
+          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
+          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
+          ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
           <strong>Booking reference:</strong> ${bookingReference}
         </p>
       `,
@@ -243,6 +265,63 @@ export async function sendBookingSelfServiceChangeNotification(
     return true;
   } catch (err) {
     console.error("[email] Failed to send self-service change notification:", err);
+    return false;
+  }
+}
+
+interface SalesLeadNotificationParams {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  industry: string | null;
+  preferredDemoTime: string | null;
+}
+
+/**
+ * Notifies the NiteOwl team when a sales-chat prospect completes all
+ * required fields. Separate from sendNeedsReviewNotification, which
+ * notifies a TENANT business owner about their own customer — this
+ * always goes to the NiteOwl team, not a business's owner_id.
+ */
+export async function sendSalesLeadNotification(
+  params: SalesLeadNotificationParams
+): Promise<boolean> {
+  const { name, email, phone, company, industry, preferredDemoTime } = params;
+  const notifyEmail = process.env.SALES_NOTIFICATION_EMAIL;
+
+  if (!notifyEmail) {
+    console.error("[email] SALES_NOTIFICATION_EMAIL not set — skipped sales lead notification.");
+    return false;
+  }
+
+  const displayName = escapeHtml(name?.trim() || "A prospect");
+  const safeEmail = email ? escapeHtml(email) : null;
+  const safePhone = phone ? escapeHtml(phone) : null;
+  const safeCompany = company ? escapeHtml(company) : null;
+  const safeIndustry = industry ? escapeHtml(industry) : null;
+  const safeDemoTime = preferredDemoTime ? escapeHtml(preferredDemoTime) : null;
+
+  try {
+    await resend.emails.send({
+      from: FROM_EMAIL,
+      to: notifyEmail,
+      subject: `New sales lead: ${name?.trim() || "A prospect"}${company ? ` — ${company}` : ""}`,
+      html: `
+        <p>A visitor completed the sales chat on the marketing site.</p>
+        <p>
+          <strong>Name:</strong> ${displayName}<br/>
+          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
+          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
+          ${safeCompany ? `<strong>Company:</strong> ${safeCompany}<br/>` : ""}
+          ${safeIndustry ? `<strong>Industry:</strong> ${safeIndustry}<br/>` : ""}
+          ${safeDemoTime ? `<strong>Preferred demo time:</strong> ${safeDemoTime}<br/>` : ""}
+        </p>
+      `,
+    });
+    return true;
+  } catch (err) {
+    console.error("[email] Failed to send sales lead notification:", err);
     return false;
   }
 }

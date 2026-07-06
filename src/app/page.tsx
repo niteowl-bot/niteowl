@@ -1,6 +1,9 @@
+import SalesChatWidget from "./SalesChatWidget";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-white font-sans">
+      <SalesChatWidget />
 
       {/* ── NAV ── */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">

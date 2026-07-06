@@ -17,6 +17,25 @@
 - [ ] Email booking confirmations (code path fixed and correct 2026-07-04; blocked on Resend custom domain — see below, real customers won't receive these until it's verified)
 - [x] Customer cancellation/reschedule links
 - [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
+- [ ] **Add `ADMIN_EMAIL` and `SALES_NOTIFICATION_EMAIL` to Vercel's production environment variables** (2026-07-06 — currently local-only; without these, `/admin/sales-leads` denies everyone and sales lead notification emails silently no-op in production)
+
+## 🟢 Sales chat (marketing site conversion, 2026-07-06)
+- [x] Persuasive, outcomes-first sales chat on the landing page, separate persona/system from Remy-as-receptionist
+- [x] Objection handling for the 5 most common pushbacks
+- [x] Industry personalization (reusable prompt structure, verified against 7 industries including one not explicitly listed)
+- [x] Structured, validated, one-field-at-a-time demo lead capture with correction support and cross-session duplicate prevention
+- [x] Admin-only `/admin/sales-leads` CRM view + team email notification on completed leads
+- [x] Closing CTA — free trial for ready visitors, demo flow for those still deciding
+- [ ] Owner's own manual pass of the authenticated `/admin/sales-leads` view (assistant verified the unauthenticated redirect and the underlying data directly, but not the authenticated render — no access to real login credentials)
+
+## 🟢 Pre-alpha security & reliability audit (2026-07-06)
+- [x] Full-codebase audit ahead of external alpha (security, performance, reliability, production-readiness)
+- [x] Fixed: unescaped user input in transactional emails (HTML injection into business-owner-facing notification emails)
+- [x] Fixed: `/api/chat` lead-capture/knowledge-base access still used an unverified client-supplied `orgId` after a spoofed org lookup returned null (the 2026-07-04 fix only patched the lookup, not the write path)
+- [x] Fixed: `/api/chat` had no rate limiting (unlike the other two chat routes) — unbounded OpenAI cost-abuse risk on a no-card-required signup
+- [x] Fixed: `/api/bookings/manage` had no rate limiting — a leaked/guessed manage_token could trigger unlimited notification emails
+- [x] Fixed: SSRF hardening gap in `/api/widget/verify-install` (DNS-rebinding and redirect-based bypass of the private-IP/localhost check, including the cloud metadata address)
+- [ ] `/api/leads` route is dead code (zero callers) with an incomplete status whitelist — flagged, not removed; decide whether to wire it up or delete it
 
 ## 🟡 Business onboarding
 - [x] Widget installation guide (WordPress, Wix, Squarespace, Shopify, Webflow, HTML, Google Tag Manager) — `Settings → Website Widget`, 2026-07-06, includes a live "verify installation" check
