@@ -123,7 +123,7 @@ export default function SalesChatWidget() {
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-24 right-5 w-[360px] max-w-[calc(100vw-40px)] h-[500px] max-h-[calc(100vh-120px)] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-50">
+        <div className="fixed inset-0 sm:inset-auto sm:bottom-24 sm:right-5 w-full sm:w-[360px] sm:max-w-[calc(100vw-40px)] h-dvh sm:h-[500px] sm:max-h-[calc(100vh-120px)] bg-white sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden z-[60]">
           <div className="bg-indigo-600 text-white px-4 py-4 flex items-center justify-between">
             <span className="text-sm font-semibold">Chat with us about Remy</span>
             <button
