@@ -38,7 +38,8 @@
 - [x] Fixed (2026-07-07): mobile input font-size (14px) was below iOS Safari's auto-zoom threshold, clipping chat content on focus — see CHANGELOG
 - [x] Fixed (2026-07-07): an objection or tangential reply mid-collection could make Remy drop the pending field request entirely; field collection guidance is now an explicit override — see CHANGELOG
 - [x] Added (2026-07-07): a demo request now requires explicit visitor confirmation of a full recap before being marked complete or triggering the team notification — see CHANGELOG
-- [ ] Mobile scroll/clipping fix (2026-07-07 round 2) is a defensive fix, not a confirmed-fixed repro — could not be verified on a real mobile device, only headless Chromium/WebKit emulation. Needs a real-device check.
+- [x] Fixed (2026-07-08): the page behind the chat widget could be scrolled while the widget was open (confirmed via a real device recording, then reproduced precisely: `window.scrollY` moved on a background wheel-scroll with the chat open); now locked and restored correctly on close — see CHANGELOG
+- [ ] Mobile message clipping is still NOT confirmed fixed by a real repro. Two rounds of fixes applied (auto-zoom font-size, scroll-to-bottom hardening, now background-scroll lock) based on well-reasoned root-cause analysis, but neither round reproduced the exact symptom in automated testing at any viewport, and the 2026-07-08 screen recording used to investigate turned out to be a desktop browser window filmed with a phone camera, not native mobile rendering. Needs a real native screen recording (not a camera pointed at a monitor) with the clipping moment timestamped.
 - [ ] Owner's own manual pass of the authenticated `/admin/sales-leads` view (assistant verified the unauthenticated redirect and the underlying data directly, but not the authenticated render — no access to real login credentials)
 
 ## 🟢 Pre-alpha security & reliability audit (2026-07-06)

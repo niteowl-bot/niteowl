@@ -2,6 +2,22 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: background page scrolled behind the open widget; further mobile clipping investigation)
+
+### Fixed
+- **The page behind the sales chat widget scrolled freely while the widget was open, instead of staying locked to whatever was behind it.** Confirmed directly via a real screen recording of the deployed site (owner testing on a real device) showing the background hero/testimonial content changing position while the chat panel stayed still, then reproduced precisely in an automated test: `window.scrollY` moved from 800 to 1300 in response to a wheel-scroll gesture with the chat open, because nothing in `SalesChatWidget.tsx` ever locked page scroll — the panel is `position: fixed`, which only pins the panel itself, not the page underneath it. Fixed using the standard fixed-position-plus-restore body lock (save `scrollY`, pin `body` at `position: fixed; top: -{scrollY}px`, restore and re-scroll to the saved position on close) rather than plain `overflow: hidden`, which doesn't reliably block scroll/touch bleed-through on mobile Safari/Chrome. Re-verified with the same automated reproduction: wheel-scroll while open now has zero effect on `scrollY`, and closing the widget restores the exact prior scroll position.
+- **Investigated the reported mobile message-clipping further** but could not get a clean, reproducible repro of a message getting permanently stuck cut off — instrumented scroll-state polling every 100ms through a full streamed conversation (157 samples) found the message list correctly at the bottom (0px gap) throughout, aside from one isolated ~20px transient that self-corrected within ~100ms. Applying the background-scroll lock above is a plausible fix for this too: without it, the page moving under the user's touch on a real phone can trigger the browser's own address-bar show/hide, an additional source of viewport instability uncorrelated with new message content that the existing `messages`-keyed scroll effect couldn't anticipate. Flagged in CHECKLIST as still needing a real-device confirmation.
+
+### Verified
+- Reviewed the actual screen recording provided (`ffmpeg`/`playwright` installed via `winget`/`npm` locally to extract and inspect frames, since no video-capable tool was otherwise available) — note: the recording is of a narrowed *desktop* browser window filmed with a phone camera (visible Windows taskbar, browser tab bar, and mouse cursor throughout), not native mobile Chrome/Samsung Internet rendering. The background-scroll bug is confirmed and viewport-independent regardless; the clipping claim couldn't be independently confirmed from this recording or from automated testing at any viewport size.
+- Automated reproduction of the scroll-lock bug and fix, both before (`scrollY` 800→1300 on background wheel-scroll while open) and after (locked at 0, restored to 800 on close)
+- Confirmed no desktop regression: background page scroll works normally before opening and after closing the widget; desktop screenshots pixel-equivalent to pre-fix layout
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All test sales leads created against the dev Supabase project during reproduction/verification deleted afterward
+
+### Known limitation
+- Message clipping is still not independently confirmed reproducible by this session — the fix applied is a well-reasoned, standard-practice change targeting the most likely shared root cause (unlocked background scroll → viewport instability), not a confirmed-fixed repro of the exact symptom. If it persists after this deploy, the next step should be a real-device screen *recording* (native screen capture, not a camera pointed at a monitor) with the exact timestamp of the clipping called out.
+
 ## 2026-07-07 (Sales chat: field collection could be derailed by objections; no confirmation gate before completing; mobile scroll robustness)
 
 ### Fixed

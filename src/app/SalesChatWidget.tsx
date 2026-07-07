@@ -54,6 +54,36 @@ export default function SalesChatWidget() {
     return () => vv.removeEventListener("resize", scrollToBottom);
   }, [isOpen]);
 
+  // Locks the underlying page while the widget is open — confirmed via
+  // a live reproduction (window.scrollY moved from 800 to 1300 on a
+  // background wheel-scroll with the chat open) that nothing currently
+  // prevents the page behind this fixed-position panel from scrolling.
+  // Plain `overflow: hidden` on body doesn't reliably block scroll/
+  // touch bleed-through on mobile Safari/Chrome, so this uses the
+  // standard fixed-position-plus-restore technique instead, which also
+  // removes a likely source of the mobile viewport instability
+  // (address-bar show/hide triggered by the page itself moving) behind
+  // the occasional message clipping.
+  useEffect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+    const scrollY = window.scrollY;
+    const { body } = document;
+    const previous = {
+      position: body.style.position,
+      top: body.style.top,
+      width: body.style.width,
+    };
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    return () => {
+      body.style.position = previous.position;
+      body.style.top = previous.top;
+      body.style.width = previous.width;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
   async function handleSend() {
     const text = input.trim();
     if (!text || isStreaming) return;
