@@ -299,10 +299,10 @@ export default function Home() {
               Terms
             </a>
             <a
-              href="mailto:hello@niteowl.ai"
+              href="mailto:contact@niteowlhq.com"
               className="hover:text-white transition-colors"
             >
-              hello@niteowl.ai
+              contact@niteowlhq.com
             </a>
           </div>
           <p className="text-slate-600 text-sm">

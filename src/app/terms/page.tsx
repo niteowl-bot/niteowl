@@ -187,8 +187,8 @@ export default function TermsOfServicePage() {
             <h2 className="text-xl font-semibold text-white mb-3">14. Contact us</h2>
             <p>
               Questions about these terms can be sent to{" "}
-              <a href="mailto:hello@niteowlhq.com" className="text-indigo-400 hover:text-indigo-300">
-                hello@niteowlhq.com
+              <a href="mailto:contact@niteowlhq.com" className="text-indigo-400 hover:text-indigo-300">
+                contact@niteowlhq.com
               </a>
               .
             </p>
