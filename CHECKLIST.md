@@ -36,6 +36,9 @@
 - [x] Closing CTA — free trial for ready visitors, demo flow for those still deciding
 - [x] Fixed (2026-07-07): a returning visitor's permanent `localStorage` conversation id could match an already-completed demo lead, causing Remy to confirm a booking using stale data instead of collecting fresh details — see CHANGELOG
 - [x] Fixed (2026-07-07): mobile input font-size (14px) was below iOS Safari's auto-zoom threshold, clipping chat content on focus — see CHANGELOG
+- [x] Fixed (2026-07-07): an objection or tangential reply mid-collection could make Remy drop the pending field request entirely; field collection guidance is now an explicit override — see CHANGELOG
+- [x] Added (2026-07-07): a demo request now requires explicit visitor confirmation of a full recap before being marked complete or triggering the team notification — see CHANGELOG
+- [ ] Mobile scroll/clipping fix (2026-07-07 round 2) is a defensive fix, not a confirmed-fixed repro — could not be verified on a real mobile device, only headless Chromium/WebKit emulation. Needs a real-device check.
 - [ ] Owner's own manual pass of the authenticated `/admin/sales-leads` view (assistant verified the unauthenticated redirect and the underlying data directly, but not the authenticated render — no access to real login credentials)
 
 ## 🟢 Pre-alpha security & reliability audit (2026-07-06)

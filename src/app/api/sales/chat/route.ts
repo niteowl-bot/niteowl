@@ -17,46 +17,62 @@ export const runtime = "nodejs";
 // different persona, different audience, and no org/booking/knowledge
 // base involved here.
 
+// Field collection is driven by captureSalesLead's deterministic state
+// (src/lib/salesLeadCapture.ts), not by the model's own judgement — the
+// model only decides HOW to phrase the next question, never WHICH one.
+// Reproduced empirically that without an explicit override, an
+// objection or tangential question mid-collection could make the model
+// answer it and drop the pending field entirely (the base prompt's
+// objection-handling/personalization/closing sections competing with
+// the plain "next field" hint below it). Every branch here is framed
+// as an override of those sections for this reply specifically, so a
+// side question still gets answered but the field request is never
+// silently dropped.
 function buildLeadStateSection(result: CaptureResult | null): string {
   if (!result) return "";
 
-  const sections: string[] = [];
-
   const capturedPairs = Object.entries(result.known).filter(([, v]) => v);
-  if (capturedPairs.length > 0) {
-    sections.push(
-      [
-        "## Details already captured for this visitor",
-        "Do not ask for any of these again — reference them naturally instead (e.g. use their name).",
-        ...capturedPairs.map(([k, v]) => `- ${k}: ${v}`),
-      ].join("\n")
-    );
-  }
+  const capturedList =
+    capturedPairs.length > 0
+      ? ["Details already captured for this visitor — do not ask for any of these again:", ...capturedPairs.map(([k, v]) => `- ${k}: ${v}`)].join("\n")
+      : null;
+
+  const OVERRIDE_HEADER = "## ACTIVE DEMO COLLECTION — this overrides every other instruction above for this reply";
+
+  let body: string | null = null;
 
   if (result.invalidFieldNote) {
-    sections.push(
-      ["## Re-ask required", result.invalidFieldNote, "Ask for this one field again, and nothing else, in this reply."].join(
-        "\n"
-      )
-    );
+    body = [
+      capturedList,
+      result.invalidFieldNote,
+      "Your entire reply must (1) briefly acknowledge the issue and (2) ask them to re-enter this one field. Do not pitch, handle objections, or ask about anything else in this reply.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  } else if (result.awaitingConfirmation) {
+    body = [
+      "You now have all five details needed for this visitor's demo request:",
+      ...capturedPairs.map(([k, v]) => `- ${k}: ${v}`),
+      "Your entire reply must recap these details back to the visitor in plain language and explicitly ask them to confirm everything is correct — for example, \"Does that all look right?\"",
+      "The demo is NOT booked yet. Do not say it's booked, do not say the team will follow up, and do not offer the free trial CTA in this reply — those only happen after the visitor confirms. Do not pitch or handle objections in this reply.",
+      "If their most recent message corrected one of these fields, the values above already reflect that correction — recap the corrected values, don't ask for that field again.",
+    ].join("\n");
   } else if (result.nextField) {
-    sections.push(
-      [
-        "## Next field to collect",
-        `The next detail to ask for is their ${result.nextField.label}. Ask for this one field only, nothing else.`,
-      ].join("\n")
-    );
+    body = [
+      capturedList,
+      `The next detail to collect is their ${result.nextField.label}.`,
+      `If their latest message raised an objection, asked a question, or went off-topic, you may answer it in one brief sentence using the guidance above — but your reply must still end by asking for their ${result.nextField.label}. Never let an objection, a question, or the closing/free-trial CTA end this reply without also asking for this field. Ask for this one field only, nothing else.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
   } else if (result.justCompleted) {
-    sections.push(
-      [
-        "## All details captured",
-        "You now have everything needed to arrange their demo. Thank them warmly and confirm the team will follow up to schedule it. Do not ask for any more details.",
-        "Also mention they don't have to wait for the demo to get started: the 14-day free trial (no credit card required) is available right now using the \"Start free trial\" button in this chat window, and they can explore Remy themselves before the demo call.",
-      ].join("\n")
-    );
+    body = [
+      "The visitor just confirmed all their details are correct. Thank them warmly and confirm the team will follow up to schedule the demo. Do not ask for any more details.",
+      "Also mention they don't have to wait for the demo to get started: the 14-day free trial (no credit card required) is available right now using the \"Start free trial\" button in this chat window, and they can explore Remy themselves before the demo call.",
+    ].join("\n");
   }
 
-  return sections.length > 0 ? "\n\n" + sections.join("\n\n") : "";
+  return body ? "\n\n" + OVERRIDE_HEADER + "\n" + body : "";
 }
 
 function buildSalesSystemPrompt(): string {

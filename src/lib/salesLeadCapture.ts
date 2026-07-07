@@ -255,6 +255,15 @@ function deduplicateMessage(existing: string | null, incoming: string): string {
   return [...lines, incoming.trim()].slice(-10).join("\n");
 }
 
+// A short, deliberately generous set of common ways someone confirms
+// a recap is correct. Only matched against the start of the message —
+// "Actually my email is..." must NOT match, since that's a correction,
+// not a confirmation. A false negative here just re-shows the recap
+// (safe); a false positive would complete a booking without real
+// confirmation, so the anchor stays strict.
+const AFFIRMATION_PATTERN =
+  /^(yes|yep|yeah|yup|correct|confirmed?|that'?s (right|correct|it|all correct)|sounds good|looks good|all (correct|good)|perfect|great|good to go|go ahead|book (it|me in)|please book|that'?s everything|all set)\b/i;
+
 // ── captureSalesLead ───────────────────────────────────────────
 
 export interface CaptureResult {
@@ -262,6 +271,9 @@ export interface CaptureResult {
   known: Record<RequiredField["key"] | "industry", string | null>;
   nextField: RequiredField | null;
   invalidFieldNote: string | null;
+  // All five fields are known but the visitor hasn't explicitly
+  // confirmed the recap yet — the demo is NOT booked until they do.
+  awaitingConfirmation: boolean;
   justCompleted: boolean;
   alreadyNotified: boolean;
 }
@@ -326,6 +338,7 @@ export async function captureSalesLead(
       },
       nextField: null,
       invalidFieldNote: null,
+      awaitingConfirmation: false,
       justCompleted: false,
       alreadyNotified: false,
     };
@@ -363,8 +376,28 @@ export async function captureSalesLead(
   }
 
   const nextFieldAfter = resolveNextField(merged);
-  const justCompleted = Boolean(expectedBefore) && !nextFieldAfter;
-  const status = nextFieldAfter ? "new" : "complete";
+  const isReadyNow = nextFieldAfter === null;
+  // expectedBefore === null means the pre-merge record already had all
+  // five fields — i.e. this isn't the first time we're ready, so a
+  // recap was already shown on a prior turn and this message is the
+  // visitor's response to it.
+  const wasReadyBefore = expectedBefore === null;
+
+  let justCompleted = false;
+  let awaitingConfirmation = false;
+
+  if (isReadyNow) {
+    if (wasReadyBefore && AFFIRMATION_PATTERN.test(userMessage.trim())) {
+      justCompleted = true;
+    } else {
+      // Either just became ready this turn (show the recap for the
+      // first time) or the visitor's reply to a prior recap wasn't a
+      // clear confirmation (re-show it, with any corrections applied).
+      awaitingConfirmation = true;
+    }
+  }
+
+  const status = justCompleted ? "complete" : "new";
 
   const payload = {
     conversation_id: conversationId,
@@ -396,6 +429,7 @@ export async function captureSalesLead(
     known: merged,
     nextField: nextFieldAfter,
     invalidFieldNote,
+    awaitingConfirmation,
     justCompleted,
     alreadyNotified: existing?.notification_sent ?? false,
   };

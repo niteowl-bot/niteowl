@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -24,8 +24,35 @@ export default function SalesChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const conversationIdRef = useRef<string | null>(null);
+
+  function scrollToBottom() {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }
+
+  // Keeps the latest message in view as content streams in. A direct
+  // scrollTop assignment (rather than scrollIntoView({behavior:
+  // "smooth"})) can't be interrupted by the next rapid token update,
+  // and running it from an effect keyed on `messages` guarantees the
+  // DOM has already committed the new content before we measure it.
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Mobile browsers resize the visible viewport (address bar
+  // collapsing, on-screen keyboard opening/closing) independently of
+  // when message content updates. Re-asserting scroll position on
+  // every visualViewport resize prevents the newest reply from being
+  // left outside the visible area if that resize settles after the
+  // last scroll-to-bottom call.
+  useEffect(() => {
+    if (!isOpen || typeof window === "undefined" || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    vv.addEventListener("resize", scrollToBottom);
+    return () => vv.removeEventListener("resize", scrollToBottom);
+  }, [isOpen]);
 
   async function handleSend() {
     const text = input.trim();
@@ -89,7 +116,6 @@ export default function SalesChatWidget() {
           copy[copy.length - 1] = { role: "assistant", content: textSoFar };
           return copy;
         });
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }
     } catch (err) {
       console.error("[SalesChatWidget] fetch error:", err);
@@ -100,7 +126,6 @@ export default function SalesChatWidget() {
       });
     } finally {
       setIsStreaming(false);
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }
 
@@ -135,7 +160,7 @@ export default function SalesChatWidget() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5">
             {messages.length === 0 && (
               <p className="text-slate-500 text-sm">
                 Hi! Ask me anything about Remy, your AI receptionist — or tell me about your business and I&apos;ll show you how it fits.
@@ -153,7 +178,6 @@ export default function SalesChatWidget() {
                 {m.content}
               </div>
             ))}
-            <div ref={messagesEndRef} />
           </div>
 
           <div className="px-3 pt-3 border-t border-slate-200">
