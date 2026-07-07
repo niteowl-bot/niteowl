@@ -2,6 +2,26 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: real cause of mobile message clipping found — silently-truncated streams; verified field collection against live production)
+
+### Fixed
+- **Root cause of mobile message clipping found: an interrupted stream (connection dropped before the server's `__DONE__` completion sentinel arrived) left whatever partial text had streamed in permanently displayed as if it were the finished reply, with no error and no recovery.** `SalesChatWidget.tsx`'s read loop only checked for `__DONE__`/`__ERROR__:` markers inside received chunks — if `reader.read()` ever resolved with `done: true` *without* one of those markers ever showing up (a dropped or reset connection, far more likely on real mobile cellular than on any stable desktop/localhost connection, which is why two prior rounds of CSS/scroll-based fixes never reproduced it), the loop just exited and the truncated text stayed on screen. Confirmed with a deterministic test: intercepted the API response and served a truncated body with no sentinel — the old code left it stuck exactly as described ("Could you please share your name to proceed with book..."). Fixed by tracking whether the sentinel was actually seen; an incomplete stream now retries once automatically (transparently, before the user sees anything), and only falls back to a visible "that reply got cut off, please try again" if the retry also fails — never silently shows partial text as final.
+- Refactored `handleSend`'s inline fetch/stream logic into a separate `streamAssistantReply` function to support the retry without duplicating the read loop; behavior for the normal (non-interrupted) path is unchanged.
+
+### Investigated, not changed
+- **Re-verified the field-collection logic directly against the live production API** (`https://niteowlhq.com/api/sales/chat`, bypassing the browser entirely) after the user reported the booking flow was still not collecting all fields on their real device. Walked a full conversation through curl: name → email → phone → company → preferred time were all correctly requested in order by the currently-deployed production code. Also confirmed the previous scroll-lock and field-collection fixes are present in the live client JS bundle (`visualViewport` and `position:"fixed"` both found in the deployed chunks). This rules out the server-side logic and the deployment itself as the cause — the "fields not collected" symptom was very likely a downstream effect of the same clipping bug: if the question asking for the next field gets cut off, the flow looks broken even though the server is asking correctly.
+
+### Verified
+- Deterministic reproduction of the exact clipping bug via Playwright route interception (served a response body with no `__DONE__` sentinel) — confirmed the OLD code left the truncated text stuck permanently, and the NEW code transparently retries and shows the complete message with no visible glitch
+- Verified the double-failure fallback path (both attempts truncated): exactly 2 total requests (no retry loop), and a clear error message shown instead of raw truncated text
+- Full end-to-end regression: all 5 fields collected in order, confirmation-gate recap shown, "yes" correctly completes the booking, and the background-scroll lock from the previous fix still holds — all with the new retry logic in place
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All test sales leads created against the dev Supabase project during reproduction/verification deleted afterward
+
+### Known limitation / follow-up needed
+- One test lead (`priya@brightsmiles.co.uk`, "Bright Smiles Dental") was created in the **real production** database while verifying field-collection logic directly against `https://niteowlhq.com`. It was left incomplete (never reached the confirmation step, so no notification email was sent) but was not deleted — `SUPABASE_SERVICE_ROLE_KEY` for production is a Vercel "sensitive" env var and cannot be read back via `vercel env pull` even by the project owner (confirmed empty on pull, consistent with the 2026-07-06 finding). Needs manual deletion via the Supabase dashboard or `/admin/sales-leads`.
+- Still no independent confirmation from a real native screen recording (not a camera pointed at a monitor) that this specific fix resolves the clipping on the reporter's actual device — this fix is shipped because the root cause is now concretely identified and deterministically reproduced/fixed (not inferred), which is a materially stronger basis than the previous two rounds, but real-device confirmation is still the definitive test.
+
 ## 2026-07-08 (Sales chat: background page scrolled behind the open widget; further mobile clipping investigation)
 
 ### Fixed

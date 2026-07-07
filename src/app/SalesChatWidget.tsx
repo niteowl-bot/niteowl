@@ -99,6 +99,32 @@ export default function SalesChatWidget() {
 
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
+    await streamAssistantReply(nextMessages);
+    setIsStreaming(false);
+  }
+
+  function setLastAssistantMessage(content: string) {
+    setMessages((prev) => {
+      const copy = [...prev];
+      copy[copy.length - 1] = { role: "assistant", content };
+      return copy;
+    });
+  }
+
+  // A mobile connection can drop mid-stream before the server's
+  // "__DONE__" completion sentinel ever arrives — reader.read() then
+  // just resolves with done:true, and without checking for the
+  // sentinel, whatever partial text had streamed in was left displayed
+  // as if it were the complete final reply. This is a real cause of
+  // messages appearing "clipped mid-sentence" with no error shown, and
+  // is far more likely on a flaky real mobile connection than on any
+  // stable desktop/localhost connection (which is why it never showed
+  // up there). An incomplete stream is now retried once from scratch
+  // before falling back to a visible error, instead of silently
+  // showing truncated text as if it were done.
+  async function streamAssistantReply(nextMessages: ChatMessage[], attempt = 1): Promise<void> {
+    const MAX_ATTEMPTS = 2;
+
     try {
       const res = await fetch("/api/sales/chat", {
         method: "POST",
@@ -107,17 +133,14 @@ export default function SalesChatWidget() {
       });
 
       if (!res.ok || !res.body) {
-        setMessages((prev) => {
-          const copy = [...prev];
-          copy[copy.length - 1] = { role: "assistant", content: "Sorry, something went wrong. Please try again." };
-          return copy;
-        });
+        setLastAssistantMessage("Sorry, something went wrong. Please try again.");
         return;
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let fullText = "";
+      let sawDone = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -127,35 +150,39 @@ export default function SalesChatWidget() {
 
         if (chunk.includes("__DONE__")) {
           fullText += chunk.split("__DONE__")[0];
+          sawDone = true;
           break;
         }
 
         if (chunk.includes("__ERROR__:")) {
-          setMessages((prev) => {
-            const copy = [...prev];
-            copy[copy.length - 1] = { role: "assistant", content: "Sorry, something went wrong. Please try again." };
-            return copy;
-          });
+          setLastAssistantMessage("Sorry, something went wrong. Please try again.");
           return;
         }
 
         fullText += chunk;
-        const textSoFar = fullText;
-        setMessages((prev) => {
-          const copy = [...prev];
-          copy[copy.length - 1] = { role: "assistant", content: textSoFar };
-          return copy;
-        });
+        setLastAssistantMessage(fullText);
+      }
+
+      if (!sawDone) {
+        if (attempt < MAX_ATTEMPTS) {
+          setLastAssistantMessage("");
+          await streamAssistantReply(nextMessages, attempt + 1);
+          return;
+        }
+        setLastAssistantMessage(
+          fullText.trim()
+            ? "Sorry, that reply got cut off. Please try again."
+            : "Sorry, something went wrong. Please try again."
+        );
       }
     } catch (err) {
       console.error("[SalesChatWidget] fetch error:", err);
-      setMessages((prev) => {
-        const copy = [...prev];
-        copy[copy.length - 1] = { role: "assistant", content: "Sorry, something went wrong. Please try again." };
-        return copy;
-      });
-    } finally {
-      setIsStreaming(false);
+      if (attempt < MAX_ATTEMPTS) {
+        setLastAssistantMessage("");
+        await streamAssistantReply(nextMessages, attempt + 1);
+        return;
+      }
+      setLastAssistantMessage("Sorry, something went wrong. Please try again.");
     }
   }
 
