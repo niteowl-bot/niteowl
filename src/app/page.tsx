@@ -1,4 +1,5 @@
 import SalesChatWidget from "./SalesChatWidget";
+import PricingPrice from "./PricingPrice";
 
 export default function Home() {
   return (
@@ -222,10 +223,7 @@ export default function Home() {
           </p>
 
           <div className="bg-slate-950 rounded-2xl p-8 text-left shadow-xl ring-1 ring-indigo-500/30">
-            <div className="flex items-end gap-2 mb-1">
-              <span className="text-white font-bold text-5xl">£79</span>
-              <span className="text-slate-400 mb-2">/month</span>
-            </div>
+            <PricingPrice />
             <p className="text-slate-400 text-sm mb-8">
               Billed monthly · Cancel anytime
             </p>
