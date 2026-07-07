@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-07 (Sales chat: stale completed leads resurfacing as false confirmations; mobile input auto-zoom)
+
+### Fixed
+- **Sales chat demo capture could confirm a booking it never actually collected in the current conversation.** `SalesChatWidget.tsx` persists its `conversationId` in `localStorage` indefinitely — it never rotates once a demo lead is marked `complete`. `findByConversationId`/`findByContact` in `src/lib/salesLeadCapture.ts` matched on that id (or on email/phone) with no status filter, so a visitor returning later to ask about a new or second demo matched their old, already-`complete` lead row and Remy treated all of its fields — including a stale `preferred_demo_time` from the earlier session — as still valid for the new request. Reproduced directly: completed a full demo capture (name/email/phone/company/time), then reused the same conversation id to ask for a demo again — Remy replied "I see Tuesday afternoon works for you" and moved straight to confirmation without asking anything in the new conversation. Fixed by gating both lookups to `status = "new"` (`OPEN_SALES_LEAD_STATUSES`), mirroring the existing "closed statuses start a fresh lead" rule already used for real bookings in `src/lib/leadCapture.ts`. A completed lead's conversation id (or contact details) no longer matches; a later demo request now starts a fresh lead and Remy asks for each field again, in order.
+- **Mobile message clipping in the sales chat widget was still reproducible after the earlier `h-dvh` panel-height fix.** Root cause was different from what that fix addressed: the message input (`SalesChatWidget.tsx`) is `text-sm` (14px), which is under iOS Safari's 16px auto-zoom-on-focus threshold — tapping the input zooms the whole page in, pushing chat content out of the visible frame on a real phone. Not reproducible in headless Chromium (no auto-zoom-on-focus behavior), so confirmed via direct knowledge of the documented Safari behavior rather than a browser repro. Fixed by bumping the input to `text-base` (16px) below the `sm` breakpoint only (`text-base sm:text-sm`) — desktop keeps its existing 14px input unchanged.
+
+### Verified
+- Reproduced the stale-lead bug against the dev Supabase project before fixing: completed a full 5-field demo capture, then reused the same conversation id to request a second demo — got a fabricated "I see Tuesday afternoon works for you" confirmation with no fields actually asked for in the new conversation
+- Re-ran the same scenario post-fix: the second demo request now correctly starts over and asks for name → email → phone → company → time in order, never claiming a field the visitor hadn't given this time
+- Full happy-path (single conversation, all 5 fields given once) still completes correctly end-to-end post-fix, confirming the status gate doesn't affect normal in-progress resume behavior
+- Headless-Chromium screenshots (390×844 mobile, 1280×800 desktop) of a real multi-turn conversation confirm no visual regression and correct auto-scroll-to-bottom on both; desktop screenshot confirmed pixel-equivalent to pre-fix layout
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline (`CalendarView.tsx` unused var, `api/chat/route.ts` unused var, `onboarding/page.tsx` unused var, `ConversationView.tsx`'s deliberately-deferred `react-hooks/set-state-in-effect`)
+- All test sales leads created against the dev Supabase project during reproduction/verification (7 rows, `company: "Acme Plumbing"`) deleted afterward
+
 ## 2026-07-06 (Real root cause of the production email failure: RESEND_FROM_EMAIL was never actually updated)
 
 ### Fixed

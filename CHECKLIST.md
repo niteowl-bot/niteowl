@@ -34,6 +34,8 @@
 - [x] Structured, validated, one-field-at-a-time demo lead capture with correction support and cross-session duplicate prevention
 - [x] Admin-only `/admin/sales-leads` CRM view + team email notification on completed leads
 - [x] Closing CTA — free trial for ready visitors, demo flow for those still deciding
+- [x] Fixed (2026-07-07): a returning visitor's permanent `localStorage` conversation id could match an already-completed demo lead, causing Remy to confirm a booking using stale data instead of collecting fresh details — see CHANGELOG
+- [x] Fixed (2026-07-07): mobile input font-size (14px) was below iOS Safari's auto-zoom threshold, clipping chat content on focus — see CHANGELOG
 - [ ] Owner's own manual pass of the authenticated `/admin/sales-leads` view (assistant verified the unauthenticated redirect and the underlying data directly, but not the authenticated render — no access to real login credentials)
 
 ## 🟢 Pre-alpha security & reliability audit (2026-07-06)

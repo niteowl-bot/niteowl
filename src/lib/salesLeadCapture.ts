@@ -188,6 +188,17 @@ ${message}
 
 // ── Lookup helpers ──────────────────────────────────────────────
 
+// A "complete" lead is a concluded demo request — the visitor already
+// got a "team will follow up" reply for it. The browser's conversation
+// id is a permanent localStorage value that never rotates, so without
+// this gate a visitor returning to ask about a fresh/second demo (even
+// weeks later) would match the old completed row and Remy would treat
+// its stale fields — including an old preferred_demo_time — as still
+// valid for the new request, skipping straight to a confirmation it
+// never actually collected in the current conversation. Mirrors the
+// same "closed statuses start a fresh lead" rule in leadCapture.ts.
+const OPEN_SALES_LEAD_STATUSES = ["new"];
+
 async function findByConversationId(
   supabase: DatabaseClient,
   conversationId: string
@@ -196,6 +207,7 @@ async function findByConversationId(
     .from("sales_leads")
     .select(SALES_LEAD_SELECT)
     .eq("conversation_id", conversationId)
+    .in("status", OPEN_SALES_LEAD_STATUSES)
     .maybeSingle();
 
   if (error) {
@@ -215,6 +227,7 @@ async function findByContact(
   let query = supabase
     .from("sales_leads")
     .select(SALES_LEAD_SELECT)
+    .in("status", OPEN_SALES_LEAD_STATUSES)
     .order("created_at", { ascending: false })
     .limit(1);
 

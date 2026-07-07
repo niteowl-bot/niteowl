@@ -177,7 +177,7 @@ export default function SalesChatWidget() {
               }}
               placeholder="Type a message…"
               disabled={isStreaming}
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500"
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-base sm:text-sm outline-none focus:border-indigo-500"
             />
             <button
               onClick={handleSend}
