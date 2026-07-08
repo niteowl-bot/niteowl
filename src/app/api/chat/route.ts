@@ -490,6 +490,108 @@ let outsideBusinessHours = false;
           handoffContactCaptured = true;
         }
 
+        // A "contact_update" message can carry a genuine question or
+        // complaint alongside the contact details (e.g. "My plumber
+        // damaged my ceiling, my email is x@y.com") — extractLeadData
+        // tags these contact_update purely because contact details are
+        // present, which previously skipped the confidence check
+        // entirely: the lead saved as an ordinary lead and the owner
+        // was never notified, even though Remy's own reply already told
+        // the customer a team member would follow up. Run the same
+        // check used for question/unknown intents here too.
+        if (extracted.intent === "contact_update") {
+          try {
+            const knowledgeResultForCheck = await supabase
+              .from("business_knowledge")
+              .select("category, title, content")
+              .eq("org_id", orgId)
+              .eq("is_active", true);
+
+            const identitySummary = org
+              ? [
+                  `- Business name: ${org.business_name}`,
+                  `- Business type: ${org.business_type}`,
+                  `- Primary goal: ${org.primary_goal}`,
+                  org.description ? `- About: ${org.description}` : null,
+                  org.website ? `- Website: ${org.website}` : null,
+                ]
+                  .filter(Boolean)
+                  .join("\n")
+              : "";
+
+            const knowledgeSummary = [
+              identitySummary,
+              ...(knowledgeResultForCheck.data ?? []).map(
+                (r) => `- ${r.title}: ${r.content}`
+              ),
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            const assessment = await assessAnswerConfidence(
+              latestUserMessage,
+              knowledgeSummary
+            );
+
+            if (assessment.needsReview) {
+              console.log(
+                "[post handler] low confidence on contact_update — flagging for review:",
+                assessment.reason
+              );
+
+              const reviewResult = await capturePartialLead(
+                supabase,
+                orgId,
+                conversationId,
+                latestUserMessage,
+                extracted,
+                leadSource,
+                true
+              );
+
+              handoffContactCaptured = true;
+
+              const alreadyNotified = await hasNeedsReviewNotificationBeenSent(
+                supabase,
+                reviewResult.leadId,
+                conversationId
+              );
+
+              if (alreadyNotified) {
+                console.log(
+                  "[post handler] needs-review notification already sent for lead:",
+                  reviewResult.leadId
+                );
+              } else {
+                const ownerInfo = await getOrgOwnerEmail(orgId);
+                const notificationSent = await sendNeedsReviewNotification({
+                  businessOwnerEmail: ownerInfo?.email ?? null,
+                  businessName: ownerInfo?.businessName ?? "the business",
+                  customerName: extracted.name,
+                  customerEmail: extracted.email,
+                  customerPhone: extracted.phone,
+                  question: latestUserMessage,
+                  conversationContext: null,
+                  leadId: reviewResult.leadId,
+                });
+
+                if (notificationSent) {
+                  await markNeedsReviewNotificationSent(
+                    supabase,
+                    reviewResult.leadId,
+                    conversationId
+                  );
+                }
+              }
+            }
+          } catch (err) {
+            console.error(
+              "[post handler] confidence check error (contact_update):",
+              err
+            );
+          }
+        }
+
       } else {
         console.log("[post handler] intent not actionable — checking answer confidence");
 
