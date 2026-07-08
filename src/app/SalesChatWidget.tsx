@@ -119,11 +119,20 @@ export default function SalesChatWidget() {
   // messages appearing "clipped mid-sentence" with no error shown, and
   // is far more likely on a flaky real mobile connection than on any
   // stable desktop/localhost connection (which is why it never showed
-  // up there). An incomplete stream is now retried once from scratch
-  // before falling back to a visible error, instead of silently
-  // showing truncated text as if it were done.
+  // up there). An incomplete stream is now retried before falling back
+  // to a visible error, instead of silently showing truncated text as
+  // if it were done.
+  //
+  // The sentinel check itself must run against the ACCUMULATED text,
+  // not each individual network chunk in isolation — different
+  // browsers' networking stacks chunk a stream differently, and
+  // nothing guarantees the 9-character "__DONE__" marker lands whole
+  // in one chunk. If it's split across two reads (observed as
+  // Samsung-Internet-specific clipping that Chrome's chunking pattern
+  // happened not to trigger), checking only the latest chunk would
+  // never detect it even though the full text already contains it.
   async function streamAssistantReply(nextMessages: ChatMessage[], attempt = 1): Promise<void> {
-    const MAX_ATTEMPTS = 2;
+    const MAX_ATTEMPTS = 3;
 
     try {
       const res = await fetch("/api/sales/chat", {
@@ -146,20 +155,20 @@ export default function SalesChatWidget() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
+        fullText += decoder.decode(value, { stream: true });
 
-        if (chunk.includes("__DONE__")) {
-          fullText += chunk.split("__DONE__")[0];
-          sawDone = true;
-          break;
-        }
-
-        if (chunk.includes("__ERROR__:")) {
+        if (fullText.includes("__ERROR__:")) {
           setLastAssistantMessage("Sorry, something went wrong. Please try again.");
           return;
         }
 
-        fullText += chunk;
+        if (fullText.includes("__DONE__")) {
+          fullText = fullText.split("__DONE__")[0];
+          sawDone = true;
+          setLastAssistantMessage(fullText);
+          break;
+        }
+
         setLastAssistantMessage(fullText);
       }
 
@@ -269,7 +278,8 @@ export default function SalesChatWidget() {
               }}
               placeholder="Type a message…"
               disabled={isStreaming}
-              className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-base sm:text-sm outline-none focus:border-indigo-500"
+              style={{ colorScheme: "light" }}
+              className="flex-1 border border-slate-300 rounded-lg px-3 py-2.5 text-base sm:text-sm bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:border-indigo-500"
             />
             <button
               onClick={handleSend}

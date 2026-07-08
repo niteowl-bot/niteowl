@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: browser-specific bugs — input text invisible under Chrome's auto-dark-theme; Samsung Internet clipping traced to a chunk-boundary bug)
+
+### Fixed
+- **Input text was nearly invisible while typing on Chrome for Android.** The `<input>` had no explicit `color`/`background-color`, relying entirely on browser defaults — Chrome's "Auto Dark Theme for Web Contents" (on by default on many Android builds, including Samsung's) heuristically recolors unstyled form controls on pages it judges to be light-themed, and applies it inconsistently enough to leave near-invisible low-contrast text. Fixed with explicit `bg-white text-slate-900` on the input plus `style={{colorScheme: "light"}}`, the standards-based signal that tells the browser this control is deliberately light-themed and opts it out of automatic dark-mode recoloring. Verified with Playwright's `colorScheme: 'dark'` emulation (the actual trigger condition): text renders as near-black on white regardless of the OS/browser dark-mode preference.
+- **Found the real cause of Samsung-Internet-specific message clipping, distinct from Chrome (which the previous round's retry fix already resolved): the completion-sentinel check only inspected each network chunk in isolation, not the accumulated text.** The 9-character `"__DONE__"` marker isn't guaranteed to land whole in a single chunk — different browsers' networking stacks chunk a stream differently, and if the marker is split across two separate reads, checking only the latest chunk never detects it, even though the accumulated text already contains it complete. This is consistent with Samsung Internet clipping while Chrome (after the round-3 fix) didn't: different chunking behavior exposed a real bug that Chrome's pattern happened not to trigger. Confirmed deterministically with a raw HTTP server (not Playwright route interception, which can't control real chunk boundaries) that writes `"...demo?\n__DO"` then, after a delay, `"NE__"` as two separate stream chunks: the old per-chunk check never detected completion and leaked the literal `"__DONE__"` text into the visible message; the fixed accumulated-text check correctly detects it and extracts clean text. Also bumped max retry attempts from 2 to 3 for additional resilience against flaky connections.
+
+### Verified
+- Deterministic split-sentinel reproduction via a raw Node HTTP server with controlled chunk timing (impossible to simulate accurately with Playwright's `route.fulfill`, which delivers a static body and lets the browser's own network stack decide chunking) — confirmed the old logic fails exactly as hypothesized and the new logic fixes it
+- Input contrast verified via Playwright's `colorScheme: 'dark'` context emulation — computed `color-scheme: light` and near-black text color on white background regardless of OS dark-mode preference
+- Full 7-turn end-to-end regression under dark-color-scheme emulation: all 5 fields collected, confirmation gate and completion both correct, no raw `"__DONE__"`/`"__ERROR__"` text leaked into any displayed message, background-scroll lock and no-overlap layout from previous fixes both still hold
+- Confirmed no desktop regression: input text color/contrast and overall layout screenshot both unchanged
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All test sales leads created against the dev Supabase project during reproduction/verification deleted afterward
+
 ## 2026-07-08 (Sales chat: last assistant message rendering behind the CTA/composer on mobile)
 
 ### Fixed
