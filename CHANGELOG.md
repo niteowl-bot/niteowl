@@ -2,6 +2,21 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: root cause of intermittently missing demo notifications — context-free field extraction; PILOT BASELINE)
+
+### Fixed
+- **The intermittent "demo booked but no notification email" failures — previously suspected to be browser-specific (Chrome vs Samsung Internet) — were caused by the field extractor silently dropping bare answers.** Root-caused via the temporary production diagnostics: `extractSalesLeadFields` sees only the visitor's latest message plus already-known fields, with no conversation history, so a bare unframed answer like "Poiu" to "what's your company name?" was a coin flip — sometimes attributed, sometimes dropped. A dropped field left the deterministic flow state stuck at "still collecting" (no recap, no confirmation, notification correctly never sent), while the reply-generating model — which *does* see the full history and knows the answer was given — declared the booking complete anyway ("Fantastic! You're all set…"), so the visitor walked away believing it was booked. Captured live in a real production trace: the failing conversation's final turn exited with `awaitingConfirmation: false` and one field missing, while the matching Samsung run 90 seconds earlier passed on identical phrasing luck. The browser pattern was pure coincidence across a small sample.
+- Fix (extraction input only — no UI, wording, booking-flow, or notification-logic changes): the extractor is now told which field the visitor was just asked for, derived from the lead's own state once a row exists; for the opening name question — where no lead row exists yet, a gap that E2E testing proved could shift every later answer one question out of phase — it instead receives the salesperson's previous message as context, passed through from the route (which already had it in the request body).
+
+### Verified
+- Exact production failure script (bare "Poiu" company, "Tomorrow at 3.45") now completes and notifies, under the failing session's real Chrome for Android user-agent
+- Adversarial bare-gibberish answers for name AND company (both classes reproduced dropping the field pre-fix) now attribute deterministically; normal-value regression unchanged — under both Chrome and Samsung Internet user-agents, 7/7 completed runs each delivered a real Resend-accepted notification
+- Owner confirmed on real devices: notifications now arrive consistently in both Chrome and Samsung Internet
+- All E2E test leads deleted from the dev database; `tsc --noEmit` passes
+
+### Status
+- **This build (`e16a228`) is the frozen working baseline for pilot customers.** Temporary diagnostic logging in the sales chat path is deliberately left live for the pilot so any future failure is immediately traceable; remove it once the pilot has stabilized. Outside-the-repo items still open: Supabase backups, external uptime pinger, manual deletion of production test leads (see CHECKLIST).
+
 ## 2026-07-08 (Needs-review owner notifications never sent when a question/complaint arrived alongside contact details)
 
 ### Fixed
