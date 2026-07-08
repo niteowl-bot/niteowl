@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
+import { sendSalesLeadNotification } from "@/lib/email";
 
 // ── Sales lead capture engine ────────────────────────────────────
 // Captures prospects chatting with the NiteOwl sales assistant
@@ -100,21 +101,36 @@ export function resolveNextField(
 
 // ── extractSalesLeadFields ─────────────────────────────────────────
 
+export interface ExtractSalesLeadFieldsResult {
+  fields: ExtractedSalesLead;
+  // true only when the extraction call itself failed (timeout, network
+  // error, non-2xx response, or unparseable output) after retries — we
+  // genuinely don't know what the visitor said this turn. False means
+  // the call succeeded, even if every field came back null (a
+  // legitimate "nothing new stated"). This distinction matters:
+  // treating a failed call the same as "nothing stated" was how a
+  // field could be silently dropped — a real, confirmed production
+  // timeout (`[extractSalesLeadFields] parse error: TimeoutError`) was
+  // found in server logs while investigating a report of the booking
+  // flow completing without ever sending the team notification.
+  failed: boolean;
+}
+
+const EMPTY_EXTRACTED_LEAD: ExtractedSalesLead = {
+  name: null,
+  email: null,
+  phone: null,
+  company: null,
+  industry: null,
+  preferred_demo_time: null,
+};
+
 export async function extractSalesLeadFields(
   message: string,
   alreadyKnown: Partial<Record<RequiredField["key"] | "industry", string | null>>
-): Promise<ExtractedSalesLead> {
-  const empty: ExtractedSalesLead = {
-    name: null,
-    email: null,
-    phone: null,
-    company: null,
-    industry: null,
-    preferred_demo_time: null,
-  };
-
+): Promise<ExtractSalesLeadFieldsResult> {
   const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return empty;
+  if (!openaiKey) return { fields: EMPTY_EXTRACTED_LEAD, failed: false };
 
   const prompt = `You are a data-extraction assistant for a B2B sales chat. A prospective business owner is chatting with a salesperson about signing up for an AI receptionist product.
 
@@ -142,48 +158,62 @@ Visitor's latest message:
 ${message}
 """`;
 
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${openaiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: 250,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(15_000),
-    });
+  const MAX_ATTEMPTS = 2;
+  let lastError: unknown = null;
 
-    if (!res.ok) return empty;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          max_tokens: 250,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
 
-    const json = await res.json();
-    const raw: string = json.choices?.[0]?.message?.content ?? "";
-    const cleaned = raw
-      .trim()
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
+      if (!res.ok) {
+        lastError = new Error(`OpenAI error: ${res.status}`);
+        continue;
+      }
 
-    const parsed = JSON.parse(cleaned) as Partial<ExtractedSalesLead>;
+      const json = await res.json();
+      const raw: string = json.choices?.[0]?.message?.content ?? "";
+      const cleaned = raw
+        .trim()
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```\s*$/i, "")
+        .trim();
 
-    return {
-      name: typeof parsed.name === "string" ? parsed.name.trim() || null : null,
-      email: typeof parsed.email === "string" ? parsed.email.trim() || null : null,
-      phone: typeof parsed.phone === "string" ? parsed.phone.trim() || null : null,
-      company: typeof parsed.company === "string" ? parsed.company.trim() || null : null,
-      industry: typeof parsed.industry === "string" ? parsed.industry.trim() || null : null,
-      preferred_demo_time:
-        typeof parsed.preferred_demo_time === "string" ? parsed.preferred_demo_time.trim() || null : null,
-    };
-  } catch (err) {
-    console.error("[extractSalesLeadFields] parse error:", err);
-    return empty;
+      const parsed = JSON.parse(cleaned) as Partial<ExtractedSalesLead>;
+
+      return {
+        fields: {
+          name: typeof parsed.name === "string" ? parsed.name.trim() || null : null,
+          email: typeof parsed.email === "string" ? parsed.email.trim() || null : null,
+          phone: typeof parsed.phone === "string" ? parsed.phone.trim() || null : null,
+          company: typeof parsed.company === "string" ? parsed.company.trim() || null : null,
+          industry: typeof parsed.industry === "string" ? parsed.industry.trim() || null : null,
+          preferred_demo_time:
+            typeof parsed.preferred_demo_time === "string" ? parsed.preferred_demo_time.trim() || null : null,
+        },
+        failed: false,
+      };
+    } catch (err) {
+      lastError = err;
+      console.error(`[extractSalesLeadFields] attempt ${attempt}/${MAX_ATTEMPTS} failed:`, err);
+    }
   }
+
+  console.error("[extractSalesLeadFields] all attempts failed:", lastError);
+  return { fields: EMPTY_EXTRACTED_LEAD, failed: true };
 }
 
 // ── Lookup helpers ──────────────────────────────────────────────
@@ -271,11 +301,23 @@ export interface CaptureResult {
   known: Record<RequiredField["key"] | "industry", string | null>;
   nextField: RequiredField | null;
   invalidFieldNote: string | null;
+  // The field-extraction call itself failed (timeout/error) after
+  // retries — nothing about this turn's message could be read, so
+  // nothing was recorded and no state advanced. The caller must ask
+  // the visitor to repeat themselves, never silently move on.
+  extractionFailed: boolean;
   // All five fields are known but the visitor hasn't explicitly
   // confirmed the recap yet — the demo is NOT booked until they do.
   awaitingConfirmation: boolean;
+  // The visitor confirmed, but sending the team notification failed —
+  // the booking is deliberately NOT marked complete so a repeated
+  // confirmation will retry sending it. The caller must not tell the
+  // visitor the booking succeeded.
+  notificationFailed: boolean;
+  // True only once all five fields are confirmed AND the team
+  // notification was actually sent successfully — the caller may only
+  // tell the visitor the booking is complete when this is true.
   justCompleted: boolean;
-  alreadyNotified: boolean;
 }
 
 /**
@@ -303,7 +345,32 @@ export async function captureSalesLead(
     preferred_demo_time: existingByConvo?.preferred_demo_time ?? null,
   };
 
-  const extracted = await extractSalesLeadFields(userMessage, alreadyKnown);
+  const { fields: extracted, failed: extractionFailed } = await extractSalesLeadFields(userMessage, alreadyKnown);
+
+  // The extraction call itself failed after retries — we don't know
+  // what this message said. Return the visitor's state exactly as it
+  // was before this turn (nothing lost, nothing guessed) and flag it
+  // so the assistant asks them to repeat themselves instead of
+  // silently treating this as if nothing had been said.
+  if (extractionFailed) {
+    return {
+      leadId: existingByConvo?.id ?? "",
+      known: {
+        name: existingByConvo?.name ?? null,
+        email: existingByConvo?.email ?? null,
+        phone: existingByConvo?.phone ?? null,
+        company: existingByConvo?.company ?? null,
+        industry: existingByConvo?.industry ?? null,
+        preferred_demo_time: existingByConvo?.preferred_demo_time ?? null,
+      },
+      nextField: resolveNextField(existingByConvo ?? {}),
+      invalidFieldNote: null,
+      extractionFailed: true,
+      awaitingConfirmation: false,
+      notificationFailed: false,
+      justCompleted: false,
+    };
+  }
 
   let existing = existingByConvo;
   if (!existing && (extracted.email || extracted.phone)) {
@@ -338,9 +405,10 @@ export async function captureSalesLead(
       },
       nextField: null,
       invalidFieldNote: null,
+      extractionFailed: false,
       awaitingConfirmation: false,
+      notificationFailed: false,
       justCompleted: false,
-      alreadyNotified: false,
     };
   }
 
@@ -385,10 +453,31 @@ export async function captureSalesLead(
 
   let justCompleted = false;
   let awaitingConfirmation = false;
+  let notificationFailed = false;
 
   if (isReadyNow) {
     if (wasReadyBefore && AFFIRMATION_PATTERN.test(userMessage.trim())) {
-      justCompleted = true;
+      // The visitor just confirmed — but the booking must never be
+      // reported as complete unless the team notification actually
+      // went out. Sending it here (rather than after this function
+      // returns) lets that outcome gate `status`/`justCompleted`
+      // atomically: on failure the lead stays "new" with all fields
+      // intact, so the visitor's next confirmation naturally retries
+      // the send — no separate retry mechanism needed.
+      const notified = await sendSalesLeadNotification({
+        name: merged.name,
+        email: merged.email,
+        phone: merged.phone,
+        company: merged.company,
+        industry: merged.industry,
+        preferredDemoTime: merged.preferred_demo_time,
+      });
+
+      if (notified) {
+        justCompleted = true;
+      } else {
+        notificationFailed = true;
+      }
     } else {
       // Either just became ready this turn (show the recap for the
       // first time) or the visitor's reply to a prior recap wasn't a
@@ -405,6 +494,7 @@ export async function captureSalesLead(
     preferred_demo_datetime: preferredDemoDatetime,
     message: deduplicateMessage(existing?.message ?? null, userMessage),
     status,
+    ...(justCompleted ? { notification_sent: true } : {}),
     updated_at: new Date().toISOString(),
   };
 
@@ -429,17 +519,9 @@ export async function captureSalesLead(
     known: merged,
     nextField: nextFieldAfter,
     invalidFieldNote,
+    extractionFailed: false,
     awaitingConfirmation,
+    notificationFailed,
     justCompleted,
-    alreadyNotified: existing?.notification_sent ?? false,
   };
-}
-
-export async function markSalesLeadNotified(supabase: DatabaseClient, leadId: string): Promise<void> {
-  if (!leadId) return;
-  const { error } = await supabase
-    .from("sales_leads")
-    .update({ notification_sent: true })
-    .eq("id", leadId);
-  if (error) console.error("[sales lead capture] failed to mark notified:", error.message);
 }

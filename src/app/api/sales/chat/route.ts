@@ -3,10 +3,8 @@ import { checkRateLimit } from "@/lib/rateLimit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   captureSalesLead,
-  markSalesLeadNotified,
   type CaptureResult,
 } from "@/lib/salesLeadCapture";
-import { sendSalesLeadNotification } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -41,7 +39,12 @@ function buildLeadStateSection(result: CaptureResult | null): string {
 
   let body: string | null = null;
 
-  if (result.invalidFieldNote) {
+  if (result.extractionFailed) {
+    body = [
+      "A technical hiccup meant we couldn't process the visitor's last message — nothing they said just now was understood, though everything from earlier in the conversation is still safe and unaffected.",
+      "Your entire reply must briefly and warmly apologize for the hiccup and ask them to repeat what they just said. Do not guess what they meant, do not advance to a new question, do not treat this as a 'yes' or confirmation even if it looked like one, and do not claim anything was recorded. Do not pitch or handle objections in this reply.",
+    ].join("\n");
+  } else if (result.invalidFieldNote) {
     body = [
       capturedList,
       result.invalidFieldNote,
@@ -49,6 +52,12 @@ function buildLeadStateSection(result: CaptureResult | null): string {
     ]
       .filter(Boolean)
       .join("\n");
+  } else if (result.notificationFailed) {
+    body = [
+      "All five details are correct and the visitor just confirmed them, but a technical problem meant the booking could NOT be completed on our end just now — it is NOT booked and the team has NOT been notified.",
+      ...capturedPairs.map(([k, v]) => `- ${k}: ${v}`),
+      "Your entire reply must briefly and warmly apologize for the hiccup and ask them to confirm once more (e.g. \"Sorry, something went wrong on our end — could you confirm those details are correct one more time?\") so we can try again. Do NOT say the booking is complete, do NOT say the team will follow up, and do NOT offer the free trial CTA in this reply. Do not pitch or handle objections in this reply.",
+    ].join("\n");
   } else if (result.awaitingConfirmation) {
     body = [
       "You now have all five details needed for this visitor's demo request:",
@@ -150,19 +159,11 @@ export async function POST(req: NextRequest) {
   if (latestUserMessage) {
     try {
       const supabase = createAdminClient();
+      // captureSalesLead now sends the team notification itself and
+      // only reports justCompleted once that send actually succeeds —
+      // see src/lib/salesLeadCapture.ts for why this is atomic with
+      // the status transition rather than a separate step here.
       captureResult = await captureSalesLead(supabase, safeConversationId, latestUserMessage);
-
-      if (captureResult.justCompleted && !captureResult.alreadyNotified) {
-        const notified = await sendSalesLeadNotification({
-          name: captureResult.known.name,
-          email: captureResult.known.email,
-          phone: captureResult.known.phone,
-          company: captureResult.known.company,
-          industry: captureResult.known.industry,
-          preferredDemoTime: captureResult.known.preferred_demo_time,
-        });
-        if (notified) await markSalesLeadNotified(supabase, captureResult.leadId);
-      }
     } catch (err) {
       console.error("[sales chat] lead capture error:", err);
     }
