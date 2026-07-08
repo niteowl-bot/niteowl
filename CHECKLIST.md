@@ -16,6 +16,7 @@
 - [x] Run a complete production booking flow against the real production Supabase project (`sklcqvvnuigpewzarbiv`) — the version originally checked off here was mistakenly run against a different dev/test project; redone and confirmed correct (2026-07-06)
 - [x] Email booking confirmations — fully verified end-to-end against real production (2026-07-06): correct date stored, both customer and owner emails sent from `remy@mail.niteowlhq.com`, owner copy confirmed `delivered` via Resend's own API
 - [x] Customer cancellation/reschedule links (self-service notification emails had the same fire-and-forget issue — fixed alongside booking confirmations)
+- [x] Needs-review owner notification emails — fixed (2026-07-08): a message combining a genuine question/complaint with contact details in the same turn was classified as `contact_update`, which skipped the confidence check entirely, so the owner was never notified even though Remy told the customer a team member would follow up; see CHANGELOG
 - [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
 
 ## 🔴 Critical infrastructure bugs found and fixed (2026-07-06)

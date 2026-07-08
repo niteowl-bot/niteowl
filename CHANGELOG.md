@@ -2,6 +2,17 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Needs-review owner notifications never sent when a question/complaint arrived alongside contact details)
+
+### Fixed
+- **Needs-review notification emails to the business owner were never sent when a customer's message combined a genuine question or complaint with their contact details in the same turn** (e.g. "My plumber damaged my ceiling, my email is x@y.com"). `extractLeadData` correctly classifies this as `contact_update` intent since contact details are present, but both `/api/chat` and `/api/widget/chat` only ran the confidence check that flags `needs_review` and triggers `sendNeedsReviewNotification` for `question`/`unknown` intents — `contact_update` (along with `new_booking`/`reschedule`) skipped it entirely. The lead saved as an ordinary lead with no `needs_review` status and no notification, even though Remy's own reply already told the customer a team member would follow up. Now runs the same existing confidence check for `contact_update` messages too, reusing the same needs-review capture and notification helpers already used for `question`/`unknown` — `new_booking` and `reschedule` (the actual booking flow) are untouched.
+
+### Verified
+- Reproduced directly against the dev database via the live widget API: a complaint message with an email address saved as an ordinary `new` lead with no metadata and no notification sent
+- Re-ran the identical message after the fix: the lead now correctly lands as `needs_review` with `needs_review_notification_sent: true` in metadata, confirming Resend accepted the send
+- `tsc --noEmit` passes with zero new errors
+- All test leads/conversations created during reproduction/verification deleted afterward
+
 ## 2026-07-08 (Sales chat: hardened field extraction against silent failure; booking can no longer appear complete unless the team notification actually sent)
 
 ### Fixed
