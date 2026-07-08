@@ -2,6 +2,21 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: last assistant message rendering behind the CTA/composer on mobile)
+
+### Fixed
+- **The latest assistant message could render partially behind the fixed "Start free trial" CTA and message composer on mobile**, confirmed by the reporter after the streaming-truncation fix resolved the earlier flow-completion issue. Root cause: the scrollable messages container (`flex-1 overflow-y-auto`) had no `min-h-0`, and its sibling footer elements (CTA block, input row, privacy text) had no `shrink-0`. Per the flexbox spec, a flex item's automatic minimum size defaults to its *content* size, not zero — without `min-h-0`, some browser engines let the messages container's content push past its allotted share instead of shrinking to fit and scrolling internally, while the footer siblings render at their normal flow position regardless, visually overlapping the tail of the last message. This is engine-dependent flex resolution, which is exactly why it was never reproducible in this session's Chromium/WebKit desktop-emulation testing (previously suspected and ruled out in round 1, but that test only covered the un-scaled default state). Fixed by adding `min-h-0` to the messages container (the only element now allowed to flex/shrink) and `shrink-0` to every other direct child (header, CTA block, input row, privacy text), plus a touch of extra bottom padding (`pb-6` in place of the uniform `p-4`) so the last message always has clear breathing room above the CTA, not just zero-overlap.
+
+### Verified
+- Automated overlap check (precise `getBoundingClientRect()` comparison between the last message bubble and the CTA button, not just a visual screenshot check) run after every turn of a full conversation, across 5 configurations: standard mobile viewport (390×844), a smaller viewport (360×740), a larger Samsung-class viewport (412×915), and — critically, a new test angle this round — the same viewports with the root font-size scaled to 130% and 150% to simulate Android/Samsung "larger text" accessibility settings, which is a real, common factor in exactly this class of overflow bug that hadn't been tested before. Zero overlap detected in any configuration.
+- Full 7-turn stress conversation (long opening message, all 5 fields, confirmation recap, "yes") at 130% font scale: zero overlap at any point, and the background-scroll lock from the previous fix still holds throughout
+- Confirmed no desktop regression: screenshot pixel-equivalent to pre-fix layout
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All test sales leads created against the dev Supabase project during reproduction/verification deleted afterward
+
+### Known limitation
+- WebKit (closest available proxy for Samsung Internet/mobile Safari rendering) could not be tested this round — its Windows installer failed with a permission error (`EPERM` writing `Playwright.exe`), most likely a local antivirus/security-software conflict unrelated to the site itself. Chromium testing across 5 configurations including aggressive font-scaling was thorough, and the fix itself (`min-h-0` + `shrink-0`) is a standards-based flexbox correction rather than an engine-specific workaround, but this is still not a real-device confirmation.
+
 ## 2026-07-08 (Sales chat: real cause of mobile message clipping found — silently-truncated streams; verified field collection against live production)
 
 ### Fixed
