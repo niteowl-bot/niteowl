@@ -133,6 +133,15 @@ function buildSalesSystemPrompt(): string {
 export async function POST(req: NextRequest) {
   const { messages, conversationId } = await req.json();
 
+  console.log(
+    "[sales chat diagnostic] request — conversationId:",
+    conversationId ?? "(none)",
+    "| messageCount:",
+    Array.isArray(messages) ? messages.length : "(not array)",
+    "| userAgent:",
+    req.headers.get("user-agent") ?? "(none)"
+  );
+
   if (!Array.isArray(messages)) {
     return new Response("Missing required fields", { status: 400 });
   }
