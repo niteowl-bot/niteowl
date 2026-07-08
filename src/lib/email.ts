@@ -305,13 +305,6 @@ export async function sendSalesLeadNotification(
   const { name, email, phone, company, industry, preferredDemoTime } = params;
   const notifyEmail = process.env.SALES_NOTIFICATION_EMAIL;
 
-  console.log(
-    "[sales notification diagnostic] recipient:",
-    notifyEmail ?? "(unset)",
-    "| from:",
-    FROM_EMAIL
-  );
-
   if (!notifyEmail) {
     console.error("[email] SALES_NOTIFICATION_EMAIL not set — skipped sales lead notification.");
     return false;
@@ -325,7 +318,7 @@ export async function sendSalesLeadNotification(
   const safeDemoTime = preferredDemoTime ? escapeHtml(preferredDemoTime) : null;
 
   try {
-    const data = await sendChecked({
+    await sendChecked({
       from: FROM_EMAIL,
       to: notifyEmail,
       subject: `New sales lead: ${name?.trim() || "A prospect"}${company ? ` — ${company}` : ""}`,
@@ -341,7 +334,6 @@ export async function sendSalesLeadNotification(
         </p>
       `,
     });
-    console.log("[sales notification diagnostic] sendChecked succeeded — resend id:", data?.id ?? "(no id)");
     return true;
   } catch (err) {
     console.error("[email] Failed to send sales lead notification:", err);
