@@ -17,7 +17,7 @@
 - [x] Email booking confirmations — fully verified end-to-end against real production (2026-07-06): correct date stored, both customer and owner emails sent from `remy@mail.niteowlhq.com`, owner copy confirmed `delivered` via Resend's own API
 - [x] Customer cancellation/reschedule links (self-service notification emails had the same fire-and-forget issue — fixed alongside booking confirmations)
 - [x] Needs-review owner notification emails — fixed (2026-07-08): a message combining a genuine question/complaint with contact details in the same turn was classified as `contact_update`, which skipped the confidence check entirely, so the owner was never notified even though Remy told the customer a team member would follow up; see CHANGELOG
-- [ ] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04; still needs `NEXT_PUBLIC_SENTRY_DSN` added to Vercel prod env vars and an external pinger (UptimeRobot/Better Uptime) pointed at `/api/health`
+- [x] Basic monitoring (logs and alerts) — Sentry + `/api/health` shipped 2026-07-04, `NEXT_PUBLIC_SENTRY_DSN` confirmed live in Vercel prod env; external uptime pinger configured against `/api/health` by the owner (2026-07-08) — `/api/health` re-verified responding `200` (`{"status":"ok","database":"ok"}`) at setup time
 
 ## 🔴 Critical infrastructure bugs found and fixed (2026-07-06)
 - [x] **Real production was running against a completely different, un-migrated Supabase project than everything tested against all session** — discovered while investigating why sales chat capture failed in production. Confirmed by extracting the real project ref straight out of the production login page's compiled JS. The real project was missing both the billing migration and the new `sales_leads` table; the missing billing columns meant every widget/dashboard chat request was failing at the very first query. Both migrations re-applied to the correct project.
@@ -66,7 +66,7 @@
 
 ## 🟡 Admin
 - [ ] Business management view
-- [ ] Verify backups
+- [x] Verify backups — enabled by the owner (2026-07-08) on the production Supabase project (`sklcqvvnuigpewzarbiv`) via the dashboard; a Supabase-side setting, no code/config change in this repo
 - [ ] Export data capability
 - [x] Privacy Policy (2026-07-06 — `/privacy`, tailored to what the app actually collects/processes; not a substitute for a real legal review, but a solid, specific draft rather than generic boilerplate)
 - [x] Terms of Service (2026-07-06 — `/terms`, same caveat)
