@@ -334,7 +334,19 @@ export async function captureSalesLead(
   conversationId: string | null,
   userMessage: string
 ): Promise<CaptureResult> {
+  console.log(
+    "[sales capture diagnostic] entry — conversationId:",
+    conversationId ?? "(null)",
+    "| message:",
+    JSON.stringify(userMessage.trim())
+  );
+
   const existingByConvo = conversationId ? await findByConversationId(supabase, conversationId) : null;
+
+  console.log(
+    "[sales capture diagnostic] existingByConvo:",
+    existingByConvo ? { id: existingByConvo.id, status: existingByConvo.status, notification_sent: existingByConvo.notification_sent } : null
+  );
 
   const alreadyKnown = {
     name: existingByConvo?.name ?? null,
@@ -521,6 +533,19 @@ export async function captureSalesLead(
     if (error) console.error("[sales lead capture] insert failed:", error.message);
     leadId = data?.id ?? "";
   }
+
+  console.log(
+    "[sales capture diagnostic] exit — leadId:",
+    leadId,
+    "| status:",
+    status,
+    "| justCompleted:",
+    justCompleted,
+    "| notificationFailed:",
+    notificationFailed,
+    "| awaitingConfirmation:",
+    awaitingConfirmation
+  );
 
   return {
     leadId,
