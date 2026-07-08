@@ -163,6 +163,11 @@ export async function POST(req: NextRequest) {
   const latestUserMessage: string =
     [...messages].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "";
 
+  // Extraction context only — lets the field extractor see what the
+  // visitor is answering (see captureSalesLead's parameter comment).
+  const lastAssistantMessage: string | null =
+    [...messages].reverse().find((m: { role: string }) => m.role === "assistant")?.content ?? null;
+
   let captureResult: CaptureResult | null = null;
 
   if (latestUserMessage) {
@@ -172,7 +177,7 @@ export async function POST(req: NextRequest) {
       // only reports justCompleted once that send actually succeeds —
       // see src/lib/salesLeadCapture.ts for why this is atomic with
       // the status transition rather than a separate step here.
-      captureResult = await captureSalesLead(supabase, safeConversationId, latestUserMessage);
+      captureResult = await captureSalesLead(supabase, safeConversationId, latestUserMessage, lastAssistantMessage);
     } catch (err) {
       console.error("[sales chat] lead capture error:", err);
     }

@@ -125,12 +125,28 @@ const EMPTY_EXTRACTED_LEAD: ExtractedSalesLead = {
   preferred_demo_time: null,
 };
 
+// expectedField: the field the salesperson's most recent reply asked the
+// visitor for, when known. This extractor sees only the latest message
+// plus alreadyKnown — it has no conversation history — so a bare,
+// unframed answer like "Poiu" to "what's your company name?" is
+// otherwise a coin flip: sometimes attributed, sometimes dropped
+// (confirmed via production traces — a dropped company left the flow
+// stuck collecting while the visitor believed the booking was done).
+// Passing the pending field makes that attribution deterministic.
 export async function extractSalesLeadFields(
   message: string,
-  alreadyKnown: Partial<Record<RequiredField["key"] | "industry", string | null>>
+  alreadyKnown: Partial<Record<RequiredField["key"] | "industry", string | null>>,
+  expectedField: RequiredField | null = null,
+  lastAssistantMessage: string | null = null
 ): Promise<ExtractSalesLeadFieldsResult> {
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) return { fields: EMPTY_EXTRACTED_LEAD, failed: false };
+
+  const expectedFieldRule = expectedField
+    ? `\n- The salesperson's most recent question asked the visitor for their ${expectedField.label}. If the latest message reads as a direct answer to that question — even a bare word, name, or short phrase with no framing around it — record it as "${expectedField.key}". Only attribute it to a different field if the message clearly states that other field instead (e.g. an email address always belongs in "email", a phone number in "phone").`
+    : lastAssistantMessage
+    ? `\n- The salesperson's previous message to the visitor was:\n"""\n${lastAssistantMessage.slice(-500)}\n"""\n  If the visitor's latest message reads as a direct answer to a question in that message — even a bare word, name, or short phrase with no framing around it — record it under the field that question asked for. A greeting or filler reply ("Hi", "Ok", "Thanks", "Sure") is not an answer to anything; return all nulls for it.`
+    : "";
 
   const prompt = `You are a data-extraction assistant for a B2B sales chat. A prospective business owner is chatting with a salesperson about signing up for an AI receptionist product.
 
@@ -148,7 +164,7 @@ Rules:
 - Only fill a field if the LATEST message actually states or corrects it — do not repeat something already known unless they are changing it.
 - "industry" is the type of business they run (e.g. plumber, dentist, solicitor) — only fill this if clearly stated.
 - "preferred_demo_time" is when they'd like a demo, exactly as they phrased it — do not convert it to a date yourself.
-- Return null for any field not present in this message.
+- Return null for any field not present in this message.${expectedFieldRule}
 
 Already known:
 ${JSON.stringify(alreadyKnown)}
@@ -332,7 +348,12 @@ export interface CaptureResult {
 export async function captureSalesLead(
   supabase: DatabaseClient,
   conversationId: string | null,
-  userMessage: string
+  userMessage: string,
+  // The assistant reply the visitor is responding to. Extraction
+  // context only: before the first field is recorded there is no lead
+  // row, so expectedField below cannot cover the opening name question
+  // — the previous reply is the only signal of what was asked.
+  lastAssistantMessage: string | null = null
 ): Promise<CaptureResult> {
   console.log(
     "[sales capture diagnostic] entry — conversationId:",
@@ -345,7 +366,9 @@ export async function captureSalesLead(
 
   console.log(
     "[sales capture diagnostic] existingByConvo:",
-    existingByConvo ? { id: existingByConvo.id, status: existingByConvo.status, notification_sent: existingByConvo.notification_sent } : null
+    existingByConvo ? { id: existingByConvo.id, status: existingByConvo.status, notification_sent: existingByConvo.notification_sent } : null,
+    "| expectedField:",
+    (existingByConvo ? resolveNextField(existingByConvo)?.key : null) ?? "(none)"
   );
 
   const alreadyKnown = {
@@ -357,7 +380,18 @@ export async function captureSalesLead(
     preferred_demo_time: existingByConvo?.preferred_demo_time ?? null,
   };
 
-  const { fields: extracted, failed: extractionFailed } = await extractSalesLeadFields(userMessage, alreadyKnown);
+  // Which field was the visitor just asked for? Only derivable once a
+  // lead row exists for this conversation (collection underway) — on
+  // greeting turns before any row exists, passing "name" here would
+  // invite the extractor to record "Hi" as the visitor's name.
+  const expectedField = existingByConvo ? resolveNextField(existingByConvo) : null;
+
+  const { fields: extracted, failed: extractionFailed } = await extractSalesLeadFields(
+    userMessage,
+    alreadyKnown,
+    expectedField,
+    lastAssistantMessage
+  );
 
   // The extraction call itself failed after retries — we don't know
   // what this message said. Return the visitor's state exactly as it
