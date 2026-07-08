@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-08 (Sales chat: fresh conversations silently inheriting an old, still-open lead's name/company/email)
+
+### Fixed
+- **Critical: a genuinely fresh-looking sales chat (empty message list) could silently resume a completely unrelated, old, still-open sales lead — greeting the visitor by a stale name and later referencing a company they never mentioned in the current conversation.** Reproduced exactly as reported: a browser with an old conversation id already cached, sent only "Hi" in what looked like a brand-new chat, and got a reply referencing a name and company from a prior, never-completed test conversation. Root cause: `SalesChatWidget.tsx` persisted its conversation id in `localStorage` indefinitely, surviving across page loads and browser restarts — but the visible message list is plain React state that has never been persisted or restored anywhere, so it always starts empty on mount regardless. That mismatch meant the widget could *look* fresh while the server, keying off the reused id, treated it as a continuation of whatever lead that id last pointed to. A 2026-07-07 fix excluded already-*completed* leads from this reuse (`OPEN_SALES_LEAD_STATUSES`), but that only covered leads that had reached the confirmation step — it did nothing for the far more common case of a lead abandoned mid-flow (never confirmed), which is exactly what's still "open" and reusable. Fixed by no longer persisting the conversation id in `localStorage` at all — every page load now gets its own brand-new id, kept only in memory (a `useRef`) for the lifetime of that page view, matching the message list's own lifecycle exactly. Also proactively clears the old `localStorage` key on mount so browsers that already have a stale id cached (like the reporter's) are reset immediately rather than needing a manual storage clear.
+- Within-page-load continuity (the actual, intended "explicitly continuing an existing conversation" case — sending multiple messages in one sitting, including closing and reopening the widget without reloading the page) is unaffected: the id is still generated once per page view and reused for every send within that view, so the booking flow's sequential field collection and confirmation gate work exactly as before.
+
+### Verified
+- Reproduced the exact reported bug against the dev Supabase project: seeded a still-open (`status: "new"`, never confirmed) lead with `name: "Ernie"` / `company: "Asgo Co"`, primed a browser with that lead's conversation id already in `localStorage` (simulating a browser that had it cached from before this fix), then opened the widget fresh and sent only "Hi" — confirmed the old code's reply would have referenced the stale name/company (this is exactly the previously-working, now-fixed, reuse path)
+- Re-ran the identical scenario post-fix: the stale `localStorage` key is removed on mount, and the reply to "Hi" is a fully generic greeting with zero reference to the seeded name or company
+- Full 7-turn within-session regression (including a close/reopen of the widget without a page reload) confirms all 5 fields are still collected correctly in order, the confirmation gate and completion both work, and nothing about the booking flow itself changed
+- Confirmed all other active fixes from previous rounds still hold: no CTA/message overlap, background-scroll lock, input text contrast
+- `tsc --noEmit` and `npm run lint` pass with zero new errors/warnings beyond the existing documented baseline
+- All test sales leads (including the deliberately-seeded stale one) created against the dev Supabase project during reproduction/verification deleted afterward
+
 ## 2026-07-08 (Sales chat: browser-specific bugs — input text invisible under Chrome's auto-dark-theme; Samsung Internet clipping traced to a chunk-boundary bug)
 
 ### Fixed

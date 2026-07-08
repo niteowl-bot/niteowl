@@ -7,16 +7,28 @@ interface ChatMessage {
   content: string;
 }
 
-const CONVERSATION_STORAGE_KEY = "niteowl_sales_chat_conversation";
+// A previous version of this widget persisted the conversation id in
+// localStorage indefinitely, so it survived across page loads and
+// browser restarts. But the visible message list is plain React state
+// that has never been persisted or restored anywhere — it always
+// starts empty on mount. That mismatch meant a genuinely fresh-looking
+// chat (empty message list) could silently resume an old, still-open
+// (never-confirmed) sales_leads row from a completely different past
+// visit, and the model would greet the visitor by a stale name or
+// reference a company they never mentioned in the current conversation
+// — reproduced directly: a new session with only "Hi" typed replied
+// "Hello Ernie" and later referenced a company from an old test.
+// A prior fix excluded already-*completed* leads from this reuse, but
+// that didn't help for leads left mid-flow (never confirmed), which is
+// the far more common case. Since messages are never persisted, the
+// conversation id must not be either — every mount (i.e. every fresh
+// page load) gets its own brand-new id, kept only in memory for the
+// lifetime of that page view.
+const LEGACY_CONVERSATION_STORAGE_KEY = "niteowl_sales_chat_conversation";
 
 function getConversationId(): string {
   if (typeof window === "undefined") return "";
-  let id = localStorage.getItem(CONVERSATION_STORAGE_KEY);
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem(CONVERSATION_STORAGE_KEY, id);
-  }
-  return id;
+  return crypto.randomUUID();
 }
 
 export default function SalesChatWidget() {
@@ -31,6 +43,17 @@ export default function SalesChatWidget() {
     const el = messagesContainerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }
+
+  // Proactively removes any conversation id a previous version of this
+  // widget already left in a visitor's localStorage, so it can never
+  // be picked back up even though nothing here reads it anymore.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(LEGACY_CONVERSATION_STORAGE_KEY);
+    } catch {
+      // Some privacy modes / embedded contexts throw on localStorage access — non-fatal.
+    }
+  }, []);
 
   // Keeps the latest message in view as content streams in. A direct
   // scrollTop assignment (rather than scrollIntoView({behavior:
