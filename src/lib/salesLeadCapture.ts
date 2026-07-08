@@ -456,6 +456,14 @@ export async function captureSalesLead(
   let notificationFailed = false;
 
   if (isReadyNow) {
+    console.log(
+      "[sales capture diagnostic] isReadyNow — wasReadyBefore:",
+      wasReadyBefore,
+      "| message:",
+      JSON.stringify(userMessage.trim()),
+      "| affirmationMatch:",
+      AFFIRMATION_PATTERN.test(userMessage.trim())
+    );
     if (wasReadyBefore && AFFIRMATION_PATTERN.test(userMessage.trim())) {
       // The visitor just confirmed — but the booking must never be
       // reported as complete unless the team notification actually
