@@ -348,3 +348,106 @@ export async function sendSalesLeadNotification(
     return false;
   }
 }
+
+interface CallSummaryParams {
+  businessOwnerEmail: string | null;
+  businessName: string;
+  callerPhone: string | null;
+  callerName: string | null;
+  startedAt: string | null; // ISO string
+  durationSeconds: number | null;
+  summary: string | null;
+  transcript: string | null;
+  leadCreated: boolean;
+}
+
+function formatCallDuration(durationSeconds: number | null): string | null {
+  if (durationSeconds === null || durationSeconds < 0) return null;
+  const mins = Math.floor(durationSeconds / 60);
+  const secs = Math.round(durationSeconds % 60);
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+/**
+ * Emails the business owner a summary of a completed Remy phone call
+ * (Voice AI). Same recipient-resolution model as the needs-review
+ * notification: the caller passes the owner email from
+ * getOrgOwnerEmail. Summary and transcript are AI/caller-derived
+ * text, so everything is escaped. Returns true only when Resend
+ * accepted the email.
+ */
+export async function sendCallSummaryEmail(
+  params: CallSummaryParams
+): Promise<boolean> {
+  const {
+    businessOwnerEmail,
+    callerPhone,
+    callerName,
+    startedAt,
+    durationSeconds,
+    summary,
+    transcript,
+    leadCreated,
+  } = params;
+
+  if (!businessOwnerEmail) {
+    console.error(
+      "[email] No business owner email available — skipped call summary."
+    );
+    return false;
+  }
+
+  const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/leads`;
+  const displayCaller = escapeHtml(
+    callerName?.trim() || callerPhone?.trim() || "Unknown caller"
+  );
+  const safePhone = callerPhone ? escapeHtml(callerPhone) : null;
+  const formattedTime = startedAt ? formatAppointmentDate(startedAt) : null;
+  const formattedDuration = formatCallDuration(durationSeconds);
+  const safeSummary = summary
+    ? escapeHtml(summary)
+    : "No summary was generated for this call.";
+
+  // Keep long transcripts from bloating the email — the full text is
+  // stored in voice_calls; this is just the owner's quick read.
+  const TRANSCRIPT_LIMIT = 4000;
+  const truncated =
+    transcript && transcript.length > TRANSCRIPT_LIMIT
+      ? `${transcript.slice(0, TRANSCRIPT_LIMIT)}…`
+      : transcript;
+  const safeTranscript = truncated
+    ? escapeHtml(truncated).replace(/\n/g, "<br/>")
+    : null;
+
+  try {
+    await sendChecked({
+      from: FROM_EMAIL,
+      to: businessOwnerEmail,
+      subject: `Remy answered a call from ${callerName?.trim() || callerPhone?.trim() || "an unknown number"}`,
+      html: `
+        <p>Remy answered a phone call for your business.</p>
+        <p>
+          <strong>Caller:</strong> ${displayCaller}<br/>
+          ${safePhone ? `<strong>Number:</strong> ${safePhone}<br/>` : ""}
+          ${formattedTime ? `<strong>Time:</strong> ${formattedTime}<br/>` : ""}
+          ${formattedDuration ? `<strong>Duration:</strong> ${formattedDuration}<br/>` : ""}
+        </p>
+        <p><strong>Summary:</strong> ${safeSummary}</p>
+        ${
+          leadCreated
+            ? `<p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>`
+            : ""
+        }
+        ${
+          safeTranscript
+            ? `<p><strong>Transcript:</strong><br/>${safeTranscript}</p>`
+            : ""
+        }
+      `,
+    });
+    return true;
+  } catch (err) {
+    console.error("[email] Failed to send call summary:", err);
+    return false;
+  }
+}
