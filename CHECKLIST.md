@@ -72,8 +72,20 @@
 - [x] Terms of Service (2026-07-06 — `/terms`, same caveat)
 - [x] Linked from the footer (already referenced there), the signup page's existing agreement notice, the sales chat, and the embeddable customer-facing widget (absolute URL, since it renders on third-party sites)
 
+## 🟡 Voice AI (Phase 2, Step 1 — code complete 2026-07-09, dark until setup below is done)
+- [x] Additive voice platform merged: `/api/voice/webhook` + `/api/voice/incoming`, adapter layer (`src/lib/voice/`), durable idempotent event ingestion, lead capture with source `voice` through the existing engine, owner call-summary emails. Kill switch `VOICE_ENABLED` keeps it all 404 until deliberately enabled — deploying is safe with zero production behaviour change
+- [ ] Run `docs/sql/2026-07-09_voice_tables.sql` in the Supabase SQL editor on the **dev/test project** (`kioljdihgbcboxlnwghv`) — enables full local end-to-end testing
+- [ ] Run the same SQL on **real production** (`sklcqvvnuigpewzarbiv`) — do not conflate the two projects (see 2026-07-06 incident)
+- [ ] Complete Step 0 (Vapi account, spend cap, browser-call prototype — see docs/VOICE_AI_PLAN.md) if not already done
+- [ ] In Vapi: set the phone number / assistant server URL to `<app-url>/api/voice/incoming`, set the server-URL secret, and put the same value in `VAPI_WEBHOOK_SECRET`
+- [ ] Insert a `voice_settings` row for the test org (phone_number in E.164, enabled=true)
+- [ ] Set `VAPI_WEBHOOK_SECRET` + `VOICE_ENABLED=true` in the target environment (Vercel) only after the SQL has run
+- [ ] Live end-to-end test call: Remy answers with KB knowledge, call row lands in `voice_calls`, lead created with source `voice`, owner receives the summary email
+- [ ] Verify a booking made by phone respects business hours/capacity and sends the existing confirmation emails
+- [ ] Confirm `leads.source` has no CHECK constraint blocking `'voice'` (note at the bottom of the SQL file)
+
 ## ⚪ Version 2
-- [ ] Voice AI
+- [x] Voice AI — in progress; moved to its own Phase 2 section above
 - [ ] Google Calendar
 - [ ] Outlook Calendar
 - [ ] Multi-staff scheduling

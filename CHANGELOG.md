@@ -2,6 +2,30 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-09 (Voice AI Phase 2 Step 1 — additive voice platform behind /api/voice/*, dark by default)
+
+### Added
+- **Voice AI foundation so Remy can answer phone calls via Vapi** — entirely additive: a new `src/lib/voice/` namespace and two new routes (`/api/voice/webhook`, `/api/voice/incoming`); no existing chat, widget, booking, notification, dashboard, or auth code path was modified. Nothing existing imports from `voice/`, so a voice failure is structurally incapable of affecting the pilot baseline.
+- **Adapter architecture (provider-replaceable):** `types.ts` defines the internal `VoiceEvent`/`VoiceAssistantConfig` schema; `vapi.ts` is the only file that knows Vapi's wire format (inbound payload parsing with defensive fallbacks, outbound transient-assistant rendering with **recording disabled** per the GDPR decision). Swapping providers later means one new adapter, not a rewrite.
+- **Durable, idempotent ingestion:** raw webhook payloads are stored in `voice_events` *before* processing (dedupe on `provider + dedupe_key`, so provider retries are no-ops); processing runs in `after()` post-ack, and a failure records `processing_error` while leaving the event replayable. If storage itself fails the route answers 500 so the provider retries — an event is never acked without being persisted.
+- **Answering calls:** an `assistant-request` resolves the org by the dialled number (`voice_settings.phone_number` is the tenant key), applies the same `hasActiveAccess` billing gate as chat (lapsed orgs get a polite spoken decline, mirroring the paused-chat reply), and builds the voice prompt from the org's **live** `business_knowledge` records — knowledge edits apply to the next call with nothing to sync. Phone-specific prompt rules: short spoken sentences, one question at a time, spell-back confirmation of names/emails, never invent answers (take a message instead), 999 emergency disclaimer, no cross-customer disclosure.
+- **Existing engines reused, not duplicated:** end-of-call structured data (schema mirrors `ExtractedLead`) feeds `capturePartialLead` with the new lead source `voice` — availability, capacity, double-booking prevention, lead merging (repeat callers match by caller ID), and booking-confirmation emails are all the existing engine. Urgent or substantive non-booking calls become `needs_review` leads. Every completed call emails the owner a summary via a new `sendCallSummaryEmail` appended to `email.ts` (reuses `escapeHtml`/`sendChecked`; no existing email function touched). No separate needs-review email for voice — the per-call summary already notifies the owner.
+- **Security:** endpoints are public and authenticated solely by constant-time verification of the `x-vapi-secret` header (fails closed if `VAPI_WEBHOOK_SECRET` is unset) — the Stripe-webhook trust model; per-IP rate limiting via the existing limiter; `VOICE_ENABLED=true` global kill switch, without which the entire voice surface answers 404 (it is currently OFF everywhere, so production behaviour is unchanged by deploying this).
+
+### Database (must be run manually — no migrations folder in this repo, same convention as prior schema changes)
+- `docs/sql/2026-07-09_voice_tables.sql` creates `voice_events`, `voice_calls` (with cost columns for future metered billing), and `voice_settings`. Additive only, RLS enabled, owner read-only policies on calls/settings. **Run it on BOTH Supabase projects — the dev/test project (`kioljdihgbcboxlnwghv`, what `.env.local` points at) and real production (`sklcqvvnuigpewzarbiv`) — before enabling voice there; recall the 2026-07-06 incident where these two were conflated.** Deploying the code without the SQL is safe: the routes are dark without `VOICE_ENABLED` and fail closed if enabled early.
+
+### Environment
+- New server-side vars: `VAPI_WEBHOOK_SECRET` (must match the Vapi dashboard's server-URL secret) and `VOICE_ENABLED` (kill switch, default dark). Added to `.env.local` with comments; **do not set `VOICE_ENABLED` in Vercel production until the SQL has run and a test number is configured.**
+
+### Verified
+- `next build` passes; all 34 existing pages/routes build unchanged; `tsc --noEmit` clean (the one pre-existing lint error in `ConversationView.tsx` predates this work and was deliberately left alone)
+- Dev-server smoke tests against the dev/test Supabase project: missing/wrong secret → 401, invalid JSON/envelope → 400, unhandled Vapi message types → 200 acked-and-ignored, `assistant-request` for an unknown number → 404, kill switch off → 404 on both routes, `/api/voice/incoming` alias behaves identically, and end-of-call storage correctly refuses to ack (500 → provider retry) while the voice tables don't exist yet
+- Baseline re-verified after all changes: `/api/health` → `200 {"status":"ok","database":"ok"}`
+
+### Status
+- Voice is code-complete for Step 1 but **dark**: no Vapi account is wired up yet, `VOICE_ENABLED` is unset in production, and the SQL has not been run. Next steps live in CHECKLIST.md under "Voice AI (Phase 2)". Live-call verification (a real Vapi test call end-to-end) is only possible once the owner completes the Vapi/Twilio setup from the Step 0 plan.
+
 ## 2026-07-08 (Sales chat: root cause of intermittently missing demo notifications — context-free field extraction; PILOT BASELINE)
 
 ### Fixed
