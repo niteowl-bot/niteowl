@@ -23,8 +23,14 @@ All notable changes to NiteOwl will be documented in this file.
 - Dev-server smoke tests against the dev/test Supabase project: missing/wrong secret → 401, invalid JSON/envelope → 400, unhandled Vapi message types → 200 acked-and-ignored, `assistant-request` for an unknown number → 404, kill switch off → 404 on both routes, `/api/voice/incoming` alias behaves identically, and end-of-call storage correctly refuses to ack (500 → provider retry) while the voice tables don't exist yet
 - Baseline re-verified after all changes: `/api/health` → `200 {"status":"ok","database":"ok"}`
 
+### Verified (addendum, later same day — full dev-project end-to-end after both SQL files were applied)
+- Both SQL files applied to the dev/test project by the owner. The `leads_source_check` hazard proved real: the first simulated booking call recorded the call and sent the summary email but the lead insert was rejected by the constraint — exactly the failure mode predicted; fixed by `docs/sql/2026-07-09_leads_source_voice.sql` (rebuilds the constraint from its live definition, no value guessing)
+- Full simulated chain then verified green: `assistant-request` returned a complete Remy assistant built from Test Plumbing Co's live knowledge base → simulated `end-of-call-report` stored raw + deduplicated on resend → `voice_calls` row (completed, cost 0.31, transcript) → lead created with source `voice`, caller ID as phone, "tomorrow at 2pm" parsed to the correct Europe/London ISO datetime, status `booked` via the existing availability/capacity checks, `manage_token` issued → lead linked back to the call → owner booking-confirmation and call-summary emails accepted by Resend (customer copy correctly skipped for a phone-only caller); a late `status-update` did not downgrade the completed call
+- Baseline re-verified live after everything: `/api/health` 200, homepage/login/dashboard-redirect 200, widget 401 on bad key, bookings-manage and Stripe webhook designed 400s, and a real widget chat message streamed the existing needs-review handoff behaviour end-to-end
+- All test data removed from the dev database afterwards (voice tables empty, test lead/conversation deleted)
+
 ### Status
-- Voice is code-complete for Step 1 but **dark**: no Vapi account is wired up yet, `VOICE_ENABLED` is unset in production, and the SQL has not been run. Next steps live in CHECKLIST.md under "Voice AI (Phase 2)". Live-call verification (a real Vapi test call end-to-end) is only possible once the owner completes the Vapi/Twilio setup from the Step 0 plan.
+- Voice is code-complete for Step 1 and fully verified by simulation against the dev project, but **dark in production**: no Vapi account is wired up yet, `VOICE_ENABLED` is unset in production, and neither SQL file has been run on the production project. Next steps live in CHECKLIST.md under "Voice AI (Phase 2)". Remaining verification gap: a real Vapi test call end-to-end, once the owner completes the Vapi/Twilio setup from the Step 0 plan.
 
 ## 2026-07-08 (Sales chat: root cause of intermittently missing demo notifications — context-free field extraction; PILOT BASELINE)
 

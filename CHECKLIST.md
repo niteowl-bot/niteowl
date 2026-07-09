@@ -75,14 +75,14 @@
 ## 🟡 Voice AI (Phase 2, Step 1 — code complete 2026-07-09, dark until setup below is done)
 - [x] Additive voice platform merged: `/api/voice/webhook` + `/api/voice/incoming`, adapter layer (`src/lib/voice/`), durable idempotent event ingestion, lead capture with source `voice` through the existing engine, owner call-summary emails. Kill switch `VOICE_ENABLED` keeps it all 404 until deliberately enabled — deploying is safe with zero production behaviour change
 - [x] Run `docs/sql/2026-07-09_voice_tables.sql` in the Supabase SQL editor on the **dev/test project** (`kioljdihgbcboxlnwghv`) — done 2026-07-09, tables verified present
-- [ ] Run `docs/sql/2026-07-09_leads_source_voice.sql` on the **dev/test project** — dev testing proved `leads_source_check` really does reject `'voice'` (the hazard flagged in the tables SQL); this rebuilds the constraint from its live definition with `'voice'` added, preserving whatever values each project allows
+- [x] Run `docs/sql/2026-07-09_leads_source_voice.sql` on the **dev/test project** — done 2026-07-09; constraint confirmed rebuilt with `'voice'` included (dev testing had proved `leads_source_check` really does reject `'voice'`)
 - [ ] Run BOTH SQL files on **real production** (`sklcqvvnuigpewzarbiv`) — do not conflate the two projects (see 2026-07-06 incident)
 - [ ] Complete Step 0 (Vapi account, spend cap, browser-call prototype — see docs/VOICE_AI_PLAN.md) if not already done
 - [ ] In Vapi: set the phone number / assistant server URL to `<app-url>/api/voice/incoming`, set the server-URL secret, and put the same value in `VAPI_WEBHOOK_SECRET`
 - [ ] Insert a `voice_settings` row for the test org (phone_number in E.164, enabled=true)
 - [ ] Set `VAPI_WEBHOOK_SECRET` + `VOICE_ENABLED=true` in the target environment (Vercel) only after the SQL has run
 - [ ] Live end-to-end test call: Remy answers with KB knowledge, call row lands in `voice_calls`, lead created with source `voice`, owner receives the summary email
-- [ ] Verify a booking made by phone respects business hours/capacity and sends the existing confirmation emails
+- [x] Verify a phone booking flows through the existing engine — **verified via full dev simulation (2026-07-09)**: simulated end-of-call report → raw event stored + deduplicated → `voice_calls` row with cost → lead created with source `voice` (caller ID as phone, "tomorrow at 2pm" parsed to the correct Europe/London ISO datetime, status `booked` after the availability/capacity checks, `manage_token` issued) → lead linked back to the call → owner booking-confirmation + call-summary emails accepted by Resend (customer copy correctly skipped, phone-only caller). All test rows deleted afterwards; still needs re-confirming with a real Vapi call (item below)
 - [x] Confirm whether `leads.source` has a CHECK constraint blocking `'voice'` — **it does** (`leads_source_check`, confirmed via a real dev-project insert failure 2026-07-09); fix is `docs/sql/2026-07-09_leads_source_voice.sql`, tracked above
 
 ## ⚪ Version 2
