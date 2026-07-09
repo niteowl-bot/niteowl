@@ -107,6 +107,9 @@ export interface VoiceAssistantConfig {
    * payloads before relying on them.
    */
   structuredDataSchema: Record<string, unknown>;
-  /** Absolute URL that call events should be posted back to. */
-  serverUrl: string;
+  /**
+   * Absolute URL that call events should be posted back to; null
+   * falls back to the server URL configured provider-side.
+   */
+  serverUrl: string | null;
 }

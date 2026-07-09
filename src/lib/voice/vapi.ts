@@ -233,7 +233,7 @@ export function buildVapiAssistantResponse(
         : {}),
       maxDurationSeconds: config.maxDurationSeconds,
       serverMessages: ["end-of-call-report", "status-update"],
-      server: { url: config.serverUrl },
+      ...(config.serverUrl ? { server: { url: config.serverUrl } } : {}),
       artifactPlan: { recordingEnabled: false },
       analysisPlan: {
         summaryPlan: { enabled: true },

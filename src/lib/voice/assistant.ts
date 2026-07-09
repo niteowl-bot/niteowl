@@ -175,7 +175,7 @@ export function buildVoiceAssistantConfig(
   org: VoiceOrgProfile,
   knowledge: VoiceKnowledgeRecord[],
   settings: VoiceOrgSettings,
-  serverUrl: string
+  serverUrl: string | null
 ): VoiceAssistantConfig {
   const firstMessage =
     settings.greeting?.trim() ||
