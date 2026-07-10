@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-10 (Voice AI: first real production call exposed a duration-rounding bug — one-line fix in the Vapi adapter)
+
+### Fixed
+- **End-of-call processing failed on every real call: `voice_calls upsert failed: invalid input syntax for type integer`.** After the two go-live gaps below were fixed (`VOICE_ENABLED` on, canned assistant un-assigned), the owner's real production test call reached the webhook and stored its `voice_events` row, but processing died at the very first step — so no `voice_calls` row survived, no lead was created, and no summary email was sent. Root cause: Vapi reports `message.durationSeconds` as a **decimal** (e.g. `34.583`), and the adapter passed it through unrounded into the integer `voice_calls.duration_seconds` column. The `durationMs` fallback path already rounded; the primary path didn't. The 2026-07-09 dev simulation missed it because its hand-written payload used a whole number.
+- Fix (`src/lib/voice/vapi.ts`, adapter only — no engine/route changes): round `durationSeconds` after resolving either source field. Failure containment worked exactly as designed: the raw event was preserved in `voice_events` with `processing_error` set, and the production diagnosis came straight from that column.
+
+### Verified (full dev end-to-end replay with the exact failing shape)
+- Replayed a realistic `end-of-call-report` (`durationSeconds: 34.583`, decimal cost, structured booking data) against the dev server + dev Supabase project: event stored and marked processed with no error; `voice_calls` row `completed` with `duration_seconds = 35`, `cost_usd = 0.0432`, lead linked; lead created with source `voice`, caller ID as phone, "tomorrow at 2pm" parsed to the correct Europe/London slot, status `booked`; both the booking-confirmation and call-summary emails confirmed `delivered` via Resend's API. All test rows (lead, call, event, conversation, temporary `voice_settings`) deleted afterwards. `next build` passes.
+
 ## 2026-07-10 (Voice AI: production setup executed by the owner — two gaps found before go-live; docs only, no code)
 
 ### Progress (owner-completed, same day as the runbook)

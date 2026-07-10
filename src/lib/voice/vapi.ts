@@ -153,11 +153,17 @@ export function parseVapiWebhook(body: unknown): VoiceEvent | null {
     const analysis = asRecord(message.analysis);
     const artifact = asRecord(message.artifact);
 
-    const durationSeconds =
+    // Vapi sends durationSeconds as a decimal (e.g. 34.583), but
+    // voice_calls.duration_seconds is an integer column — must round
+    // or the upsert is rejected with "invalid input syntax for type
+    // integer" (first real production call, 2026-07-10).
+    const rawDurationSeconds =
       asNumber(message.durationSeconds) ??
       (asNumber(message.durationMs) !== null
-        ? Math.round((asNumber(message.durationMs) as number) / 1000)
+        ? (asNumber(message.durationMs) as number) / 1000
         : null);
+    const durationSeconds =
+      rawDurationSeconds === null ? null : Math.round(rawDurationSeconds);
 
     const event: VoiceCallEndedEvent = {
       kind: "call-ended",
