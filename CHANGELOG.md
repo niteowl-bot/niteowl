@@ -2,6 +2,19 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-10 (Voice AI: production setup executed by the owner — two gaps found before go-live; docs only, no code)
+
+### Progress (owner-completed, same day as the runbook)
+- Both voice SQL files run on real production (`sklcqvvnuigpewzarbiv`); owner confirmed `leads_source_check` now includes `'voice'`
+- Vapi account + production phone number `+18436480204` created and activated; number's Server URL set to `https://niteowlhq.com/api/voice/incoming` with the shared secret; `VAPI_WEBHOOK_SECRET` added to Vercel Production and redeployed
+- `voice_settings` row created and verified for the production org (`e3a9ae40-836a-4a55-a723-8b09a9622050`, enabled, E.164 number matching the Vapi number)
+- A real inbound call to the number was answered — proves number provisioning and telephony work
+
+### Found before go-live (both must be fixed before the end-to-end test counts)
+- **`VOICE_ENABLED` is still off in production** — externally verified after the owner's redeploy: `POST /api/voice/incoming` and `/api/voice/webhook` both answer 404 (dark), while `/api/health` is 200. The env var was never set (it was absent from the completed-steps report). Fix: add `VOICE_ENABLED=true` in Vercel Production and redeploy.
+- **A dashboard-built assistant ("Inbound AI Receptionist") was assigned to the Vapi number.** With an assistant attached, Vapi answers using that canned assistant rather than sending an `assistant-request` to our Server URL — so the successful test call never touched our integration: Remy was not built from the Knowledge Base, and no `voice_events`/`voice_calls` rows, lead, or summary email were produced (confirmed consistent with the routes being dark). Fix: remove the assistant from the number so only the Server URL drives it, per runbook Step 3.
+- CHECKLIST's Voice section updated to reflect exactly which items are genuinely complete and which two remain; the live end-to-end test call item stays open and must be redone after both fixes.
+
 ## 2026-07-10 (Voice AI: production setup runbook for the owner — docs only)
 
 ### Added

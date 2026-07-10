@@ -55,7 +55,12 @@ In the Vapi dashboard, on the phone number (not on any assistant):
   production (the niteowlhq.com app URL). Vapi will POST an
   `assistant-request` here on every incoming call and our server returns the
   per-org assistant built live from the Knowledge Base — do **not** attach a
-  dashboard-built assistant to the number.
+  dashboard-built assistant to the number. **This mistake actually happened on
+  2026-07-10:** with an assistant assigned, Vapi answers calls with that canned
+  assistant and never contacts our server — the call "works" but bypasses the
+  Knowledge Base, call records, lead capture, and summary emails entirely, and
+  looks deceptively like a successful test. The number's assistant field must
+  be empty; only the Server URL should be set.
 - **Server URL secret**: generate a long random value (e.g.
   `openssl rand -hex 32` or a password manager). Vapi sends it as the
   `x-vapi-secret` header; our routes reject anything that doesn't match.
