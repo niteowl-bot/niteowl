@@ -73,6 +73,7 @@
 - [x] Linked from the footer (already referenced there), the signup page's existing agreement notice, the sales chat, and the embeddable customer-facing widget (absolute URL, since it renders on third-party sites)
 
 ## 🟡 Voice AI (Phase 2, Step 1 — code complete 2026-07-09, dark until setup below is done)
+> Owner setup steps below are written up in order with exact values and verification queries in **`docs/VOICE_SETUP_RUNBOOK.md`** (2026-07-10) — follow that document; the items here just track completion.
 - [x] Additive voice platform merged: `/api/voice/webhook` + `/api/voice/incoming`, adapter layer (`src/lib/voice/`), durable idempotent event ingestion, lead capture with source `voice` through the existing engine, owner call-summary emails. Kill switch `VOICE_ENABLED` keeps it all 404 until deliberately enabled — deploying is safe with zero production behaviour change
 - [x] Run `docs/sql/2026-07-09_voice_tables.sql` in the Supabase SQL editor on the **dev/test project** (`kioljdihgbcboxlnwghv`) — done 2026-07-09, tables verified present
 - [x] Run `docs/sql/2026-07-09_leads_source_voice.sql` on the **dev/test project** — done 2026-07-09; constraint confirmed rebuilt with `'voice'` included (dev testing had proved `leads_source_check` really does reject `'voice'`)

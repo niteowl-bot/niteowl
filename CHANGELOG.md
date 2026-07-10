@@ -2,6 +2,11 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-10 (Voice AI: production setup runbook for the owner — docs only)
+
+### Added
+- `docs/VOICE_SETUP_RUNBOOK.md` — the remaining Voice AI work is entirely outside-the-repo owner setup (production SQL, Vapi account/number, Vercel env vars, live test call), so this writes those steps up in strict order with exact values pulled from the code: the correct production project ref, verification queries for both SQL files, the `x-vapi-secret` server-URL secret flow, an idempotent `voice_settings` upsert template, the two Vercel variables that finally turn voice on, the live-call verification chain, and rollback. CHECKLIST's Voice section now points at it. No code changed; voice remains dark in production.
+
 ## 2026-07-09 (Voice AI Phase 2 Step 1 — additive voice platform behind /api/voice/*, dark by default)
 
 ### Added
