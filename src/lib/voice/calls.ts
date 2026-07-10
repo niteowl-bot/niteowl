@@ -7,7 +7,12 @@ import {
   type LeadIntent,
 } from "@/lib/leadCapture";
 import { sendCallSummaryEmail } from "@/lib/email";
-import type { VoiceCallEndedEvent, VoiceStatusEvent } from "@/lib/voice/types";
+import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
+import type {
+  VoiceCallEndedEvent,
+  VoiceExtractedDetails,
+  VoiceStatusEvent,
+} from "@/lib/voice/types";
 
 // ── Voice call processing engine ───────────────────────────────────
 // Consumes internal VoiceEvents (never provider payloads) and drives
@@ -171,8 +176,10 @@ const VALID_INTENTS: LeadIntent[] = [
  * sit in the extractor's "details incomplete" band, everything else
  * low.
  */
-function toExtractedLead(event: VoiceCallEndedEvent): ExtractedLead | null {
-  const details = event.extracted;
+function toExtractedLead(
+  details: VoiceExtractedDetails | null,
+  callerPhone: string | null
+): ExtractedLead | null {
   if (!details) return null;
 
   const intent: LeadIntent = VALID_INTENTS.includes(details.intent as LeadIntent)
@@ -183,7 +190,7 @@ function toExtractedLead(event: VoiceCallEndedEvent): ExtractedLead | null {
     intent,
     name: details.name,
     email: details.email,
-    phone: details.phone ?? event.callerPhone,
+    phone: details.phone ?? callerPhone,
     service: details.service,
     preferred_datetime: details.preferred_datetime,
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
@@ -239,7 +246,25 @@ export async function processCallEnded(
   // collected) become needs_review leads — Remy promised the caller a
   // follow-up, so the enquiry must not vanish. Pure question calls
   // create no lead: the summary email below already tells the owner.
-  const extracted = toExtractedLead(event);
+  // Provider analysis is primary; when it returned nothing (Vapi
+  // leaves structuredData empty on its extraction timeout) fall back
+  // to extracting from the transcript we already hold, so a
+  // provider-side analysis failure never costs the lead.
+  let details = event.extracted;
+  if (!details) {
+    details = await extractVoiceLeadFromTranscript(
+      event.transcript,
+      event.summary
+    );
+    if (details) {
+      console.log(
+        "[voice] provider returned no structured data — used fallback transcript extraction:",
+        event.providerCallId
+      );
+    }
+  }
+
+  const extracted = toExtractedLead(details, event.callerPhone);
   let leadId: string | null = null;
 
   if (extracted) {
@@ -247,7 +272,7 @@ export async function processCallEnded(
     const hasSubstance = Boolean(
       extracted.name || extracted.service || extracted.preferred_datetime
     );
-    const needsReview = !actionable && (event.extracted?.urgent === true || hasSubstance);
+    const needsReview = !actionable && (details?.urgent === true || hasSubstance);
 
     if (actionable || needsReview) {
       const conversationId = await ensureVoiceConversation(
@@ -294,7 +319,7 @@ export async function processCallEnded(
     businessOwnerEmail: ownerInfo?.email ?? null,
     businessName: ownerInfo?.businessName ?? "the business",
     callerPhone: event.callerPhone,
-    callerName: event.extracted?.name ?? null,
+    callerName: details?.name ?? null,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,
     summary: event.summary,

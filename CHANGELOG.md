@@ -2,6 +2,18 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-10 (Voice AI: second real call — summary email worked, but Vapi returned no structured data, so no lead; timeout raised + transcript-extraction fallback added)
+
+### Diagnosed
+- After the duration fix deployed, the owner's second real production call completed the pipeline (event processed cleanly, `voice_calls` row correct, summary email delivered) but **`message.analysis.structuredData` was NULL**, so no lead and no booking email. Vapi's API spec documents the cause: analysis requests default to a **5-second timeout** and "when request times out, `call.analysis.structuredData` will be empty" — a 2.5-minute transcript plus extraction schema doesn't reliably fit in 5s. The summary still arriving (Vapi summarises by default) matched exactly. Verified against Vapi's live OpenAPI spec that our `analysisPlan.structuredDataPlan { enabled, schema }` shape is current and correct — the shape wasn't the problem, the timeout was.
+
+### Fixed
+- `src/lib/voice/vapi.ts`: `timeoutSeconds: 30` set on both `summaryPlan` and `structuredDataPlan` (spec allows up to 60; trades a slower end-of-call report for reliable extraction).
+- **New fallback so a provider-side analysis failure can never cost a lead again**: `src/lib/voice/extraction.ts` extracts the same lead fields from the transcript we already hold (gpt-4o-mini, JSON-only, defensively parsed, returns null on any failure — a fallback failure leaves behaviour exactly as before the fallback existed). `processCallEnded` uses it only when the provider returned no structured data; everything downstream (lead capture, needs-review logic, summary-email caller name) reads the resolved details. Prompt handles spoken artefacts: fragmented name spellings, "john dot smith at gmail dot com" emails, and keeps the repo's hard-won rule of returning requested times exactly as spoken (never model-resolved dates).
+
+### Verified (dev end-to-end, fallback path specifically)
+- Replayed an end-of-call report **without** `structuredData` (transcript only, decimal duration 154.583): fallback log line fired; event processed with no error; `voice_calls` completed (`duration_seconds = 155`, cost, lead linked); lead created with source `voice`, transcript-extracted name, spoken email correctly normalised to `fallback.test@example.com`, caller ID as phone, "tomorrow at 2pm" booked for the correct Europe/London slot; all three emails (owner booking confirmation, owner call summary — now with the caller's name in the subject — and customer booking confirmation) accepted/delivered via Resend. All test rows deleted afterwards; `next build` passes.
+
 ## 2026-07-10 (Voice AI: first real production call exposed a duration-rounding bug — one-line fix in the Vapi adapter)
 
 ### Fixed

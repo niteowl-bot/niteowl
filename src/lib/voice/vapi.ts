@@ -242,10 +242,16 @@ export function buildVapiAssistantResponse(
       ...(config.serverUrl ? { server: { url: config.serverUrl } } : {}),
       artifactPlan: { recordingEnabled: false },
       analysisPlan: {
-        summaryPlan: { enabled: true },
+        // Vapi's analysis requests default to a 5s timeout and leave
+        // the result EMPTY on expiry (per their API spec) — observed
+        // on the first real production call, where the summary arrived
+        // but structuredData was null. 30s trades a slower end-of-call
+        // report for reliable extraction.
+        summaryPlan: { enabled: true, timeoutSeconds: 30 },
         structuredDataPlan: {
           enabled: true,
           schema: config.structuredDataSchema,
+          timeoutSeconds: 30,
         },
       },
     },
