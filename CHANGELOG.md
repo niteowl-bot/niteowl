@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-12 (Voice AI: four more owner-requested conversation refinements from the latest test call — prompt rules only)
+
+### Changed (`src/lib/voice/assistant.ts` Phone Conversation Rules only — rules 1, 2, 11)
+- **Rule 1 (grammar)**: the latest call produced dropped-opening-word questions ("There an email address where they can reach you if needed?"); the rule now demands complete, grammatically correct sentences and quotes that exact wrong/right pair.
+- **Rule 2 (one question per turn, tightened again)**: the previous example didn't generalise ("Is this an urgent issue? Also, could I get your phone number?" still happened), so the rule is now mechanical — at most ONE question mark per turn — with both observed anti-patterns quoted. Also absorbs the anti-repetition refinement: an acknowledgement is a few words ("Thank you. I'll make sure our team knows this is urgent."), never a read-back of everything collected so far.
+- **Rule 11 (closing)**: the mandated end-of-call recap of every detail is removed (it was producing the long final summary; each detail is already confirmed at collection time by rules 6/7, which are untouched — worth watching lead quality on the next few calls since the recap also gave the transcript-extraction fallback a consolidated record). New closing: "Perfect. I have everything I need. I'll pass your details to our team straight away and someone will contact you as soon as possible. Thank you for calling {business name}." The urgent/manual-follow-up variant and the "never promise an appointment or a guaranteed response time" safeguard are retained.
+- Explicitly NOT touched, per the owner's instruction: booking logic, Vapi integration, Supabase, database, webhooks, lead creation, email templates, extraction logic, all other prompt content and safeguards. `next build` passes.
+
 ## 2026-07-12 (Voice AI: five owner-requested conversation refinements — prompt rules only, one file)
 
 ### Changed (`src/lib/voice/assistant.ts` Phone Conversation Rules only)
