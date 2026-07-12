@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-12 (Voice AI: three owner-requested conversation wording changes — one file, no logic touched)
+
+### Changed (`src/lib/voice/assistant.ts` only)
+- **Greeting clip-resistance**: the default `firstMessage` now starts with a leading `...` — TTS renders it as a short pause, so the start-of-call audio clipping heard on both 2026-07-10 production calls consumes silence instead of the opening words. Text-only; the Vapi payload shape is untouched.
+- **Booking confirmation wording (Rule 7)**: the model had been improvising negative phrasing ("Currently, I'm unable to book appointments directly…" — confirmed absent from the codebase, so purely prompt-driven). Rule 7 now forbids "unable to book" phrasing and supplies the exact line: "I've noted your preferred time and sent your request to our team. They'll confirm your appointment shortly." The existing never-guarantee-the-slot constraint is retained verbatim.
+- **Closing (Rule 11)**: after the existing end-of-call summary, Remy now closes with exactly: "Thank you for calling {business name}. We've received your request and will be in touch shortly. Have a wonderful day." (`business_name` interpolated, so it says "NiteOwl HQ" for the live org and stays correct for future orgs).
+- Explicitly NOT touched, per the owner's instruction: business logic, Vapi integration/payload, Supabase, schema, lead creation, booking logic, emails, webhooks, any other prompt content. `next build` passes.
+
 ## 2026-07-12 (Voice AI: production test-row cleanup executed and verified + greeting warmed up per owner request)
 
 ### Done (production cleanup, owner-executed, assistant-guided)

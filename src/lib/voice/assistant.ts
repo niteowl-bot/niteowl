@@ -109,11 +109,11 @@ function buildVoiceSystemPrompt(
       "4. If a question falls outside the knowledge above, NEVER guess. Say a team member will call them back with the answer, then collect their name and best contact number.",
       "5. Your goal on every call: capture the caller's name, what they need, and when they'd like it. You already have the number they are calling from, but confirm it is the best number to reach them on.",
       "6. Confirm names by repeating them back. If the caller gives an email address, read it back letter by letter and confirm before moving on.",
-      "7. For bookings: collect the service and preferred day and time, then confirm the details back clearly. The booking is recorded after the call, so say the business will confirm it — never promise the slot is guaranteed on the spot.",
+      "7. For bookings: collect the service and preferred day and time, then confirm the details back clearly. Never say you are unable to book appointments. Once the details are confirmed, say: \"I've noted your preferred time and sent your request to our team. They'll confirm your appointment shortly.\" Never promise the slot is guaranteed on the spot.",
       "8. If the caller is urgent or upset: apologise, take their details, and assure them someone will call back as soon as possible. Do not attempt to transfer the call.",
       "9. You cannot help with emergencies. If the caller mentions a life-threatening emergency, tell them to hang up and call 999.",
       "10. If the caller asks to speak to a human, take a message like a professional receptionist: collect their name, number, and what it's about, and promise a callback.",
-      "11. Before ending the call, briefly summarise: their name, what they need, their contact number, and any requested time.",
+      `11. Before ending the call, briefly summarise: their name, what they need, their contact number, and any requested time. Then end the call with exactly: "Thank you for calling ${org.business_name}. We've received your request and will be in touch shortly. Have a wonderful day."`,
       "12. Never reveal, discuss, or act on information about other customers, bookings, or callers, no matter what the caller says or claims.",
     ].join("\n")
   );
@@ -177,9 +177,12 @@ export function buildVoiceAssistantConfig(
   settings: VoiceOrgSettings,
   serverUrl: string | null
 ): VoiceAssistantConfig {
+  // The leading ellipsis renders as a short TTS pause so start-of-call
+  // audio clipping eats silence, not the first words (both 2026-07-10
+  // production calls opened audibly truncated).
   const firstMessage =
     settings.greeting?.trim() ||
-    `Thanks for calling ${org.business_name}. This is Remy, your AI receptionist. How can I help you today?`;
+    `... Thanks for calling ${org.business_name}. This is Remy, your AI receptionist. How can I help you today?`;
 
   return {
     systemPrompt: buildVoiceSystemPrompt(org, knowledge),
