@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-12 (Voice AI: five owner-requested conversation refinements — prompt rules only, one file)
+
+### Changed (`src/lib/voice/assistant.ts` Phone Conversation Rules only)
+- **Rule 2 (one question at a time)**: the bare rule was being ignored ("May I have your name? Also, what's the best phone number…"); now spells out the anti-pattern verbatim and the required rhythm — ask, wait, acknowledge, then ask the next.
+- **Rule 6 (email confirmation)**: letter-by-letter read-back replaced with a single natural confirmation ("Thanks, I've got your email as john@example.com."); a caller's correction is acknowledged once, then the call moves on.
+- **Rule 11 (closing)**: urgent/manual-follow-up calls now close with "We'll make sure your request reaches the team as quickly as possible. Thank you for calling {business name}." instead of the standard booking closing; an explicit "never promise an appointment or a guaranteed response time" is added to the rule, alongside the existing Rule 7 no-guarantee safeguard which is untouched.
+- **New Rule 13 (no fake checking, confident tone)**: forbids narrating work Remy isn't doing ("I'm checking…", "Let me see if…", "I wanna make sure…") about things it already knows or that happen after the call; supplies the replacement patterns — move the conversation forward or state plainly what will happen ("I'll make sure the right person receives your request as quickly as possible.").
+- Explicitly NOT touched, per the owner's instruction: booking logic, Vapi integration, Supabase, schema, webhooks, email templates, lead creation, transcript extraction, all other prompt content and safeguards. `next build` passes.
+
 ## 2026-07-12 (Voice AI: three owner-requested conversation wording changes — one file, no logic touched)
 
 ### Changed (`src/lib/voice/assistant.ts` only)
