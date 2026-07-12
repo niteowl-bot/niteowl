@@ -179,7 +179,7 @@ export function buildVoiceAssistantConfig(
 ): VoiceAssistantConfig {
   const firstMessage =
     settings.greeting?.trim() ||
-    `Thanks for calling ${org.business_name}. This is Remy, the AI receptionist. How can I help you today?`;
+    `Thanks for calling ${org.business_name}. This is Remy, your AI receptionist. How can I help you today?`;
 
   return {
     systemPrompt: buildVoiceSystemPrompt(org, knowledge),
