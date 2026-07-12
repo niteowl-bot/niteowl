@@ -2,6 +2,17 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-12 (Voice AI: production test-row cleanup SQL prepared + garbled greeting narrowed to a custom setting — docs only, no code)
+
+### Added
+- `docs/sql/2026-07-12_voice_test_rows_cleanup.sql` — owner-runnable script for the outstanding hygiene item: deleting the 2026-07-10 go-live test rows from real production. Same discipline as the earlier sales-leads cleanup: an inspect-first section to eyeball every row before anything is deleted, deletes scoped by the exact same predicates (test caller `+353871465274` + test org only — a genuine customer call from any other number is untouched by every statement), FK-safe ordering (events resolved via `voice_calls` before those rows go, calls before leads, leads before conversations), and zero-remaining verification queries at the end.
+
+### Diagnosed (greeting follow-up narrowed, pending one prod query)
+- The deterministic "Hi. For calling. How can I help you today?" opening on both real calls is almost certainly **not** the code default: `src/lib/voice/assistant.ts` defaults to "Thanks for calling {business}. This is Remy, the AI receptionist. How can I help you today?", which starts differently ("Hi" vs "Thanks") and contains a whole sentence ("This is Remy…") absent from what was heard. A custom `voice_settings.greeting` row value in production is therefore the prime suspect. The confirming read-only query is appended to the cleanup script (owner runs both in one SQL-editor session); once the stored value is known, the fix is a single UPDATE (or clearing it to NULL to fall back to the code default).
+
+### Notes
+- No code changed; CHECKLIST's two open Voice items updated to point at the script. The third open follow-up (Vapi `structuredData` NULL on every real call) needs Vapi call logs/support and stays open — the transcript fallback continues to carry extraction.
+
 ## 2026-07-10 (Voice AI: second real call — summary email worked, but Vapi returned no structured data, so no lead; timeout raised + transcript-extraction fallback added)
 
 ### Diagnosed
