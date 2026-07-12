@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-12 (Voice AI: production test-row cleanup executed and verified + greeting warmed up per owner request)
+
+### Done (production cleanup, owner-executed, assistant-guided)
+- The 2026-07-10 go-live test rows are gone from real production: 12 `voice_events`, 4 `voice_calls`, 1 `voice` lead, 2 conversations, all scoped to the owner's test caller `+353871465274` / test org. Run inspect-first with results verified at every step; each delete used `returning` so the owner saw exactly what was removed; final verification query confirmed 0 remaining in all four tables.
+- One inspection catch that mattered: the merged test lead stored the **spoken** local-format phone (`0871465274`, via the transcript-extraction fallback), not the `+353…` caller ID, so the script's phone-predicate lead delete would have silently missed it (and the conversations delete would then have hit the lead's FK). Caught before deleting; the lead was verified by content and deleted by exact id instead. Worth remembering: **voice leads' `phone` is the number as spoken, not the caller ID** — the caller ID lives on `voice_calls.caller_phone`.
+- Greeting mystery resolved by the same session's prod query: `voice_settings.greeting` is **NULL** — the code default was in play all along (the "custom greeting" theory in the entry below was wrong), so "Hi. For calling." is the call audio/transcript's rendering of the default, most plausibly start-of-call clipping. Tracked in CHECKLIST: listen on the next test call; if still clipped, it's audio timing, not wording.
+
+### Changed (greeting only — owner-requested wording)
+- `src/lib/voice/assistant.ts` default greeting: "This is Remy, **the** AI receptionist" → "This is Remy, **your** AI receptionist" (one word; the `{business_name}` interpolation and everything else untouched). No other voice logic, booking flow, lead capture, or email path modified — the greeting string is consumed only as `firstMessage` in the assistant config. `next build` passes.
+
 ## 2026-07-12 (Voice AI: production test-row cleanup SQL prepared + garbled greeting narrowed to a custom setting — docs only, no code)
 
 ### Added
