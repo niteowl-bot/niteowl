@@ -197,6 +197,48 @@ function toExtractedLead(
   };
 }
 
+// ── Unconfirmed-service guard ───────────────────────────────────────
+// isBookingConfirmed() in the shared lead-capture engine (leadCapture.ts,
+// used by chat/widget too — not modified here) marks a lead "booked" and
+// fires the booking-confirmation email from intent + contact + a
+// confirmed time alone; it never checks whether the requested SERVICE is
+// actually something the business's Knowledge Base confirms. A caller
+// asking for a service the business doesn't offer (e.g. "cabinet making"
+// on a plumbing org) must not come out the other end as a real booking.
+// This checks the KB before the lead ever reaches that shared engine, so
+// a confirmed-service request is completely unaffected.
+async function isServiceConfirmedByKnowledge(
+  admin: AdminClient,
+  orgId: string,
+  requestedService: string
+): Promise<boolean> {
+  const needle = requestedService.toLowerCase().trim();
+  if (!needle) return false;
+
+  const STOP_WORDS = new Set([
+    "a", "an", "the", "and", "or", "for", "of", "to", "in", "on", "with",
+    "my", "i", "need", "want", "please", "some", "service", "services",
+  ]);
+  const needleWords = needle.split(/\W+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  if (needleWords.length === 0) return false;
+
+  const { data, error } = await admin
+    .from("business_knowledge")
+    .select("title, content")
+    .eq("org_id", orgId)
+    .eq("is_active", true);
+
+  if (error || !data) {
+    console.error("[voice] service-confirmation lookup failed:", error?.message);
+    return false; // fail closed — never invent a confirmation the KB can't back
+  }
+
+  return data.some((record) => {
+    const haystack = `${record.title} ${record.content}`.toLowerCase();
+    return needleWords.some((w) => haystack.includes(w));
+  });
+}
+
 // ── End-of-call processing ─────────────────────────────────────────
 
 export async function processCallEnded(
@@ -266,8 +308,26 @@ export async function processCallEnded(
 
   const extracted = toExtractedLead(details, event.callerPhone);
   let leadId: string | null = null;
+  let serviceConfirmed = true;
 
   if (extracted) {
+    // Unconfirmed-service guard — new_booking only, and only when a
+    // specific service was actually named. Downgrading the intent BEFORE
+    // it reaches the shared lead-capture engine is what stops
+    // isBookingConfirmed() there from ever marking this "booked" or
+    // sending the booking-confirmation email; a confirmed-service
+    // booking never hits this branch, so that path is unchanged.
+    if (extracted.intent === "new_booking" && extracted.service) {
+      serviceConfirmed = await isServiceConfirmedByKnowledge(
+        admin,
+        orgId,
+        extracted.service
+      );
+      if (!serviceConfirmed) {
+        extracted.intent = "question";
+      }
+    }
+
     const actionable = ACTIONABLE_INTENTS.includes(extracted.intent);
     const hasSubstance = Boolean(
       extracted.name || extracted.service || extracted.preferred_datetime
@@ -299,6 +359,25 @@ export async function processCallEnded(
       leadId = captureResult.leadId;
 
       if (leadId) {
+        // The unconfirmed-service intent downgrade above already stops the
+        // shared engine from ever marking this "booked"; this only makes
+        // the resulting status explicit ("awaiting_confirmation" already
+        // exists in the schema for exactly this "not yet confirmed" case)
+        // rather than leaving it at whatever the downgraded intent
+        // produced (typically "needs_review").
+        if (!serviceConfirmed) {
+          const { error: statusError } = await admin
+            .from("leads")
+            .update({ status: "awaiting_confirmation" })
+            .eq("id", leadId);
+          if (statusError) {
+            console.error(
+              "[voice] failed to set awaiting_confirmation status:",
+              statusError.message
+            );
+          }
+        }
+
         const { error: linkError } = await admin
           .from("voice_calls")
           .update({ lead_id: leadId, updated_at: new Date().toISOString() })

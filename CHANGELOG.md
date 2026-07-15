@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Voice AI: unconfirmed services no longer create a real booking — `src/lib/voice/calls.ts`, `src/lib/voice/assistant.ts`)
+
+### Fixed (voice-only; business name NOT touched — "Nite Owl Test" is correct and unchanged)
+- **Bug**: a caller requesting a service not in the Knowledge Base (e.g. "cabinet making" on a plumbing org) got Remy's correct spoken caveat, but the system still created a `booked` lead and sent the "New booking" confirmation email. Root cause: `isBookingConfirmed()` in the shared lead-capture engine (`src/lib/leadCapture.ts`, used by chat/widget too — **not modified**) decides "booked" from intent + contact + a confirmed time alone; it has no concept of whether the requested *service* is actually confirmed by the Knowledge Base.
+- **Fix, voice-only, before the shared engine ever sees it**: `processCallEnded` in `calls.ts` now checks a `new_booking` request's named service against the org's active `business_knowledge` (new `isServiceConfirmedByKnowledge`, word-overlap match, fails closed on any lookup error). If unconfirmed, the intent is downgraded (so the shared engine's own unmodified logic naturally skips "booked" and never schedules the booking email), the lead's name/phone/exact requested service/preferred time are still captured as before, and its status is explicitly set to the existing `awaiting_confirmation` value. The owner still gets the call-summary email that already fires for every call — just not a false "New booking" confirmation.
+- **Confirmed-service bookings are completely unaffected** — the guard only fires when a service is named and isn't found in the KB; the known-service branch never enters the new code path.
+- **Voice prompt (Rule 15)** tightened so the caller is told plainly the preferred time is noted but the appointment isn't confirmed until the business verifies it offers the service — no other prompt content changed (Rule 14, added last commit, is untouched).
+- Known limitation, accepted to keep this change minimal and to avoid touching `leadCapture.ts`: on the rare repeat-caller *merge* path, `shouldUpdateService()` there only updates `service_needed` when intent is `new_booking`, so a downgraded intent won't overwrite an existing merged lead's service text. New leads (the reported scenario) are unaffected.
+- No change to: business name (any surface), known-service booking behaviour, Knowledge Base retrieval, voice routing, Vapi integration, chat, the shared lead-capture engine, calendar logic, database schema, or dashboard layout. `tsc --noEmit` and `next build` pass.
+
 ## 2026-07-15 (Three targeted fixes: editable business name, currency, unknown-service handling)
 
 ### Added — Business Information settings page (`src/app/(dashboard)/settings/business/`)
