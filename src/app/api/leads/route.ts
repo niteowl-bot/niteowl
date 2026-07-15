@@ -26,6 +26,22 @@ interface ValidationError {
 
 const VALID_SOURCES = ["chat", "sms", "web_widget", "manual", "other"] as const;
 
+// Basic phone-number validation — accepts international numbers with
+// spaces, +, parentheses, and hyphens; rejects anything containing other
+// characters (letters, symbols) and anything with too few or too many
+// digits to plausibly be a real number. Deliberately lenient on FORMAT
+// (no country-specific rules) so it never rejects a genuine international
+// number — it only catches the clearly malformed case.
+const PHONE_ALLOWED_CHARS_RE = /^[0-9+()\-\s]+$/;
+const MIN_PHONE_DIGITS = 7;
+const MAX_PHONE_DIGITS = 15; // E.164 maximum
+
+function isValidPhoneNumber(value: string): boolean {
+  if (!PHONE_ALLOWED_CHARS_RE.test(value)) return false;
+  const digitCount = (value.match(/\d/g) ?? []).length;
+  return digitCount >= MIN_PHONE_DIGITS && digitCount <= MAX_PHONE_DIGITS;
+}
+
 function validatePayload(body: unknown): {
   data: LeadPayload | null;
   errors: ValidationError[];
@@ -66,9 +82,21 @@ function validatePayload(body: unknown): {
     }
   }
 
-  // phone — optional but must be a string if provided
-  if (raw.phone !== undefined && raw.phone !== null && typeof raw.phone !== "string") {
-    errors.push({ field: "phone", message: "phone must be a string." });
+  // phone — optional, but must look like a real phone number if provided.
+  // International numbers, spaces, +, parentheses, and hyphens are all
+  // accepted; only the digit count is checked (7–15, per the E.164 max),
+  // so this rejects obviously-malformed input ("12x-abc") without
+  // rejecting any valid international format.
+  if (raw.phone !== undefined && raw.phone !== null) {
+    if (typeof raw.phone !== "string") {
+      errors.push({ field: "phone", message: "phone must be a string." });
+    } else if (raw.phone.trim() && !isValidPhoneNumber(raw.phone.trim())) {
+      errors.push({
+        field: "phone",
+        message:
+          "phone must be a valid phone number, e.g. +44 7700 900123 — only digits, spaces, +, (), and - are allowed.",
+      });
+    }
   }
 
   // source — optional but must be a valid enum value if provided

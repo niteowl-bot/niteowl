@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Basic phone number validation — `src/app/api/leads/route.ts` only)
+
+### Changed
+- Follow-up to the Priority 9 finding: `/api/leads`'s existing `validatePayload` checked that `phone` was a string but never checked its format, so `"12x-abc"` (and anything else) was accepted. `validatePayload` already had a working `field`/`message` validation pattern (used by the `email` check right above it) — this extends the same pattern to `phone` rather than inventing a new mechanism.
+- New `isValidPhoneNumber` helper: accepts digits, spaces, `+`, `(`, `)`, and `-`; rejects any other character (letters, symbols); requires the digit count to be between 7 and 15 (the E.164 maximum) so it never rejects a genuine international number, only something clearly too short or malformed. On failure, the API returns the same friendly-message shape every other field already uses: `"phone must be a valid phone number, e.g. +44 7700 900123 — only digits, spaces, +, (), and - are allowed."`
+- Verified with 14 test cases covering UK/US/Irish/Australian international formats with spaces, `+`, parentheses, and hyphens (all correctly accepted) alongside the original `"12x-abc"` bug report, too-short numbers, letters, and an over-length number (all correctly rejected) — all 14 passed.
+- **Only this one route changed.** AI-extracted phone numbers from chat, the widget, and voice are untouched — those come from natural-language extraction, not a structured form field, and validating/rejecting them is a different, more involved product decision that was deliberately not made here. GET and PATCH on `/api/leads`, and every other field's validation, are unchanged.
+- `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Refinement Priority 9: edge-case testing — results, no code changes)
 
 ### Tested against the real dev environment (dev server + dev Supabase + `Test Plumbing Co` org), no code changed
