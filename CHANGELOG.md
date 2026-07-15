@@ -2,6 +2,13 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Voice AI: two wording refinements for unconfirmed services — `src/lib/voice/assistant.ts` prompt text only)
+
+### Changed (voice prompt wording only — no logic, no other file)
+- **Exact service text preserved**: the structured-data `service` field description and Rule 15 previously told the model to record an unconfirmed service as "General enquiry - X". Both now instruct it to record the caller's exact words with no relabelling at all (e.g. "cabinet making" stays "cabinet making") — the lead's `service_needed` still shows the literal request, status still `awaiting_confirmation` (from the previous commit's code fix, unchanged).
+- **Clearer unconfirmed-service closing**: Rule 15's script now explicitly overrides Rule 7's booking-confirmation wording (which promises "They'll confirm your appointment shortly" and was leaking into unconfirmed-service calls) and closes instead with wording that makes clear neither the service nor the appointment is confirmed yet: "I'll pass your request to our team. They'll confirm whether we can provide that service and, if we can, they'll arrange your appointment."
+- Known-service bookings are untouched — Rule 7's wording, the booking flow, and the "booked" status/confirmation email are unaffected; Rule 15 only overrides Rule 7 for the unconfirmed-service branch. No change to `calls.ts`, `leadCapture.ts`, chat, widget, Vapi integration, Supabase, or schema. `tsc --noEmit` and `next build` pass.
+
 ## 2026-07-15 (Voice AI: unconfirmed services no longer create a real booking — `src/lib/voice/calls.ts`, `src/lib/voice/assistant.ts`)
 
 ### Fixed (voice-only; business name NOT touched — "Nite Owl Test" is correct and unchanged)
