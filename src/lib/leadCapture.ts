@@ -263,6 +263,45 @@ Return ONLY the JSON object — no markdown, no explanation.`;
   }
 }
 
+// ── isServiceConfirmedByKnowledge ─────────────────────────────────
+// Shared by chat, the public widget, and voice (one implementation,
+// not three) so a caller can never get a real "booked" lead for a
+// service the business hasn't actually listed in its Knowledge Base.
+// Word-overlap match against active business_knowledge; fails closed
+// (treats as unconfirmed) on any lookup error — never invent a
+// confirmation the KB can't back.
+export async function isServiceConfirmedByKnowledge(
+  supabase: DatabaseClient,
+  orgId: string,
+  requestedService: string
+): Promise<boolean> {
+  const needle = requestedService.toLowerCase().trim();
+  if (!needle) return false;
+
+  const STOP_WORDS = new Set([
+    "a", "an", "the", "and", "or", "for", "of", "to", "in", "on", "with",
+    "my", "i", "need", "want", "please", "some", "service", "services",
+  ]);
+  const needleWords = needle.split(/\W+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w));
+  if (needleWords.length === 0) return false;
+
+  const { data, error } = await supabase
+    .from("business_knowledge")
+    .select("title, content")
+    .eq("org_id", orgId)
+    .eq("is_active", true);
+
+  if (error || !data) {
+    console.error("[lead capture] service-confirmation lookup failed:", error?.message);
+    return false;
+  }
+
+  return data.some((record) => {
+    const haystack = `${record.title} ${record.content}`.toLowerCase();
+    return needleWords.some((w) => haystack.includes(w));
+  });
+}
+
 // ── capturePartialLead ───────────────────────────────────────────
 
 

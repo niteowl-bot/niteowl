@@ -3,6 +3,7 @@ import {
   ACTIONABLE_INTENTS,
   capturePartialLead,
   getOrgOwnerEmail,
+  isServiceConfirmedByKnowledge,
   type ExtractedLead,
   type LeadIntent,
 } from "@/lib/leadCapture";
@@ -197,49 +198,17 @@ function toExtractedLead(
   };
 }
 
-// ── Unconfirmed-service guard ───────────────────────────────────────
-// isBookingConfirmed() in the shared lead-capture engine (leadCapture.ts,
-// used by chat/widget too — not modified here) marks a lead "booked" and
-// fires the booking-confirmation email from intent + contact + a
-// confirmed time alone; it never checks whether the requested SERVICE is
-// actually something the business's Knowledge Base confirms. A caller
-// asking for a service the business doesn't offer (e.g. "cabinet making"
-// on a plumbing org) must not come out the other end as a real booking.
-// This checks the KB before the lead ever reaches that shared engine, so
-// a confirmed-service request is completely unaffected.
-async function isServiceConfirmedByKnowledge(
-  admin: AdminClient,
-  orgId: string,
-  requestedService: string
-): Promise<boolean> {
-  const needle = requestedService.toLowerCase().trim();
-  if (!needle) return false;
-
-  const STOP_WORDS = new Set([
-    "a", "an", "the", "and", "or", "for", "of", "to", "in", "on", "with",
-    "my", "i", "need", "want", "please", "some", "service", "services",
-  ]);
-  const needleWords = needle.split(/\W+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w));
-  if (needleWords.length === 0) return false;
-
-  const { data, error } = await admin
-    .from("business_knowledge")
-    .select("title, content")
-    .eq("org_id", orgId)
-    .eq("is_active", true);
-
-  if (error || !data) {
-    console.error("[voice] service-confirmation lookup failed:", error?.message);
-    return false; // fail closed — never invent a confirmation the KB can't back
-  }
-
-  return data.some((record) => {
-    const haystack = `${record.title} ${record.content}`.toLowerCase();
-    return needleWords.some((w) => haystack.includes(w));
-  });
-}
-
 // ── End-of-call processing ─────────────────────────────────────────
+// isBookingConfirmed() in the shared lead-capture engine (leadCapture.ts,
+// used by chat/widget too) marks a lead "booked" and fires the
+// booking-confirmation email from intent + contact + a confirmed time
+// alone; it never checks whether the requested SERVICE is actually
+// something the business's Knowledge Base confirms. A caller asking for
+// a service the business doesn't offer (e.g. "cabinet making" on a
+// plumbing org) must not come out the other end as a real booking.
+// isServiceConfirmedByKnowledge (imported above, shared with chat/widget)
+// checks the KB before the lead ever reaches that shared engine, so a
+// confirmed-service request is completely unaffected.
 
 export async function processCallEnded(
   admin: AdminClient,

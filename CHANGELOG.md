@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 1: chat and widget now use the SAME unknown-service validation as Voice AI)
+
+### Changed (`src/lib/leadCapture.ts`, `src/lib/voice/calls.ts`, `src/app/api/chat/route.ts`, `src/app/api/widget/chat/route.ts`)
+- **Shared, not duplicated**: `isServiceConfirmedByKnowledge` (word-overlap match against active `business_knowledge`, fails closed on any error) moved out of voice's `calls.ts` into `leadCapture.ts` — the one place already shared by chat, widget, and voice — and voice now imports it from there instead of keeping its own copy. One implementation, three callers.
+- **Chat and widget gained the same guard voice already had**: right after lead extraction, if the intent is `new_booking` and a specific service was named, the service is checked against the org's Knowledge Base. If unconfirmed, the intent is downgraded before it reaches `ACTIONABLE_INTENTS`/`capturePartialLead` — the same mechanism that stops the shared `isBookingConfirmed()` from marking it "booked" or sending a booking-confirmation email. A new deterministic branch then captures the lead directly (not routed through `assessAnswerConfidence`, whose own rules explicitly treat "any booking-related message" as not needing review and would otherwise drop the enquiry instead of capturing it), sets the resulting status to the existing `awaiting_confirmation` value, and preserves the caller's exact requested service text — matching what was already correct for voice.
+- **Same wording as voice**: chat gains a new Rule 11 and widget a new Rule 9, both matching voice's Rule 15 almost verbatim — "I'll pass your request to our team. They'll confirm whether we can provide that service and, if we can, they'll arrange your appointment," making clear neither the service nor the appointment is confirmed.
+- **Resolved a real conflict found during this fix**: chat's existing Rule 9 said "When a customer requests any service — even one not listed in the knowledge base — always accept it as a booking," which directly caused the bug this priority fixes. Rule 9 is now scoped to "treat it as a genuine request, don't redirect them elsewhere" while explicitly deferring to the new Rule 11 for confirmation — the same override pattern voice's Rule 15 already uses against its own Rule 7.
+- **Known-service bookings are completely unchanged** — the guard only fires when a service is named and isn't found in the Knowledge Base; every existing booking, chat, and widget behavior for real services is untouched.
+- No changes to the database schema, RLS, voice routing, Vapi integration, or any file outside the four listed above. `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Voice AI: two wording refinements for unconfirmed services — `src/lib/voice/assistant.ts` prompt text only)
 
 ### Changed (voice prompt wording only — no logic, no other file)

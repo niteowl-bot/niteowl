@@ -13,6 +13,7 @@ import {
   capturePartialLead,
   getOrgOwnerEmail,
   hasNeedsReviewNotificationBeenSent,
+  isServiceConfirmedByKnowledge,
   markNeedsReviewNotificationSent,
 } from "@/lib/leadCapture";
 
@@ -343,8 +344,9 @@ function buildSystemPrompt(
       "6. When a customer wants to reschedule or change a booking — including phrases like 'change to', 'update to', 'make it', 'actually', 'instead', 'reschedule', 'move to', 'how about', 'can we do', 'I'd prefer' followed by a time or date — respond warmly and confirm the new time. Example: 'Got it, I've updated your appointment to [new time]. Is there anything else I can help you with?'",
       "7. Never say you cannot change, update, or modify a booking. You capture customer preferences on behalf of the business. Booking changes are always handled here — never redirect the customer elsewhere for this.",
       "8. Never repeat back a long transcript. Keep confirmations short and friendly.",
-      "9. When a customer requests any service — even one not listed in the knowledge base — always accept it as a booking. Say something like: 'Thank you, I've noted your request for [service]. Let me confirm your appointment details.' Never say you don't have information about a service when the customer is trying to book it.",
+      "9. When a customer requests a service, treat it as a genuine request and move the conversation forward — never redirect them elsewhere just because it isn't phrased exactly like an FAQ entry. However, only confirm an appointment as booked if the service is one the business knowledge above actually confirms; if it is NOT confirmed there, follow rule 11 instead of this one.",
       "10. When a customer asks to speak to a person, a human, a team member, or asks how to contact the business directly, do NOT redirect them elsewhere and do NOT mention the website, a phone number, or any contact details as something they should go find themselves. Instead, act like a professional receptionist taking the message: offer to arrange a callback, and collect their name, phone number, email, and preferred time to be contacted — one piece at a time. You are how they reach the business.",
+      "11. Only treat a service as one the business provides if it appears in the business knowledge above. If a customer asks about or wants to book a service that is NOT listed there, do not confirm it, do not imply the business offers it, and do not say the appointment is booked or confirmed — this overrides rule 9. Still collect their name, best contact method, and preferred day and time, and record the service EXACTLY as they described it — never renamed, reworded, or labelled as a \"general enquiry\". Tell them: \"I'll pass your request to our team. They'll confirm whether we can provide that service and, if we can, they'll arrange your appointment.\" Make clear that neither the service nor the appointment is confirmed yet.",
     ].join("\n")
   );
 
@@ -467,6 +469,26 @@ let outsideBusinessHours = false;
       if (latestUserMessage && org) {
     try {
       const extracted = await extractLeadData(latestUserMessage);
+
+      // Unconfirmed-service guard — shared with voice AI
+      // (isServiceConfirmedByKnowledge in leadCapture.ts). Downgrading
+      // the intent BEFORE it reaches ACTIONABLE_INTENTS/capturePartialLead
+      // is what stops isBookingConfirmed() there from ever marking this
+      // "booked" or sending the booking-confirmation email; a
+      // confirmed-service booking never enters this branch, so that
+      // path is unchanged.
+      let serviceConfirmed = true;
+      if (extracted.intent === "new_booking" && extracted.service) {
+        serviceConfirmed = await isServiceConfirmedByKnowledge(
+          supabase,
+          orgId,
+          extracted.service
+        );
+        if (!serviceConfirmed) {
+          extracted.intent = "question";
+        }
+      }
+
       detectedIntent = extracted.intent;
 
       console.log("[post handler] extraction complete — intent:", extracted.intent);
@@ -592,6 +614,39 @@ let outsideBusinessHours = false;
           }
         }
 
+      } else if (!serviceConfirmed) {
+        // Deterministic unconfirmed-service capture — same behaviour as
+        // voice AI. Does not depend on assessAnswerConfidence (whose own
+        // rules explicitly treat "any booking-related message" as not
+        // needing review, which would otherwise silently drop this
+        // enquiry instead of capturing it).
+        console.log("[post handler] service not confirmed by knowledge base — capturing as awaiting confirmation");
+
+        const captureResult = await capturePartialLead(
+          supabase,
+          orgId,
+          conversationId,
+          latestUserMessage,
+          extracted,
+          leadSource,
+          true
+        );
+
+        if (captureResult.leadId) {
+          const { error: statusError } = await supabase
+            .from("leads")
+            .update({ status: "awaiting_confirmation" })
+            .eq("id", captureResult.leadId);
+          if (statusError) {
+            console.error(
+              "[post handler] failed to set awaiting_confirmation status:",
+              statusError.message
+            );
+          }
+          if (extracted.email || extracted.phone) {
+            handoffContactCaptured = true;
+          }
+        }
       } else {
         console.log("[post handler] intent not actionable — checking answer confidence");
 

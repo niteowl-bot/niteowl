@@ -5,6 +5,7 @@ import {
   capturePartialLead,
   getOrgOwnerEmail,
   hasNeedsReviewNotificationBeenSent,
+  isServiceConfirmedByKnowledge,
   markNeedsReviewNotificationSent,
 } from "@/lib/leadCapture";
 import { sendNeedsReviewNotification } from "@/lib/email";
@@ -296,6 +297,7 @@ function buildSystemPrompt(
       "6. Never say you cannot change, update, or modify a booking.",
       "7. Never repeat back a long transcript. Keep confirmations short and friendly.",
       "8. When a customer asks to speak to a person, a human, a team member, or asks how to contact the business directly, do NOT redirect them elsewhere and do NOT mention the website, a phone number, or any contact details as something they should go find themselves. Instead, act like a professional receptionist taking the message: offer to arrange a callback, and collect their name, phone number, email, and preferred time to be contacted — one piece at a time. You are how they reach the business.",
+      "9. Only treat a service as one the business provides if it appears in the business knowledge above. If a customer asks about or wants to book a service that is NOT listed there, do not confirm it, do not imply the business offers it, and do not say the appointment is booked or confirmed. Still collect their name, best contact method, and preferred day and time, and record the service EXACTLY as they described it — never renamed, reworded, or labelled as a \"general enquiry\". Tell them: \"I'll pass your request to our team. They'll confirm whether we can provide that service and, if we can, they'll arrange your appointment.\" Make clear that neither the service nor the appointment is confirmed yet.",
     ].join("\n")
   );
 
@@ -474,6 +476,26 @@ export async function POST(req: NextRequest) {
       );
 
       const extracted = await extractLeadData(latestUserMessage);
+
+      // Unconfirmed-service guard — shared with voice AI
+      // (isServiceConfirmedByKnowledge in leadCapture.ts). Downgrading
+      // the intent BEFORE it reaches ACTIONABLE_INTENTS/capturePartialLead
+      // is what stops isBookingConfirmed() there from ever marking this
+      // "booked" or sending the booking-confirmation email; a
+      // confirmed-service booking never enters this branch, so that
+      // path is unchanged.
+      let serviceConfirmed = true;
+      if (extracted.intent === "new_booking" && extracted.service) {
+        serviceConfirmed = await isServiceConfirmedByKnowledge(
+          supabase,
+          orgId,
+          extracted.service
+        );
+        if (!serviceConfirmed) {
+          extracted.intent = "question";
+        }
+      }
+
       detectedIntent = extracted.intent;
 
       console.log("[widget] extracted intent:", extracted.intent, "| conversation:", linkedConversationId);
@@ -591,6 +613,39 @@ export async function POST(req: NextRequest) {
               "[widget POST] confidence check error (contact_update):",
               err
             );
+          }
+        }
+      } else if (!serviceConfirmed) {
+        // Deterministic unconfirmed-service capture — same behaviour as
+        // voice AI. Does not depend on assessAnswerConfidence (whose own
+        // rules explicitly treat "any booking-related message" as not
+        // needing review, which would otherwise silently drop this
+        // enquiry instead of capturing it).
+        console.log("[widget] service not confirmed by knowledge base — capturing as awaiting confirmation");
+
+        const captureResult = await capturePartialLead(
+          supabase,
+          orgId,
+          linkedConversationId,
+          latestUserMessage,
+          extracted,
+          "web_widget",
+          true
+        );
+
+        if (captureResult.leadId) {
+          const { error: statusError } = await supabase
+            .from("leads")
+            .update({ status: "awaiting_confirmation" })
+            .eq("id", captureResult.leadId);
+          if (statusError) {
+            console.error(
+              "[widget] failed to set awaiting_confirmation status:",
+              statusError.message
+            );
+          }
+          if (extracted.email || extracted.phone) {
+            handoffContactCaptured = true;
           }
         }
       } else {
