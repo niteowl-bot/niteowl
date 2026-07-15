@@ -2,6 +2,13 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Voice AI: temporary KB-retrieval diagnostics on the assistant-request path — logging only)
+
+### Added (`src/lib/voice/incoming.ts` — TEMPORARY `[voice kb diagnostic]` logs, remove after pilot)
+- Investigating: after the Vapi number was switched off its static assistant, live calls now reach our dynamic path but Remy still asks follow-up questions instead of answering a KB FAQ (e.g. the €100 call-out fee) that chat answers correctly. Local end-to-end drive of the assistant-request path proved the code fetches and injects the KB, so these logs capture the one thing only a real prod call can show: which org the dialled number resolved to and what actually reached the LLM.
+- Logs added in `buildAssistantRequestResponse`, same deliberately-live-in-prod pattern as the existing `[sales chat diagnostic]` lines: (1) resolved org id/name + dialled number, (2) whether the KB query errored and how many active records returned, (3) the record categories/titles, (4) whether the `## Business Knowledge` block is present and the FULL injected system prompt, (5) a note that the LLM's answer selection isn't server-visible — so if the FAQ line is in the prompt but Remy still asked for details, retrieval is correct and the cause is model/prompt-following; if absent, the record is missing/inactive/mis-categorised for that org.
+- Logging only — no logic, control flow, retrieval, or prompt content changed. `tsc --noEmit` passes. To read: make one test call, then `npx vercel logs <deployment> --json | grep "voice kb diagnostic"`.
+
 ## 2026-07-15 (Security Advisor fixes prepared: business_knowledge RLS + lead_summary invoker — docs only, awaiting owner execution)
 
 ### Security (SQL prepared in `docs/sql/2026-07-15_business_knowledge_rls.sql`, to be run in BOTH Supabase SQL editors)
