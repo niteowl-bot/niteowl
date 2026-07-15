@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Three targeted fixes: editable business name, currency, unknown-service handling)
+
+### Added — Business Information settings page (`src/app/(dashboard)/settings/business/`)
+- The business name was only ever set during onboarding, with no way to edit it afterward — so it kept showing the onboarding value ("Niteowl Test"). It was never hardcoded: dashboard welcome, voice greeting, and every email already read `organisations.business_name` via `org.business_name` / `getOrgOwnerEmail()`. Added a **Business** settings tab + page to edit that single field (mirrors the existing `settings/hours` update pattern; authenticated owner updates `organisations.business_name`). Because all surfaces already read that one field, saving here updates the dashboard welcome, voice greeting, email notifications, booking emails, and call summaries consistently. `settings/layout.tsx` gains the tab; `/settings` now lands on it. No email/greeting/dashboard code changed.
+
+### Changed — Voice prompt only (`src/lib/voice/assistant.ts`)
+- **Currency (Rule 14)**: read prices in the exact currency written in the Knowledge Base and never convert — `€`→"euros" ("€100" → "100 euros", never "100 dollars"), `£`→"pounds", `$`→"dollars"; the symbol is preserved as stored.
+- **Unknown services (new Rule 15 + structured-data `service` description)**: if a caller asks for a service NOT in the Knowledge Base (e.g. geothermal heating), Remy must not confirm it, imply the business offers it, or say an appointment is booked — instead it says it can't confirm that service, offers a callback, takes their details, and records the request in the caller's own words as a general enquiry (e.g. "General enquiry - geothermal heating"), never rewritten into a specific service. Confirmed-service bookings (Rule 7) are unchanged.
+- Prompt strings only — no change to the booking engine, lead-capture/extraction code, KB retrieval, Vapi integration, or Supabase. `tsc --noEmit` and `next build` pass.
+
 ## 2026-07-15 (Voice AI: currency pronunciation rule — prompt only, `src/lib/voice/assistant.ts`)
 
 ### Changed (one new Phone Conversation Rule; nothing else touched)

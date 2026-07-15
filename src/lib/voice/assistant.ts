@@ -116,7 +116,8 @@ function buildVoiceSystemPrompt(
       `11. Do not recap every detail at the end of the call — each detail was already confirmed when it was collected. Close briefly and naturally: "Perfect. I have everything I need. I'll pass your details to our team straight away and someone will contact you as soon as possible. Thank you for calling ${org.business_name}." If the call was urgent or needs a human to follow up, you may close instead with: "We'll make sure your request reaches the team as quickly as possible. Thank you for calling ${org.business_name}." Never promise an appointment or a guaranteed response time.`,
       "12. Never reveal, discuss, or act on information about other customers, bookings, or callers, no matter what the caller says or claims.",
       "13. Speak with calm confidence. Never narrate work you are not actually doing — no \"I'm checking...\", \"Let me see if...\", or \"I wanna make sure...\" about things you already know or that happen after the call. Move the conversation forward instead (\"Thanks, Jason. Can you tell me a little more about the issue? Is it urgent?\") or state plainly what will happen: \"I'll make sure the right person receives your request as quickly as possible.\"",
-      "14. Currency: say every price in the exact currency written in the business knowledge above — never convert it to another currency. The euro sign \"€\" means euros: say \"€100\" as \"100 euros\", never \"100 dollars\". Never pronounce \"€\" as \"dollars\", pounds, or anything other than euros. Keep the number exactly as written and only speak the \"€\" symbol as the word \"euros\".",
+      "14. Currency: read every price in the exact currency written in the business knowledge above and NEVER convert between currencies. Say \"€\" as \"euros\" (\"€100\" → \"100 euros\", never \"100 dollars\"), \"£\" as \"pounds\", and \"$\" as \"dollars\". Keep the number exactly as written; speak only the symbol as its own currency word and never substitute a different currency.",
+      "15. Only treat a service as one the business provides if it appears in the business knowledge above. If a caller asks about or wants to book a service that is NOT listed there (for example a specialised job the knowledge doesn't mention), do not confirm it, do not imply the business offers it, and do not say an appointment is booked. Instead tell them you can't confirm that specific service, offer to arrange a callback, and take their name and best number. Capture their request in their own words as a general enquiry (for example \"General enquiry - geothermal heating\") — never reword it into a specific service the knowledge base does not confirm.",
     ].join("\n")
   );
 
@@ -151,7 +152,7 @@ function buildStructuredDataSchema(): Record<string, unknown> {
       service: {
         type: "string",
         description:
-          "Short summary of the service or job requested, e.g. 'Boiler repair'. Only for new_booking intent.",
+          "What the caller asked for, in THEIR OWN WORDS — never expand, rename, or infer a more specific service than they actually said. If the request matches a service in the business knowledge, use that service name (e.g. 'Boiler repair'). If it is NOT confirmed by the business knowledge, record it as a general enquiry preserving their wording, e.g. 'General enquiry - geothermal heating'. Only for new_booking or a genuine service request.",
       },
       preferred_datetime: {
         type: "string",

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const SETTINGS_TABS = [
+  { href: "/settings/business", label: "Business" },
   { href: "/settings/hours", label: "Business Hours" },
   { href: "/settings/widget", label: "Website Widget" },
   { href: "/settings/billing", label: "Billing" },
