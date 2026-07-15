@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 9: edge-case testing — results, no code changes)
+
+### Tested against the real dev environment (dev server + dev Supabase + `Test Plumbing Co` org), no code changed
+- **Invalid phone numbers**: sent `"12x-abc"` as a contact number through the widget. Confirmed it is stored completely unvalidated — `leads.phone` accepted it verbatim, no format check anywhere in the app. Not fixed here (a validation/rejection policy is a product decision, not implied by "testing"), but flagged as a real, reproducible gap worth a deliberate follow-up.
+- **Multiple questions/requests in one message**: sent a single message combining a pricing question, a "do you offer X" question, and a full booking request with name/email/time. Remy answered all three correctly in one coherent reply and completed the booking properly — no extraction or capture bug found.
+- **Customer changing their mind**: sent "book boiler repair tomorrow at 2pm" then, in the same conversation, "actually make it 4pm instead" (deliberately with no contact info, so the lead could never reach `booked` and risk a real email — see below). Confirmed the SAME lead was updated (not duplicated) and `appointment_datetime` correctly moved from 2pm to 4pm. Existing reschedule-merge logic handled this correctly with no changes needed.
+- **Long pauses, background noise, caller interruptions**: these are live-phone-call scenarios this environment cannot reproduce (no way to place a call or simulate audio/transcription conditions here). Silence/interruption *wording* was already addressed at the prompt level in Priority 7 (voice Rule 16); the actual real-time turn-taking behaviour depends on Vapi's own defaults, which the app does not currently override (`buildVapiAssistantResponse` in `src/lib/voice/vapi.ts` sets no `silenceTimeoutSeconds` or interruption-sensitivity parameters) — a real test call is the only way to verify this properly, and is recommended before considering this scenario closed.
+- **Incident during testing, disclosed immediately**: one test message ("book someone for tomorrow at 3pm... my email is edgecaseb@example.com") completed a full, real booking against the dev org — which set the lead to `booked` and fired the real booking-confirmation email flow through this project's production Resend account, almost certainly reaching the dev org owner's real inbox. The test lead and conversation were deleted from the database immediately (verified 0 remaining), but an already-sent email cannot be recalled. All further tests were redesigned to never supply both contact info and a confirmable time together, specifically to make a real send impossible for the remainder of this session.
+- No files changed for this priority — testing and reporting only.
+
 ## 2026-07-15 (Refinement Priority 8: Knowledge Base edge cases — similar names, conflicting/multiple answers)
 
 ### Changed (`src/lib/leadCapture.ts`, `src/lib/voice/assistant.ts`, `src/app/api/chat/route.ts`, `src/app/api/widget/chat/route.ts`)
