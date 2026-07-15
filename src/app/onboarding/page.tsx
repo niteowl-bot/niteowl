@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import OnboardingHoursStep from "./OnboardingHoursStep";
@@ -13,6 +13,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
   const [form, setForm] = useState({
     businessName: "",
@@ -23,6 +24,50 @@ export default function OnboardingPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // A page refresh (or back-navigation) mid-onboarding used to re-submit
+  // step 1 and silently create a SECOND organisations row for the same
+  // owner — every other query in the app resolves "the" org by
+  // most-recently-created, so the duplicate went invisible rather than
+  // erroring, quietly polluting the table. Checking for an existing org
+  // on mount lets the owner resume onboarding on the one they already
+  // have instead of ever re-showing the step-1 form.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkExistingOrg() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        if (!cancelled) setCheckingExisting(false);
+        return;
+      }
+
+      const { data: existingOrg } = await supabase
+        .from("organisations")
+        .select("id")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (existingOrg) {
+        setOrgId(existingOrg.id);
+        setStep(2);
+      }
+      setCheckingExisting(false);
+    }
+
+    checkExistingOrg();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -44,6 +89,23 @@ export default function OnboardingPage() {
       } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Not authenticated.");
 
+      // Defensive re-check, in addition to the mount-time check above —
+      // never insert a second organisations row for this owner.
+      const { data: existingOrg } = await supabase
+        .from("organisations")
+        .select("id")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingOrg) {
+        setOrgId(existingOrg.id);
+        setSubmitting(false);
+        setStep(2);
+        return;
+      }
+
       const { data, error: insertError } = await supabase
         .from("organisations")
         .insert({
@@ -64,7 +126,9 @@ export default function OnboardingPage() {
       setStep(2);
     } catch (err: unknown) {
       setError(
-        err instanceof Error ? err.message : "Something went wrong. Please try again."
+        err instanceof Error
+          ? err.message
+          : "We couldn't set up your business profile. Please try again — if this keeps happening, refresh the page and continue."
       );
       setSubmitting(false);
     }
@@ -78,6 +142,14 @@ export default function OnboardingPage() {
 
   const labelBase =
     "mb-1.5 block text-xs font-medium tracking-wide text-white/50 uppercase";
+
+  if (checkingExisting) {
+    return (
+      <div className="min-h-screen bg-[#0d0f14] flex items-center justify-center px-4 py-12">
+        <Spinner />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0d0f14] flex items-center justify-center px-4 py-12">

@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 4: onboarding no longer creates duplicate organisations)
+
+### Changed (`src/app/onboarding/page.tsx` only)
+- Step 1 of onboarding inserted a new `organisations` row unconditionally, with no check for one already existing. Refreshing the page (or navigating back) after submitting step 1, then continuing again, silently created a second row for the same owner — every other query in the app resolves "the" org by most-recently-created, so the duplicate went invisible rather than erroring, quietly polluting the table.
+- **Validated on mount**: the page now checks for an existing organisation for the signed-in owner before ever showing the step-1 form. If one exists, onboarding resumes at step 2 using that org — the create-new-org form is never re-shown, so the duplicate can't happen in the first place. A brief loading state covers this check so the form doesn't flash first.
+- **Defensive re-check on submit**: `handleSubmitStep1` re-checks for an existing org immediately before inserting (belt-and-suspenders against the same race), and reuses it instead of inserting if one is found.
+- **Clearer error message**: the generic "Something went wrong. Please try again." fallback is now a specific, actionable message for genuine failures.
+- No change to steps 2–4, the database schema, or any other file. `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Refinement Priority 3: password reset flow for business owners)
 
 ### Added (`src/app/(auth)/forgot-password/`, `src/app/(auth)/reset-password/`, `src/app/auth/confirm-reset/route.ts`) + Changed (`src/app/(auth)/login/page.tsx`, one link)
