@@ -17,6 +17,52 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// ── Shared branded layout ─────────────────────────────────────────
+// Every email below renders its own <p> markup through this wrapper, so
+// all customer- and owner-facing emails share one consistent look
+// (wordmark, card, footer) instead of five slightly different bare
+// templates. Light theme and inline styles are deliberate — email
+// clients (Outlook especially) render inline styles far more reliably
+// than embedded <style> blocks or dark-background HTML, regardless of
+// the product's own dark dashboard theme.
+function renderEmailLayout(bodyHtml: string): string {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    <div style="max-width:520px;margin:0 auto;padding:32px 16px;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <span style="display:inline-block;width:26px;height:26px;border-radius:8px;background:#2563eb;color:#ffffff;line-height:26px;font-weight:700;font-size:13px;vertical-align:middle;">N</span>
+        <span style="font-size:15px;font-weight:600;color:#111827;margin-left:8px;vertical-align:middle;">Niteowl <span style="color:#9ca3af;">AI</span></span>
+      </div>
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;padding:28px;color:#1f2937;font-size:14px;line-height:1.65;">
+        ${bodyHtml}
+      </div>
+      <p style="text-align:center;color:#9ca3af;font-size:12px;line-height:1.6;margin-top:20px;">
+        Sent by Remy, your AI receptionist.<br/>
+        <a href="https://niteowlhq.com/privacy" style="color:#9ca3af;text-decoration:underline;">Privacy Policy</a>
+      </p>
+    </div>
+  </body>
+</html>`;
+}
+
+// Small reusable pieces so every email's "details" block reads the
+// same way instead of five subtly different <p><strong> layouts.
+function emailButton(url: string, label: string): string {
+  return `<p style="margin:20px 0 4px;"><a href="${url}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:10px;">${label}</a></p>`;
+}
+
+function detailsBlock(rows: Array<[string, string] | null>): string {
+  const cells = rows
+    .filter((r): r is [string, string] => r !== null)
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:3px 12px 3px 0;color:#6b7280;white-space:nowrap;">${label}</td><td style="padding:3px 0;color:#111827;font-weight:500;">${value}</td></tr>`
+    )
+    .join("");
+  return `<table style="border-collapse:collapse;font-size:14px;margin:14px 0;">${cells}</table>`;
+}
+
 // The Resend SDK resolves with { data, error } on API-level failures
 // (invalid key, unverified sender, etc.) rather than throwing — a bare
 // `await resend.emails.send(...)` inside try/catch silently treats
@@ -89,20 +135,20 @@ export async function sendBookingConfirmationEmails(
         from: FROM_EMAIL,
         to: customerEmail,
         subject: `Booking confirmed with ${businessName}`,
-        html: `
-          <p>Hi ${displayName},</p>
-          <p>Your booking with <strong>${safeBusinessName}</strong> is confirmed.</p>
-          <p>
-            <strong>Date & time:</strong> ${formattedDate}<br/>
-            ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
-            <strong>Booking reference:</strong> ${bookingReference}
-          </p>
+        html: renderEmailLayout(`
+          <p style="margin:0 0 14px;">Hi ${displayName},</p>
+          <p style="margin:0 0 4px;">Good news — your booking with <strong>${safeBusinessName}</strong> is confirmed.</p>
+          ${detailsBlock([
+            ["Date & time", formattedDate],
+            safeService ? ["Service", safeService] : null,
+            ["Reference", bookingReference],
+          ])}
           ${
             manageUrl
-              ? `<p>Need to make changes? <a href="${manageUrl}">Cancel or reschedule your booking</a>.</p>`
-              : `<p>If you need to make any changes, please contact ${safeBusinessName} directly.</p>`
+              ? emailButton(manageUrl, "Cancel or reschedule")
+              : `<p style="margin:14px 0 0;">Need to make changes? Contact ${safeBusinessName} directly.</p>`
           }
-        `,
+        `),
       });
     } catch (err) {
       console.error("[email] Failed to send customer confirmation:", err);
@@ -120,16 +166,16 @@ export async function sendBookingConfirmationEmails(
         from: FROM_EMAIL,
         to: businessOwnerEmail,
         subject: `New booking: ${displayName} — ${formattedDate}`,
-        html: `
-          <p>You have a new booking.</p>
-          <p>
-            <strong>Customer:</strong> ${displayName}<br/>
-            ${safeCustomerEmail ? `<strong>Email:</strong> ${safeCustomerEmail}<br/>` : ""}
-            <strong>Date & time:</strong> ${formattedDate}<br/>
-            ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
-            <strong>Booking reference:</strong> ${bookingReference}
-          </p>
-        `,
+        html: renderEmailLayout(`
+          <p style="margin:0 0 4px;">You've got a new booking via Remy.</p>
+          ${detailsBlock([
+            ["Customer", displayName],
+            safeCustomerEmail ? ["Email", safeCustomerEmail] : null,
+            ["Date & time", formattedDate],
+            safeService ? ["Service", safeService] : null,
+            ["Reference", bookingReference],
+          ])}
+        `),
       });
     } catch (err) {
       console.error("[email] Failed to send business notification:", err);
@@ -185,18 +231,18 @@ export async function sendNeedsReviewNotification(
     await sendChecked({
       from: FROM_EMAIL,
       to: businessOwnerEmail,
-      subject: "Customer enquiry requires review",
-      html: `
-        <p>Customer enquiry requires review.</p>
-        <p>
-          <strong>From:</strong> ${displayName}<br/>
-          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
-          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
-        </p>
-        <p><strong>Question:</strong> ${safeQuestion}</p>
-        ${safeContext ? `<p><strong>Context:</strong> ${safeContext}</p>` : ""}
-        <p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>
-      `,
+      subject: `A customer needs your input${customerName ? ` — ${customerName.trim()}` : ""}`,
+      html: renderEmailLayout(`
+        <p style="margin:0 0 4px;">Remy couldn't confidently answer a customer's question, so it's been flagged for you to follow up personally.</p>
+        ${detailsBlock([
+          ["From", displayName],
+          safeEmail ? ["Email", safeEmail] : null,
+          safePhone ? ["Phone", safePhone] : null,
+        ])}
+        <p style="margin:14px 0 0;"><strong>Their question:</strong><br/>${safeQuestion}</p>
+        ${safeContext ? `<p style="margin:10px 0 0;"><strong>Context:</strong><br/>${safeContext}</p>` : ""}
+        ${emailButton(dashboardUrl, "View in your dashboard")}
+      `),
     });
     return true;
   } catch (err) {
@@ -257,8 +303,8 @@ export async function sendBookingSelfServiceChangeNotification(
 
   const bodyDetail =
     action === "cancelled"
-      ? `<p><strong>${displayName}</strong> has cancelled their booking for <strong>${formattedPrevious}</strong>.</p>`
-      : `<p><strong>${displayName}</strong> has rescheduled their booking from <strong>${formattedPrevious}</strong> to <strong>${formatAppointmentDate(
+      ? `<p style="margin:0 0 4px;"><strong>${displayName}</strong> has cancelled their booking for <strong>${formattedPrevious}</strong>.</p>`
+      : `<p style="margin:0 0 4px;"><strong>${displayName}</strong> has rescheduled their booking from <strong>${formattedPrevious}</strong> to <strong>${formatAppointmentDate(
           newDatetime ?? previousDatetime
         )}</strong>.</p>`;
 
@@ -267,15 +313,15 @@ export async function sendBookingSelfServiceChangeNotification(
       from: FROM_EMAIL,
       to: businessOwnerEmail,
       subject,
-      html: `
+      html: renderEmailLayout(`
         ${bodyDetail}
-        <p>
-          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
-          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
-          ${safeService ? `<strong>Service:</strong> ${safeService}<br/>` : ""}
-          <strong>Booking reference:</strong> ${bookingReference}
-        </p>
-      `,
+        ${detailsBlock([
+          safeEmail ? ["Email", safeEmail] : null,
+          safePhone ? ["Phone", safePhone] : null,
+          safeService ? ["Service", safeService] : null,
+          ["Reference", bookingReference],
+        ])}
+      `),
     });
     return true;
   } catch (err) {
@@ -329,17 +375,17 @@ export async function sendSalesLeadNotification(
       from: FROM_EMAIL,
       to: notifyEmail,
       subject: `New sales lead: ${name?.trim() || "A prospect"}${company ? ` — ${company}` : ""}`,
-      html: `
-        <p>A visitor completed the sales chat on the marketing site.</p>
-        <p>
-          <strong>Name:</strong> ${displayName}<br/>
-          ${safeEmail ? `<strong>Email:</strong> ${safeEmail}<br/>` : ""}
-          ${safePhone ? `<strong>Phone:</strong> ${safePhone}<br/>` : ""}
-          ${safeCompany ? `<strong>Company:</strong> ${safeCompany}<br/>` : ""}
-          ${safeIndustry ? `<strong>Industry:</strong> ${safeIndustry}<br/>` : ""}
-          ${safeDemoTime ? `<strong>Preferred demo time:</strong> ${safeDemoTime}<br/>` : ""}
-        </p>
-      `,
+      html: renderEmailLayout(`
+        <p style="margin:0 0 4px;">A visitor completed the sales chat on the marketing site.</p>
+        ${detailsBlock([
+          ["Name", displayName],
+          safeEmail ? ["Email", safeEmail] : null,
+          safePhone ? ["Phone", safePhone] : null,
+          safeCompany ? ["Company", safeCompany] : null,
+          safeIndustry ? ["Industry", safeIndustry] : null,
+          safeDemoTime ? ["Preferred demo time", safeDemoTime] : null,
+        ])}
+      `),
     });
     console.log("[sales notification diagnostic] sendChecked succeeded — resend id:", data?.id ?? "(no id)");
     return true;
@@ -381,6 +427,7 @@ export async function sendCallSummaryEmail(
 ): Promise<boolean> {
   const {
     businessOwnerEmail,
+    businessName,
     callerPhone,
     callerName,
     startedAt,
@@ -424,26 +471,26 @@ export async function sendCallSummaryEmail(
       from: FROM_EMAIL,
       to: businessOwnerEmail,
       subject: `Remy answered a call from ${callerName?.trim() || callerPhone?.trim() || "an unknown number"}`,
-      html: `
-        <p>Remy answered a phone call for your business.</p>
-        <p>
-          <strong>Caller:</strong> ${displayCaller}<br/>
-          ${safePhone ? `<strong>Number:</strong> ${safePhone}<br/>` : ""}
-          ${formattedTime ? `<strong>Time:</strong> ${formattedTime}<br/>` : ""}
-          ${formattedDuration ? `<strong>Duration:</strong> ${formattedDuration}<br/>` : ""}
-        </p>
-        <p><strong>Summary:</strong> ${safeSummary}</p>
+      html: renderEmailLayout(`
+        <p style="margin:0 0 4px;">Remy answered a phone call for ${escapeHtml(businessName)}.</p>
+        ${detailsBlock([
+          ["Caller", displayCaller],
+          safePhone ? ["Number", safePhone] : null,
+          formattedTime ? ["Time", formattedTime] : null,
+          formattedDuration ? ["Duration", formattedDuration] : null,
+        ])}
+        <p style="margin:14px 0 0;"><strong>Summary:</strong><br/>${safeSummary}</p>
         ${
           leadCreated
-            ? `<p><a href="${dashboardUrl}">View this lead in your dashboard</a></p>`
-            : ""
+            ? emailButton(dashboardUrl, "View this lead in your dashboard")
+            : `<p style="margin:14px 0 0;color:#6b7280;">No lead was created from this call.</p>`
         }
         ${
           safeTranscript
-            ? `<p><strong>Transcript:</strong><br/>${safeTranscript}</p>`
+            ? `<p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #e5e7eb;"><strong>Transcript:</strong><br/>${safeTranscript}</p>`
             : ""
         }
-      `,
+      `),
     });
     return true;
   } catch (err) {

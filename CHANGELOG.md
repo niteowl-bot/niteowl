@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 6: consistent, polished formatting for every customer-facing email)
+
+### Changed (`src/lib/email.ts` only)
+- Every email (booking confirmation ×2, needs-review notification, self-service cancel/reschedule notification, sales lead notification, call summary) rendered its own bare `<p><strong>` markup with no shared look. Added one `renderEmailLayout` wrapper (wordmark header, card body, footer with a privacy link) plus two small helpers (`detailsBlock`, `emailButton`) so every email now shares the same branded structure and a consistent details layout instead of five slightly different ad-hoc ones.
+- Wording tightened for warmth and clarity without changing what any email says happened: booking confirmation opens with "Good news — your booking is confirmed"; the needs-review subject and body now explicitly say "Remy couldn't confidently answer" instead of the colder, unexplained "Customer enquiry requires review"; the call summary distinguishes "no lead was created from this call" instead of silently omitting the dashboard link with no explanation.
+- **Fixed a real bug found during this pass**: `sendCallSummaryEmail` accepted a `businessName` parameter that every caller already provides, but the function never actually used it. It now appears in the email ("Remy answered a phone call for {business}"), so multi-business owners (a rare case today, more relevant later) can immediately tell which business the call belongs to.
+- **Everything else is unchanged**: recipients, triggers, subject-line meaning, `escapeHtml` sanitisation, `sendChecked` error handling, and every function's signature and return value are exactly as before — this is markup and copy only.
+- The project's configured Resend key is the production account, so this was **not** verified by sending a real email (that would reach real inboxes) — verified instead by `tsc --noEmit`, `next build`, and careful structural review of the generated markup. Worth a real send-and-look before considering this fully closed.
+
 ## 2026-07-15 (Refinement Priority 5: branded 404 and error pages)
 
 ### Added (`src/app/not-found.tsx`, `src/app/error.tsx`, `src/app/global-error.tsx`)
