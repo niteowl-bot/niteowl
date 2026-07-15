@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 5: branded 404 and error pages)
+
+### Added (`src/app/not-found.tsx`, `src/app/error.tsx`, `src/app/global-error.tsx`)
+- No custom 404 or error boundary existed anywhere in the app — any mistyped URL or uncaught render/server error fell through to Next.js's bare default screens.
+- `not-found.tsx`: branded 404 ("This page took a wrong turn"), links to the dashboard and homepage. Verified live: a nonexistent route now returns HTTP 404 with this page's content instead of Next's default.
+- `error.tsx`: branded error boundary with a "Try again" button (calls Next's `reset()`) and a link to the dashboard. Logs the error via `console.error`, which Sentry's existing `captureConsoleIntegration` (already configured in `src/instrumentation.ts`) turns into an event with no other wiring needed — this is what actually connects the friendly page to the monitoring that was already in place but had nothing surfacing errors to it from the UI layer.
+- `global-error.tsx`: the last-resort handler for an error in the root layout itself — per Next's requirement it renders its own minimal `<html>/<body>` (inline styles only, no shared components) so it can't itself fail if something more foundational broke.
+- No existing page, layout, or logic touched — purely additive. `tsc --noEmit` and `next build` both pass; the 404 page was confirmed rendering via a live request to a nonexistent route.
+
 ## 2026-07-15 (Refinement Priority 4: onboarding no longer creates duplicate organisations)
 
 ### Changed (`src/app/onboarding/page.tsx` only)
