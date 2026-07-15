@@ -374,6 +374,7 @@ function MonthView({
 
   return (
     <div className="flex-1 overflow-auto">
+      <div className="min-w-[640px]">
       <div className="grid grid-cols-7 border-b border-slate-800">
         {DAYS.map((d) => (
           <div key={d} className="py-2 text-center text-xs font-medium text-slate-400">
@@ -417,6 +418,7 @@ function MonthView({
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -437,6 +439,7 @@ function WeekView({
 
   return (
     <div className="flex-1 overflow-auto">
+      <div className="min-w-[640px]">
       <div className="grid grid-cols-7 border-b border-slate-800">
         {days.map((d, i) => {
           const isToday = isSameDay(d, today);
@@ -469,6 +472,7 @@ function WeekView({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

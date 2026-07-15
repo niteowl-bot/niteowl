@@ -2,6 +2,18 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 2: dashboard is now responsive on mobile)
+
+### Changed (`src/components/dashboard/DashboardNav.tsx`, `src/app/(dashboard)/layout.tsx`, `src/app/(dashboard)/settings/layout.tsx`, `src/app/(dashboard)/calendar/CalendarView.tsx`)
+- **The core fix**: `DashboardNav` was a fixed 224px sidebar with zero responsive behaviour, wrapping every dashboard page (Dashboard, Chat Preview, Knowledge Base, Leads, Calendar, Settings). It's now a slide-in drawer below the `md` breakpoint — a mobile top bar (logo + hamburger) toggles a backdrop + off-canvas panel that closes automatically when a link is tapped — and an unchanged static sidebar at `md` and above. This mirrors the exact interaction pattern already proven in the Chat Preview's own sidebar (`ChatShell.tsx`), reused for consistency rather than invented fresh. `(dashboard)/layout.tsx` gained one class change (`flex-col md:flex-row` instead of a fixed row) so content stacks under the mobile top bar instead of being squeezed beside it.
+- **Leads table**: already responsive from an earlier session (desktop table below `lg`, card list above it) — confirmed unaffected, no change needed.
+- **Dashboard home cards**: already used `sm:grid-cols-2` (single column on mobile) — confirmed unaffected, no change needed.
+- **Chat Preview**: already had its own working mobile drawer — confirmed unaffected, no change needed.
+- **Settings tabs**: the 4-tab bar (`Business`, `Business Hours`, `Website Widget`, `Billing`) now scrolls horizontally instead of wrapping or squeezing at narrow widths (`overflow-x-auto` + `whitespace-nowrap` on the tab links) — same "wide content scrolls in its own container" pattern already used elsewhere, not a new mechanism. Settings/Business, Settings/Hours, and Settings/Widget pages were reviewed and are already single-column and mobile-safe; no changes needed there.
+- **Calendar**: the month and week grids (7 columns) are now wrapped in a horizontally-scrollable container with a sensible minimum width, so a narrow phone screen scrolls the grid instead of crushing each day's column illegibly. The grid itself, its columns, and Day view are otherwise unchanged — no redesign into an agenda/list view.
+- No changes to business logic, data fetching, the database, or any file outside the four listed above. `tsc --noEmit` and `next build` both pass.
+- **Verification note**: dashboard pages require an authenticated session to view, which isn't available from this environment, so the drawer's interactive behaviour was verified by code review against the already-working `ChatShell` pattern it mirrors, plus a successful production build — not by a live click-through. Worth a manual phone check before considering this fully closed.
+
 ## 2026-07-15 (Refinement Priority 1: chat and widget now use the SAME unknown-service validation as Voice AI)
 
 ### Changed (`src/lib/leadCapture.ts`, `src/lib/voice/calls.ts`, `src/app/api/chat/route.ts`, `src/app/api/widget/chat/route.ts`)
