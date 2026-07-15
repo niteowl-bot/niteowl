@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 3: password reset flow for business owners)
+
+### Added (`src/app/(auth)/forgot-password/`, `src/app/(auth)/reset-password/`, `src/app/auth/confirm-reset/route.ts`) + Changed (`src/app/(auth)/login/page.tsx`, one link)
+- There was no self-service password recovery anywhere in the app — an owner who forgot their password had no path back into their own dashboard. Added the standard Supabase Auth recovery flow: **Forgot password?** link on login → `/forgot-password` (email form, calls `resetPasswordForEmail`) → emailed link → new `/auth/confirm-reset` route handler (mirrors the existing `/auth/callback` code-exchange exactly, but redirects to `/reset-password` instead of straight to `/dashboard`, since recovery must show a "choose a new password" form, not silently sign the owner in with their old, forgotten password still unchanged) → `/reset-password` (verifies a real recovery session exists, then calls `updateUser({ password })`) → redirects to the dashboard.
+- Success/error handling throughout: the request-reset form always shows the same "check your email" message whether or not the address has an account (never reveals which emails exist); an expired or already-used reset link shows a clear message with a way to request a new one; the new-password form validates length and confirmation match before submitting and surfaces Supabase's own error message on failure.
+- `/forgot-password` needed a `Suspense` boundary around its `useSearchParams()` usage to satisfy Next's static-prerender requirement — split into a thin server `page.tsx` + client `ForgotPasswordForm.tsx`, the same pattern already used by `booking/manage/page.tsx`.
+- **Existing authentication is unchanged** — login (email/password and Google OAuth), signup, and `/auth/callback` were not modified beyond the one added link on the login page.
+- **Action needed from the owner**: this project has a documented history of Supabase silently falling back to the Site URL when a `redirectTo` isn't in its allow-list (the 2026-07-04 production-deployment incident). The new `/auth/confirm-reset` redirect target must be added to Supabase Auth's allow-listed Redirect URLs (both projects) before a real reset email will land on the right page — verified by code review, build, and a local render check of all three new pages; not yet tested against a real Supabase-sent email, which requires that allow-list step first.
+- `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Refinement Priority 2: dashboard is now responsive on mobile)
 
 ### Changed (`src/components/dashboard/DashboardNav.tsx`, `src/app/(dashboard)/layout.tsx`, `src/app/(dashboard)/settings/layout.tsx`, `src/app/(dashboard)/calendar/CalendarView.tsx`)
