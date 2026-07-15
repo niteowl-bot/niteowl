@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 7: conversation prompt review — silence/interruptions, one repetitive-wording fix)
+
+### Reviewed (voice, chat, and widget prompts) + Changed (`src/lib/voice/assistant.ts` only)
+- **Silence and interruptions** (explicitly requested, only meaningful on a live phone call): added Rule 16 — if the caller goes quiet, check in naturally ("Sorry, are you still there?") instead of repeating the last question verbatim or sitting in silence; if interrupted mid-sentence, stop talking immediately and respond to what was actually said instead of finishing or repeating the original sentence.
+- **Repetitive wording fix**: Rule 11's generic closing and Rule 15's unconfirmed-service closing could both fire for the same call (an unconfirmed-service request that's also urgent), risking two closing statements back to back. Rule 11 now explicitly defers to Rule 15's closing when it already applies.
+- **Greeting — deliberately left untouched**: the current voice greeting (leading ellipsis for TTS clip-resistance, "your AI receptionist" wording) has already been iteratively refined across several prior commits based on real production test calls and explicit owner requests. Changing it again without new call evidence risked undoing already-verified fixes, so it was reviewed and left as-is.
+- **Chat/widget — reviewed, no changes**: no repetitive-wording or unnatural phrasing issues found beyond what Priority 1 already resolved (the Rule 9 rewrite). Chat has no fixed "closing" script by design, since a chat session (unlike a phone call) has no single natural end point — forcing one would be a behaviour change, not a wording polish, so none was added.
+- No change to business logic, booking behaviour, knowledge retrieval, or any other file. `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Refinement Priority 6: consistent, polished formatting for every customer-facing email)
 
 ### Changed (`src/lib/email.ts` only)
