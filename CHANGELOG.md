@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Security Advisor fixes prepared: business_knowledge RLS + lead_summary invoker — docs only, awaiting owner execution)
+
+### Security (SQL prepared in `docs/sql/2026-07-15_business_knowledge_rls.sql`, to be run in BOTH Supabase SQL editors)
+- **Finding (confirmed empirically on both projects)**: `business_knowledge` was created without RLS — the public anon key could read *and write* every org's knowledge records. Verified on dev by an unauthenticated INSERT succeeding (probe row deleted immediately); prod showed the same signature via read-only count probes (all rows anon-visible, every other table 0). All other app tables already had RLS enabled — this was the only gap. Prod advisor also reports a dormant policy on the table ("Policy Exists, RLS Disabled").
+- **Fix**: drop all dormant policies on `business_knowledge` (provably behaviour-neutral — none has ever been active with RLS off, and a leftover permissive policy could otherwise keep the table world-readable once RLS turns on), create one owner-scoped `FOR ALL TO authenticated` policy (same `org_id in (select … where owner_id = auth.uid())` pattern as the existing `voice_calls` policy), then enable RLS.
+- **Why the app is unaffected**: every anon-key access to `business_knowledge` (knowledge page, KnowledgeClient CRUD, onboarding knowledge step, setup checklist, dashboard-preview chat API) was verified in code to be an authenticated owner operating on their own org; widget chat, voice, and booking paths use the RLS-bypassing service-role client.
+- **`lead_summary` (advisor: "Security Definer View")**: as a default view it ran with owner rights, bypassing `leads` RLS and exposing per-org lead counts to the anon key (confirmed on both projects). Fixed with `security_invoker = true`; the view is referenced nowhere in the codebase (repo-wide search), so this cannot affect the app. Kept rather than dropped — dropping is a bigger change than the fix needs.
+- **Explicitly NOT touched**: all other tables/policies, schema, app code, booking logic. Script is idempotent and ends with a single verification query (expected: exactly two rows, no "STILL RLS-DISABLED" lines) — owner to paste results back after running on prod (`sklcqvvnuigpewzarbiv`) and dev (`kioljdihgbcboxlnwghv`).
+
 ## 2026-07-12 (Voice AI: four more owner-requested conversation refinements from the latest test call — prompt rules only)
 
 ### Changed (`src/lib/voice/assistant.ts` Phone Conversation Rules only — rules 1, 2, 11)
