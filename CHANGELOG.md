@@ -2,6 +2,12 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Voice AI: currency pronunciation rule — prompt only, `src/lib/voice/assistant.ts`)
+
+### Changed (one new Phone Conversation Rule; nothing else touched)
+- Live calls were reading `€100` from the Knowledge Base as "100 dollars". Added Rule 14 to the voice system prompt instructing the assistant to say prices in the exact currency written and never convert — the `€` symbol is spoken as "euros" ("€100" → "100 euros"), never "dollars"/pounds/etc. Number kept exactly as written; only the symbol is spoken as the word.
+- Prompt string only — no logic, retrieval, booking, lead-capture, or other prompt rules changed. `tsc --noEmit` and `next build` pass.
+
 ## 2026-07-15 (Leads page: compact rows + details drawer — layout only, `src/app/(dashboard)/leads/LeadsTable.tsx`)
 
 ### Changed (presentation only — no data, schema, lead-creation, notification, or voice change)
