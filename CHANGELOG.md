@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Leads page: compact rows + details drawer — layout only, `src/app/(dashboard)/leads/LeadsTable.tsx`)
+
+### Changed (presentation only — no data, schema, lead-creation, notification, or voice change)
+- **Row height fixed**: long voice-call summaries no longer stretch rows. The old standalone "Message" column (an inline, expand-in-place cell) is removed from the desktop table; the enquiry/summary now shows as a **two-line, ellipsis-clamped** preview inside the **Service** column (`service_needed`, falling back to the summary). Same two-line clamp applied on the mobile cards.
+- **Details view**: the whole row (desktop) and whole card (mobile) are now clickable, and the last column is labelled **Actions** with a clear **View details** button, all opening the existing right-side drawer. The drawer already shows the full text; its section was relabelled "Enquiry summary" and continues to render the complete `lead.message`. The drawer keeps its existing edit fields (status/service/appointment/notes) — no functionality removed.
+- Columns kept and readable: Created, Name, Phone, Email, Service, Appointment time, Status, Source, Actions. Desktop table + mobile cards both preserved (responsive `lg` breakpoint unchanged). `tsc --noEmit` and `next build` pass.
+- NOTE: the full call **transcript** lives on `voice_calls.transcript`, which this page does not load; surfacing it would need a data-fetch change (out of scope per the request), so the drawer shows the complete stored lead summary (`lead.message`).
+
 ## 2026-07-15 (Voice AI: KB-not-used root-caused to a stray static Vapi assistant — RESOLVED; temp diagnostics removed)
 
 ### Fixed (configuration — Vapi dashboard, no code change) + Reverted (`src/lib/voice/incoming.ts`)

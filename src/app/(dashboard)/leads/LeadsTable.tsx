@@ -84,27 +84,16 @@ function displayAppointment(lead: Lead) {
     : valueOrDash(lead.preferred_datetime);
 }
 
-// ── MessageCell ──────────────────────────────────────────────────
+// ── SummaryPreview ───────────────────────────────────────────────
+// Compact, height-safe preview of the service / enquiry summary. Clamps
+// to at most two lines with an ellipsis so a long voice-call summary can
+// never stretch the row; the full text is shown in the details drawer.
 
-function MessageCell({ message }: { message: string | null | undefined }) {
-  const [expanded, setExpanded] = useState(false);
-  if (!message || !message.trim()) return <span className="text-slate-600">—</span>;
-  const isLong = message.length > 100;
-  const preview = isLong ? message.slice(0, 100).trim() + "…" : message;
+function SummaryPreview({ text }: { text: string | null | undefined }) {
+  if (!text || !text.trim())
+    return <span className="text-slate-600">—</span>;
   return (
-    <div>
-      <p className={expanded ? "whitespace-pre-wrap break-words" : "line-clamp-3"}>
-        {expanded ? message : preview}
-      </p>
-      {isLong && (
-        <button
-          onClick={() => setExpanded((e) => !e)}
-          className="mt-1 text-xs font-medium text-blue-400 hover:text-blue-300 transition"
-        >
-          {expanded ? "Show less" : "View full message"}
-        </button>
-      )}
-    </div>
+    <p className="line-clamp-2 break-words leading-snug text-slate-300">{text}</p>
   );
 }
 
@@ -233,11 +222,11 @@ function EditPanel({
             </div>
           </section>
 
-          {/* Message */}
+          {/* Full enquiry / call summary */}
           {lead.message && (
             <section>
               <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                Customer message
+                Enquiry summary
               </p>
               <div className="rounded-xl border border-slate-800 bg-slate-800/50 p-4 space-y-2">
   {(lead.message ?? "").split("\n").filter(Boolean).map((line, i) => (
@@ -454,8 +443,7 @@ export default function LeadsTable({
                       <th className="px-5 py-4">Appointment time</th>
                       <th className="px-5 py-4">Status</th>
                       <th className="px-5 py-4">Source</th>
-                      <th className="px-5 py-4">Message</th>
-                      <th className="px-5 py-4"></th>
+                      <th className="px-5 py-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
@@ -464,30 +452,36 @@ export default function LeadsTable({
                         STATUS_STYLES[lead.status ?? ""] ??
                         "bg-slate-500/15 text-slate-400 border-slate-500/30";
                       return (
-                        <tr key={lead.id} className="hover:bg-slate-800/40">
+                        <tr
+                          key={lead.id}
+                          onClick={() => setEditingLead(lead)}
+                          className="cursor-pointer align-middle hover:bg-slate-800/40"
+                        >
                           <td className="whitespace-nowrap px-5 py-4 text-slate-300">
                             {formatDate(lead.created_at)}
                           </td>
                           <td className="px-5 py-4">{valueOrDash(lead.name)}</td>
-                          <td className="px-5 py-4">{valueOrDash(lead.phone)}</td>
+                          <td className="whitespace-nowrap px-5 py-4">{valueOrDash(lead.phone)}</td>
                           <td className="px-5 py-4">{valueOrDash(lead.email)}</td>
-                          <td className="px-5 py-4">{valueOrDash(lead.service_needed)}</td>
-                          <td className="px-5 py-4">{displayAppointment(lead)}</td>
+                          <td className="max-w-xs px-5 py-4">
+                            <SummaryPreview text={lead.service_needed || lead.message} />
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-4">{displayAppointment(lead)}</td>
                           <td className="px-5 py-4">
                             <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusStyle}`}>
                               {valueOrDash(lead.status)}
                             </span>
                           </td>
                           <td className="px-5 py-4 capitalize">{valueOrDash(lead.source)}</td>
-                          <td className="max-w-xs px-5 py-4 text-slate-300 align-top">
-                            <MessageCell message={lead.message} />
-                          </td>
-                          <td className="px-5 py-4">
+                          <td className="px-5 py-4 text-right">
                             <button
-                              onClick={() => setEditingLead(lead)}
-                              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingLead(lead);
+                              }}
+                              className="whitespace-nowrap rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-slate-700 hover:text-white"
                             >
-                              Edit
+                              View details
                             </button>
                           </td>
                         </tr>
@@ -506,7 +500,8 @@ export default function LeadsTable({
                   return (
                     <article
                       key={lead.id}
-                      className="rounded-xl border border-slate-800 bg-slate-950/60 p-4"
+                      onClick={() => setEditingLead(lead)}
+                      className="cursor-pointer rounded-xl border border-slate-800 bg-slate-950/60 p-4"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
@@ -523,11 +518,11 @@ export default function LeadsTable({
                       <div className="mt-4 grid gap-3 text-sm">
                         <div>
                           <p className="text-slate-500">Service</p>
-                          <p className="text-slate-200">{valueOrDash(lead.service_needed)}</p>
+                          <SummaryPreview text={lead.service_needed || lead.message} />
                         </div>
                         <div>
                           <p className="text-slate-500">Contact</p>
-                          <p className="text-slate-200">
+                          <p className="text-slate-200 break-words">
                             {valueOrDash(lead.phone)} / {valueOrDash(lead.email)}
                           </p>
                         </div>
@@ -538,20 +533,19 @@ export default function LeadsTable({
                         {lead.notes && (
                           <div>
                             <p className="text-slate-500">Notes</p>
-                            <p className="text-slate-200">{lead.notes}</p>
+                            <p className="text-slate-200 line-clamp-2 break-words">{lead.notes}</p>
                           </div>
                         )}
-                        <div>
-                          <p className="text-slate-500">Message</p>
-                          <MessageCell message={lead.message} />
-                        </div>
                       </div>
 
                       <button
-                        onClick={() => setEditingLead(lead)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingLead(lead);
+                        }}
                         className="mt-4 w-full rounded-lg border border-slate-700 bg-slate-800 py-2 text-sm text-slate-300 transition hover:bg-slate-700"
                       >
-                        Edit lead
+                        View details
                       </button>
                     </article>
                   );
