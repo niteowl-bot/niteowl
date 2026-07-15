@@ -98,31 +98,6 @@ export async function buildAssistantRequestResponse(
 
   const knowledge: VoiceKnowledgeRecord[] = knowledgeData ?? [];
 
-  // ── TEMP diagnostic: voice KB retrieval (remove after pilot) ───────
-  // Same deliberately-live-in-prod pattern as the [sales chat diagnostic]
-  // logs, so one real call reveals whether the KB reached the prompt.
-  // Answers: did the search run, for which org, and how many records.
-  console.log(
-    "[voice kb diagnostic] org:",
-    org.id,
-    "| business:",
-    org.business_name,
-    "| dialled:",
-    event.businessPhone
-  );
-  console.log(
-    "[voice kb diagnostic] KB query ran — error:",
-    knowledgeError?.message ?? "none",
-    "| active records returned:",
-    knowledge.length
-  );
-  console.log(
-    "[voice kb diagnostic] records:",
-    JSON.stringify(
-      knowledge.map((r) => ({ category: r.category, title: r.title }))
-    )
-  );
-
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? null;
   if (!appUrl) {
     console.error(
@@ -132,22 +107,5 @@ export async function buildAssistantRequestResponse(
   const serverUrl = appUrl ? `${appUrl}/api/voice/webhook` : null;
 
   const config = buildVoiceAssistantConfig(org, knowledge, settings, serverUrl);
-
-  // ── TEMP diagnostic: what the LLM actually receives (remove after pilot) ──
-  // Shows the exact text injected, and whether the KB block made it in, so
-  // the prompt can be compared against the call transcript.
-  const hasKbBlock = config.systemPrompt.includes("## Business Knowledge");
-  console.log(
-    "[voice kb diagnostic] KB block present in system prompt:",
-    hasKbBlock
-  );
-  console.log(
-    "[voice kb diagnostic] FULL system prompt injected below:\n" +
-      config.systemPrompt
-  );
-  console.log(
-    "[voice kb diagnostic] NOTE: the LLM's final answer selection is not visible here. If the FAQ line (e.g. the €100 call-out fee) appears in the prompt above but Remy still asked for details, KB retrieval is correct and the issue is model/prompt-following — not retrieval. If the line is absent, the record is missing, inactive, or in an unlabelled category for THIS org."
-  );
-
   return { status: 200, body: buildVapiAssistantResponse(config) };
 }

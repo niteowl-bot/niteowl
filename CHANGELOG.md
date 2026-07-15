@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Voice AI: KB-not-used root-caused to a stray static Vapi assistant — RESOLVED; temp diagnostics removed)
+
+### Fixed (configuration — Vapi dashboard, no code change) + Reverted (`src/lib/voice/incoming.ts`)
+- **Root cause**: a static assistant ("Inbound AI Receptionist") was still attached to the Vapi number `+18436480204`, so Vapi answered calls with that canned prompt and never sent an `assistant-request` to `/api/voice/incoming` — our KB-building path never ran. Exactly the mistake `docs/VOICE_SETUP_RUNBOOK.md` Step 3 warns about; end-of-call reports still reached us, so leads/emails/call-rows worked and it looked healthy while the Knowledge Base was bypassed.
+- **How it was proven** (not a code/retrieval bug): SQL confirmed the number resolves to the right org ("Niteowl Test", enabled) which holds the €100 record active under category `faq` (a rendered category); a dev end-to-end drive showed the code injects that record into the voice prompt; and prod log capture across 3 real calls showed every call ran end-of-call processing but produced ZERO `[voice kb diagnostic]` lines — those fire at the top of `buildAssistantRequestResponse`, so their absence proved the builder never executed.
+- **Fix**: owner detached the static assistant from the number in Vapi (assistant field empty; only the Server URL remains). **Verified in production**: the next call logged `active records returned: 5`, `KB block present in system prompt: true`, and the injected prompt contained `### Frequently Asked Questions — What are your call out fees: €100 standard fee`. Voice now answers from the Knowledge Base, same content as chat.
+- **Reverted**: the temporary `[voice kb diagnostic]` logging added earlier today (commit 30be6cc) is removed — `src/lib/voice/incoming.ts` is byte-for-byte back to its prior state. No other code, chat, schema, or functionality touched. `tsc --noEmit` passes.
+
 ## 2026-07-15 (Voice AI: temporary KB-retrieval diagnostics on the assistant-request path — logging only)
 
 ### Added (`src/lib/voice/incoming.ts` — TEMPORARY `[voice kb diagnostic]` logs, remove after pilot)
