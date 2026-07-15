@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-15 (Refinement Priority 8: Knowledge Base edge cases — similar names, conflicting/multiple answers)
+
+### Changed (`src/lib/leadCapture.ts`, `src/lib/voice/assistant.ts`, `src/app/api/chat/route.ts`, `src/app/api/widget/chat/route.ts`)
+- **Unknown services**: already covered end-to-end by Priority 1 (shared across voice, chat, widget).
+- **Similar service names — real false-positive found and fixed**: `isServiceConfirmedByKnowledge` (the shared function from Priority 1) matched on ANY shared word, which meant a single generic word could wrongly confirm an unrelated request — e.g. "emergency roof repair" would have matched a plumbing KB entry titled "Emergency Plumbing Call-Out" purely because both mention "emergency," even though the business has nothing to do with roofing. Now filters common trade/booking words (emergency, repair, installation, check, appointment, etc.) before matching, and requires ALL meaningful words to match for short requests (1–2 words, the common case) or two-thirds for longer ones — genuine close variants like "boiler check" against "Boiler Repair" still confirm correctly; unrelated services sharing only a generic word now correctly fail. Verified with 7 test cases covering both directions (unrelated services correctly rejected, genuine variants correctly accepted) — all passed.
+- **Multiple / conflicting matching answers**: added one new rule to all three prompts (voice Rule 17, chat Rule 12, widget Rule 10) — if more than one knowledge entry could answer the same question, use the most specific one rather than reciting several; if two entries genuinely conflict (e.g. different prices for what sounds like the same thing), say a team member will confirm the exact details rather than guessing.
+- **Missing answers**: reviewed — already correctly handled by the existing "if a question falls outside the knowledge base, don't guess" rules on all three surfaces; no gap found, no change needed.
+- No change to booking logic, database schema, or any file outside the four listed above. `tsc --noEmit` and `next build` both pass.
+
 ## 2026-07-15 (Refinement Priority 7: conversation prompt review — silence/interruptions, one repetitive-wording fix)
 
 ### Reviewed (voice, chat, and widget prompts) + Changed (`src/lib/voice/assistant.ts` only)

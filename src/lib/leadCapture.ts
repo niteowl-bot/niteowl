@@ -267,9 +267,20 @@ Return ONLY the JSON object — no markdown, no explanation.`;
 // Shared by chat, the public widget, and voice (one implementation,
 // not three) so a caller can never get a real "booked" lead for a
 // service the business hasn't actually listed in its Knowledge Base.
-// Word-overlap match against active business_knowledge; fails closed
-// (treats as unconfirmed) on any lookup error — never invent a
-// confirmation the KB can't back.
+// Fails closed (treats as unconfirmed) on any lookup error — never
+// invent a confirmation the KB can't back.
+//
+// Matching is word-overlap, not exact-string, so genuine close variants
+// still confirm (e.g. "boiler check" against a KB entry titled "Boiler
+// Repair"). But a single SHARED GENERIC WORD is not enough on its own —
+// without that guard, "emergency roof repair" would incorrectly confirm
+// against a KB entry titled "Emergency Plumbing Call-Out" purely because
+// both mention "emergency", even though the business has nothing to do
+// with roofing. Common trade/booking words are filtered before matching,
+// and short requests (1–2 meaningful words, the common case) must match
+// ALL of them in the SAME record; longer requests need at least two
+// thirds — similar-sounding but different services should fail closed,
+// not be waved through on a coincidental word in common.
 export async function isServiceConfirmedByKnowledge(
   supabase: DatabaseClient,
   orgId: string,
@@ -281,6 +292,9 @@ export async function isServiceConfirmedByKnowledge(
   const STOP_WORDS = new Set([
     "a", "an", "the", "and", "or", "for", "of", "to", "in", "on", "with",
     "my", "i", "need", "want", "please", "some", "service", "services",
+    "emergency", "repair", "repairs", "installation", "install", "fix",
+    "fixing", "check", "checkup", "appointment", "booking", "book",
+    "call", "callout", "job", "work",
   ]);
   const needleWords = needle.split(/\W+/).filter((w) => w.length > 2 && !STOP_WORDS.has(w));
   if (needleWords.length === 0) return false;
@@ -296,9 +310,13 @@ export async function isServiceConfirmedByKnowledge(
     return false;
   }
 
+  const requiredMatches =
+    needleWords.length <= 2 ? needleWords.length : Math.ceil((needleWords.length * 2) / 3);
+
   return data.some((record) => {
     const haystack = `${record.title} ${record.content}`.toLowerCase();
-    return needleWords.some((w) => haystack.includes(w));
+    const matches = needleWords.filter((w) => haystack.includes(w)).length;
+    return matches >= requiredMatches;
   });
 }
 
