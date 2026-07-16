@@ -2,11 +2,13 @@ import { NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   assessAnswerConfidence,
+  buildConversationTranscript,
   capturePartialLead,
   getOrgOwnerEmail,
   hasNeedsReviewNotificationBeenSent,
   isServiceConfirmedByKnowledge,
   markNeedsReviewNotificationSent,
+  resolveEscalationQuestion,
 } from "@/lib/leadCapture";
 import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
@@ -460,6 +462,7 @@ export async function POST(req: NextRequest) {
   // ── Lead extraction — same engine as /api/chat ─────────────────
   const latestUserMessage: string =
     [...messages].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "";
+  const conversationTranscript = buildConversationTranscript(messages);
 
   let detectedIntent: LeadIntent = "unknown";
   let suggestedAlternativeIso: string | null = null;
@@ -508,7 +511,9 @@ export async function POST(req: NextRequest) {
           linkedConversationId,
           latestUserMessage,
           extracted,
-          "web_widget"
+          "web_widget",
+          false,
+          conversationTranscript
         );
 
         suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
@@ -572,7 +577,8 @@ export async function POST(req: NextRequest) {
                 latestUserMessage,
                 extracted,
                 "web_widget",
-                true
+                true,
+                conversationTranscript
               );
 
               handoffContactCaptured = true;
@@ -595,8 +601,13 @@ export async function POST(req: NextRequest) {
                   customerName: extracted.name,
                   customerEmail: extracted.email,
                   customerPhone: extracted.phone,
-                  question: latestUserMessage,
-                  conversationContext: null,
+                  question: resolveEscalationQuestion(
+                    latestUserMessage,
+                    extracted.email,
+                    extracted.phone
+                  ),
+                  escalationReason: assessment.reason,
+                  conversationContext: conversationTranscript,
                   leadId: reviewResult.leadId,
                 });
 
@@ -631,7 +642,8 @@ export async function POST(req: NextRequest) {
           latestUserMessage,
           extracted,
           "web_widget",
-          true
+          true,
+          conversationTranscript
         );
 
         if (captureResult.leadId) {
@@ -688,7 +700,8 @@ export async function POST(req: NextRequest) {
             latestUserMessage,
             extracted,
             "web_widget",
-            true
+            true,
+            conversationTranscript
           );
 
           const hasContact = Boolean(extracted.email || extracted.phone);
@@ -712,8 +725,13 @@ export async function POST(req: NextRequest) {
                 customerName: extracted.name,
                 customerEmail: extracted.email,
                 customerPhone: extracted.phone,
-                question: latestUserMessage,
-                conversationContext: null,
+                question: resolveEscalationQuestion(
+                  latestUserMessage,
+                  extracted.email,
+                  extracted.phone
+                ),
+                escalationReason: assessment.reason,
+                conversationContext: conversationTranscript,
                 leadId: reviewResult.leadId,
               });
 

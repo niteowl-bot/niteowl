@@ -193,6 +193,7 @@ interface NeedsReviewNotificationParams {
   customerEmail: string | null;
   customerPhone: string | null;
   question: string;
+  escalationReason?: string | null;
   conversationContext?: string | null;
   leadId: string | null;
 }
@@ -210,6 +211,7 @@ export async function sendNeedsReviewNotification(
     customerEmail,
     customerPhone,
     question,
+    escalationReason,
     conversationContext,
   } = params;
 
@@ -225,7 +227,12 @@ export async function sendNeedsReviewNotification(
   const safeEmail = customerEmail ? escapeHtml(customerEmail) : null;
   const safePhone = customerPhone ? escapeHtml(customerPhone) : null;
   const safeQuestion = escapeHtml(question);
-  const safeContext = conversationContext ? escapeHtml(conversationContext) : null;
+  const safeReason = escapeHtml(
+    escalationReason?.trim() || "Confidence below threshold — Remy could not confidently answer this customer."
+  );
+  const safeTranscript = conversationContext
+    ? escapeHtml(conversationContext).replace(/\n/g, "<br/>")
+    : null;
 
   try {
     await sendChecked({
@@ -234,13 +241,18 @@ export async function sendNeedsReviewNotification(
       subject: `A customer needs your input${customerName ? ` — ${customerName.trim()}` : ""}`,
       html: renderEmailLayout(`
         <p style="margin:0 0 4px;">Remy couldn't confidently answer a customer's question, so it's been flagged for you to follow up personally.</p>
+        <p style="margin:8px 0 0;"><strong>Why Remy escalated:</strong> ${safeReason}</p>
         ${detailsBlock([
           ["From", displayName],
           safeEmail ? ["Email", safeEmail] : null,
           safePhone ? ["Phone", safePhone] : null,
         ])}
         <p style="margin:14px 0 0;"><strong>Their question:</strong><br/>${safeQuestion}</p>
-        ${safeContext ? `<p style="margin:10px 0 0;"><strong>Context:</strong><br/>${safeContext}</p>` : ""}
+        ${
+          safeTranscript
+            ? `<p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #e5e7eb;"><strong>Conversation transcript:</strong><br/>${safeTranscript}</p>`
+            : ""
+        }
         ${emailButton(dashboardUrl, "View in your dashboard")}
       `),
     });

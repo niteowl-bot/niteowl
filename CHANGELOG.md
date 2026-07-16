@@ -2,6 +2,15 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-16 (Needs-review escalation email — content only)
+
+### Changed (`src/lib/email.ts`, `src/lib/leadCapture.ts`, `src/app/api/widget/chat/route.ts`, `src/app/api/chat/route.ts`)
+- **Root cause**: the escalation email's "Their question" line always showed whichever message happened to trigger the notification. For the common pattern (customer asks something Remy can't answer → Remy asks for contact details → customer replies with just an email/phone), that trigger message was the contact-only reply, so the email displayed contact details where the real question should be. The email's transcript field (`conversationContext`) existed but every call site always passed `null`; the escalation reason (`assessment.reason`, already computed by the confidence check) was only ever logged to the console, never passed to the email.
+- **Fix**: added `buildConversationTranscript()` to `src/lib/leadCapture.ts`, built from the client-supplied message history at both chat routes (windowed to the most recent 10 messages, not a character cut from the start) and passed through `capturePartialLead()`'s new optional `conversationTranscript` param. `sendNeedsReviewNotification` now renders a "Why Remy escalated" line and an actual "Conversation transcript" section. Name/email/phone were already shown as separate detail rows — unchanged.
+- **Follow-up refinement (pilot feedback, same day)**: the first pass still let the trigger message's raw text appear in "Their question" even when that text was purely the extracted email/phone. Added `resolveEscalationQuestion()`, applied at every `sendNeedsReviewNotification` call site — it strips the extracted email/phone (exact match, plus a digits-only match for phone number formatting variants) and common contact-supplying filler words from the candidate text; if nothing substantive survives, the email now shows **"No explicit question captured."** instead of ever displaying an email address or phone number as the question.
+- Verified live: reproduced three scenarios against the dev org and fetched each sent email via Resend's API — (1) a single-turn message that was purely contact details → "No explicit question captured."; (2) a single-turn message combining a real complaint with contact details → real complaint text shown, not blanked; (3) a two-turn conversation (real question, then a contact-only reply) → the original question shown, not the reply. All three showed the escalation reason, the full transcript, and contact fields kept separate. Test leads and conversations deleted afterward.
+- No change to intent classification, the confidence-check logic, booking, voice AI, or any other functionality — this only changes what the escalation email displays. `tsc --noEmit` passes.
+
 ## 2026-07-16 (Owner notification recipient — separate from login email)
 
 ### Changed (`src/lib/leadCapture.ts`, `.env.local`, new `docs/sql/2026-07-16_organisations_notification_email.sql`)

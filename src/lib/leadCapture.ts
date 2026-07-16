@@ -164,6 +164,76 @@ function deduplicateMessage(
   return updated.join("\n");
 }
 
+// ── buildConversationTranscript ───────────────────────────────────
+// Shared by the widget and dashboard chat routes so a needs-review
+// notification can show the business owner the conversation leading up
+// to escalation, not just the single message that happened to trigger
+// it (which, e.g. in a contact_update turn, may be little more than "my
+// email is x@y.com" with the real question several turns earlier).
+// Windowed to the most recent messages (not a character cut from the
+// start) so a long conversation still shows the RECENT context that's
+// actually relevant to the escalation, not its oldest messages.
+const TRANSCRIPT_MESSAGE_LIMIT = 10;
+
+export function buildConversationTranscript(
+  messages: Array<{ role: string; content: string }> | null | undefined
+): string | null {
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  const relevant = messages.filter((m) => m.role === "user" || m.role === "assistant");
+  if (relevant.length === 0) return null;
+
+  return relevant
+    .slice(-TRANSCRIPT_MESSAGE_LIMIT)
+    .map((m) => `${m.role === "user" ? "Customer" : "Remy"}: ${m.content}`)
+    .join("\n\n");
+}
+
+// ── resolveEscalationQuestion ──────────────────────────────────────
+// The needs-review email must show the customer's actual unanswered
+// question, never the contact details they gave Remy afterward. A
+// message that triggers escalation is sometimes purely a contact-info
+// reply ("my email is x@y.com") with no question of its own — strip the
+// exact extracted email/phone (and common "here's my contact info"
+// filler words) out of the candidate text; if nothing substantive
+// survives, there was no real question to show.
+const NO_QUESTION_CAPTURED = "No explicit question captured.";
+
+export function resolveEscalationQuestion(
+  candidate: string | null | undefined,
+  extractedEmail: string | null | undefined,
+  extractedPhone: string | null | undefined
+): string {
+  const trimmed = (candidate ?? "").trim();
+  if (!trimmed) return NO_QUESTION_CAPTURED;
+
+  let remainder = trimmed;
+  if (extractedEmail) {
+    remainder = remainder.split(extractedEmail).join(" ");
+  }
+  if (extractedPhone) {
+    remainder = remainder.split(extractedPhone).join(" ");
+    // Phone numbers are often typed with different spacing/punctuation
+    // than the extracted value, so also strip a digits-only match.
+    const phoneDigits = extractedPhone.replace(/\D/g, "");
+    if (phoneDigits.length >= 6) {
+      const digitPattern = phoneDigits.split("").join("[\\s()-]*");
+      remainder = remainder.replace(new RegExp(digitPattern, "g"), " ");
+    }
+  }
+
+  const strippedOfFiller = remainder
+    .replace(/[.,;:!?()]/g, " ")
+    .replace(
+      /\b(my|is|the|a|an|it'?s|email|e-?mail|phone|number|mobile|contact|here'?s|you can reach me at|and|at)\b/gi,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return strippedOfFiller.length >= 8 ? trimmed : NO_QUESTION_CAPTURED;
+}
+
 // ── assessAnswerConfidence ────────────────────────────────────────
 
 interface ConfidenceAssessment {
@@ -596,7 +666,8 @@ export async function capturePartialLead(
   userMessage: string,
   extracted: ExtractedLead,
   leadSource: string = "chat",
-  needsReview: boolean = false
+  needsReview: boolean = false,
+  conversationTranscript: string | null = null
 ): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null; leadId: string | null; needsReviewContactCaptured?: boolean }> {
 
 
@@ -754,6 +825,22 @@ export async function capturePartialLead(
             "[needs-review] notification already sent for this conversation — skipping (contact capture path)"
           );
         } else {
+          // existing.message accumulates each raw captured line for this
+          // lead (deduplicateMessage, oldest first) — the first line is
+          // the original enquiry that got it flagged; later lines are
+          // typically just contact details supplied in follow-up turns.
+          // Prefer the caller's real transcript (has assistant replies
+          // too) when passed; otherwise fall back to reformatting the
+          // accumulated lines so there's still SOME conversation context.
+          const existingLines = (existing.message ?? "")
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          const fallbackTranscript =
+            existingLines.length > 0
+              ? existingLines.map((l) => `Customer: ${l}`).join("\n\n")
+              : null;
+
           const ownerInfo = await getOrgOwnerEmail(orgId);
           const notificationSent = await sendNeedsReviewNotification({
             businessOwnerEmail: ownerInfo?.email ?? null,
@@ -761,8 +848,14 @@ export async function capturePartialLead(
             customerName: extracted.name ?? existing.name,
             customerEmail: mergedEmail,
             customerPhone: mergedPhone,
-            question: existing.message ?? userMessage,
-            conversationContext: null,
+            question: resolveEscalationQuestion(
+              existingLines[0] || userMessage,
+              mergedEmail,
+              mergedPhone
+            ),
+            escalationReason:
+              "Human assistance required — customer supplied contact details for a previously flagged enquiry Remy couldn't confidently answer.",
+            conversationContext: conversationTranscript ?? fallbackTranscript,
             leadId: existing.id,
           });
 

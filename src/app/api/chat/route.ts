@@ -10,11 +10,13 @@ import {
   EMPTY_LEAD,
   ACTIONABLE_INTENTS,
   assessAnswerConfidence,
+  buildConversationTranscript,
   capturePartialLead,
   getOrgOwnerEmail,
   hasNeedsReviewNotificationBeenSent,
   isServiceConfirmedByKnowledge,
   markNeedsReviewNotificationSent,
+  resolveEscalationQuestion,
 } from "@/lib/leadCapture";
 
 export const runtime = "nodejs";
@@ -460,6 +462,7 @@ const { messages, conversationId, orgId, source } = await req.json();
     [...messages]
       .reverse()
       .find((m: { role: string }) => m.role === "user")?.content ?? "";
+  const conversationTranscript = buildConversationTranscript(messages);
 let detectedIntent: LeadIntent = "unknown";
 let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
@@ -502,7 +505,9 @@ let outsideBusinessHours = false;
           conversationId,
           latestUserMessage,
           extracted,
-          leadSource
+          leadSource,
+          false,
+          conversationTranscript
         );
 
         outsideBusinessHours = captureResult.outsideBusinessHours;
@@ -569,7 +574,8 @@ let outsideBusinessHours = false;
                 latestUserMessage,
                 extracted,
                 leadSource,
-                true
+                true,
+                conversationTranscript
               );
 
               handoffContactCaptured = true;
@@ -593,8 +599,13 @@ let outsideBusinessHours = false;
                   customerName: extracted.name,
                   customerEmail: extracted.email,
                   customerPhone: extracted.phone,
-                  question: latestUserMessage,
-                  conversationContext: null,
+                  question: resolveEscalationQuestion(
+                    latestUserMessage,
+                    extracted.email,
+                    extracted.phone
+                  ),
+                  escalationReason: assessment.reason,
+                  conversationContext: conversationTranscript,
                   leadId: reviewResult.leadId,
                 });
 
@@ -630,7 +641,8 @@ let outsideBusinessHours = false;
           latestUserMessage,
           extracted,
           leadSource,
-          true
+          true,
+          conversationTranscript
         );
 
         if (captureResult.leadId) {
@@ -693,7 +705,8 @@ let outsideBusinessHours = false;
     latestUserMessage,
     extracted,
     leadSource,
-    true
+    true,
+    conversationTranscript
   );
 
   const hasContact = Boolean(extracted.email || extracted.phone);
@@ -723,8 +736,9 @@ let outsideBusinessHours = false;
       customerName: extracted.name,
       customerEmail: extracted.email,
       customerPhone: extracted.phone,
-      question: latestUserMessage,
-      conversationContext: null,
+      question: resolveEscalationQuestion(latestUserMessage, extracted.email, extracted.phone),
+      escalationReason: assessment.reason,
+      conversationContext: conversationTranscript,
       leadId: reviewResult.leadId,
     });
 
