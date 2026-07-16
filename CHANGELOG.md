@@ -2,6 +2,16 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-16 (Owner notification recipient — separate from login email)
+
+### Changed (`src/lib/leadCapture.ts`, `.env.local`, new `docs/sql/2026-07-16_organisations_notification_email.sql`)
+- **Root cause**: all four owner-notification emails (booking confirmations, needs-review handoffs, self-service cancel/reschedule, voice call summaries) share one recipient resolver, `getOrgOwnerEmail()` in `src/lib/leadCapture.ts`. It resolved the recipient as the org owner's Supabase Auth **login** email — there was no separate notification-address field anywhere. For the pilot org that login email is the owner's personal address, so every business notification landed there instead of `admin@niteowlhq.com`.
+- **Fix**: added a nullable `organisations.notification_email` column (`docs/sql/2026-07-16_organisations_notification_email.sql` — must be run manually in the Supabase SQL editor on both the dev and prod projects, per this repo's no-migrations-folder convention; DDL isn't reachable via the service-role REST API). `getOrgOwnerEmail()` now prefers `notification_email` and falls back to the existing auth-email behaviour when it's unset, so every other/future org keeps working exactly as before with no action needed. The SQL script sets it to `admin@niteowlhq.com` scoped to the owner's own org(s) only.
+- **`ADMIN_EMAIL` (access-control gate for `/admin/sales-leads`) and Supabase Auth login emails are deliberately untouched** — this was a notification-routing fix only, not an access-control change. The owner's existing login keeps working exactly as-is.
+- `SALES_NOTIFICATION_EMAIL` (recipient for marketing-site sales-chat lead notifications, unrelated to any tenant org) changed from the personal address to `admin@niteowlhq.com` in `.env.local` and in Vercel's Production env vars (owner updated via the dashboard and redeployed).
+- No changes to booking logic, voice AI, chat, the widget, or any customer-facing email — verified every `sendChecked` call site in `src/lib/email.ts` is unchanged.
+- `tsc --noEmit` passes.
+
 ## 2026-07-15 (Basic phone number validation — `src/app/api/leads/route.ts` only)
 
 ### Changed

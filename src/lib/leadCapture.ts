@@ -484,13 +484,24 @@ export async function getOrgOwnerEmail(
 
     const { data: org, error: orgError } = await admin
       .from("organisations")
-      .select("owner_id, business_name")
+      .select("owner_id, business_name, notification_email")
       .eq("id", orgId)
       .single();
 
     if (orgError || !org?.owner_id) {
       console.error("[email] Could not resolve org owner:", orgError?.message);
       return null;
+    }
+
+    // notification_email is a dedicated, owner-configurable recipient for
+    // business notifications (bookings, needs-review, call summaries) —
+    // independent of the login email on the org's auth account, so
+    // notifications can be routed to a shared/admin inbox without
+    // affecting who can sign in. Falls back to the owner's auth login
+    // email when unset, which is the only behaviour every other org has
+    // ever had.
+    if (org.notification_email) {
+      return { email: org.notification_email, businessName: org.business_name ?? "the business" };
     }
 
     const { data: userData, error: userError } =
