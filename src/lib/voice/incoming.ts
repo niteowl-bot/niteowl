@@ -86,6 +86,7 @@ export async function buildAssistantRequestResponse(
     .select("category, title, content")
     .eq("org_id", org.id)
     .eq("is_active", true)
+    .eq("status", "published")
     .order("category", { ascending: true })
     .order("display_order", { ascending: true });
 

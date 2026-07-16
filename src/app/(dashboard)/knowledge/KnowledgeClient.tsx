@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
+import RegenerateFaqsModal from "./RegenerateFaqsModal";
+import HistoryModal from "./HistoryModal";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -13,6 +15,18 @@ export interface KnowledgeRecord {
   display_order: number;
   is_active: boolean;
   created_at: string;
+  // Added for the "Import with AI" feature — optional so existing rows
+  // (and any code path that doesn't select them) keep working unchanged.
+  status?: "draft" | "published";
+  price?: number | null;
+  currency?: string | null;
+  duration_minutes?: number | null;
+  notes?: string | null;
+  quote_required?: boolean;
+  starting_from?: boolean;
+  source?: "manual" | "ai_import";
+  updated_at?: string;
+  updated_by?: string | null;
 }
 
 const CATEGORIES = [
@@ -217,6 +231,8 @@ export default function KnowledgeClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [regenerateFaqsForId, setRegenerateFaqsForId] = useState<string | null>(null);
+  const [historyForId, setHistoryForId] = useState<string | null>(null);
 
   const grouped = CATEGORY_ORDER.reduce<Record<string, KnowledgeRecord[]>>(
     (acc, cat) => {
@@ -241,7 +257,16 @@ export default function KnowledgeClient({
           content: values.content,
           display_order: grouped[values.category]?.length ?? 0,
         })
-        .select("id, category, title, content, display_order, is_active, created_at")
+        // Widened to the same column list page.tsx's initial fetch uses
+        // (added for the AI Import feature) — the insert still only sets
+        // the original four fields, everything else takes its DB default
+        // (status='published' etc.), but the row returned here must
+        // carry those defaults back into local state or the new
+        // Publish/pill UI has nothing to render for a freshly-added
+        // record until the next full page load.
+        .select(
+          "id, category, title, content, display_order, is_active, created_at, status, price, currency, duration_minutes, notes, quote_required, starting_from, source, updated_at, updated_by"
+        )
         .single();
 
       if (error || !data) {
@@ -267,7 +292,15 @@ export default function KnowledgeClient({
         })
         .eq("id", id)
         .eq("org_id", orgId)
-        .select("id, category, title, content, display_order, is_active, created_at")
+        // Widened for the same reason as handleCreate above — without
+        // this, a saved edit silently wiped status/price/etc. from this
+        // row's local state (they were never touched in the database,
+        // only dropped from what the client held), making the new
+        // Publish button and draft/published pill disappear for that
+        // row until a full page refresh.
+        .select(
+          "id, category, title, content, display_order, is_active, created_at, status, price, currency, duration_minutes, notes, quote_required, starting_from, source, updated_at, updated_by"
+        )
         .single();
 
       if (error || !data) {
@@ -275,7 +308,7 @@ export default function KnowledgeClient({
         return;
       }
 
-      setRecords((prev) => prev.map((r) => (r.id === id ? (data as KnowledgeRecord) : r)));
+      setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...(data as KnowledgeRecord) } : r)));
       setEditingId(null);
     });
   }
@@ -292,6 +325,69 @@ export default function KnowledgeClient({
     }
 
     setRecords((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  // ── Publish/unpublish — direct Supabase update, same pattern as
+  // handleUpdate/handleDelete above. AI-imported entries land as
+  // 'draft'; this is how an owner makes them live for customers. ──────
+  async function handleTogglePublish(id: string, currentStatus: KnowledgeRecord["status"]) {
+    const nextStatus = currentStatus === "published" ? "draft" : "published";
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from("business_knowledge")
+      .update({ status: nextStatus })
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select(
+        "id, category, title, content, display_order, is_active, created_at, status, price, currency, duration_minutes, notes, quote_required, starting_from, source, updated_at, updated_by"
+      )
+      .single();
+
+    if (error || !data) {
+      console.error("SUPABASE PUBLISH TOGGLE ERROR:", error);
+      return;
+    }
+
+    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, ...(data as KnowledgeRecord) } : r)));
+  }
+
+  async function handleRestoreVersion(id: string, snapshot: Record<string, unknown>) {
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from("business_knowledge")
+      .update({
+        category: snapshot.category,
+        title: snapshot.title,
+        content: snapshot.content,
+        is_active: snapshot.is_active,
+        status: snapshot.status,
+        price: snapshot.price,
+        currency: snapshot.currency,
+        duration_minutes: snapshot.duration_minutes,
+        notes: snapshot.notes,
+        quote_required: snapshot.quote_required,
+        starting_from: snapshot.starting_from,
+      })
+      .eq("id", id)
+      .eq("org_id", orgId)
+      .select(
+        "id, category, title, content, display_order, is_active, created_at, status, price, currency, duration_minutes, notes, quote_required, starting_from, source, updated_at, updated_by"
+      )
+      .single();
+
+    if (error || !data) {
+      console.error("SUPABASE RESTORE ERROR:", error);
+      return;
+    }
+
+    setRecords((prev) => prev.map((r) => (r.id === id ? (data as KnowledgeRecord) : r)));
+    setHistoryForId(null);
+  }
+
+  async function handleFaqsCommitted(newFaqRecord: KnowledgeRecord) {
+    setRecords((prev) => [...prev, newFaqRecord]);
   }
 
   return (
@@ -319,16 +415,25 @@ export default function KnowledgeClient({
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              setShowAddForm((s) => !s);
-              setEditingId(null);
-            }}
-            className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
-            <PlusIcon />
-            {showAddForm ? "Cancel" : "Add record"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href="/knowledge/import"
+              className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
+            >
+              <SparkleIcon />
+              Import with AI
+            </a>
+            <button
+              onClick={() => {
+                setShowAddForm((s) => !s);
+                setEditingId(null);
+              }}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <PlusIcon />
+              {showAddForm ? "Cancel" : "Add record"}
+            </button>
+          </div>
         </header>
 
         {deleteError && (
@@ -412,6 +517,9 @@ export default function KnowledgeClient({
                             setEditingId(record.id);
                             setShowAddForm(false);
                           }}
+                          onTogglePublish={handleTogglePublish}
+                          onRegenerateFaqs={() => setRegenerateFaqsForId(record.id)}
+                          onHistory={() => setHistoryForId(record.id)}
                         />
                       )
                     )}
@@ -422,6 +530,23 @@ export default function KnowledgeClient({
           </div>
         )}
       </div>
+
+      {regenerateFaqsForId && (
+        <RegenerateFaqsModal
+          orgId={orgId}
+          knowledgeId={regenerateFaqsForId}
+          onClose={() => setRegenerateFaqsForId(null)}
+          onCommitted={handleFaqsCommitted}
+        />
+      )}
+
+      {historyForId && (
+        <HistoryModal
+          knowledgeId={historyForId}
+          onClose={() => setHistoryForId(null)}
+          onRestore={(snapshot) => handleRestoreVersion(historyForId, snapshot)}
+        />
+      )}
     </div>
   );
 }
@@ -432,14 +557,21 @@ function RecordRow({
   record,
   onDelete,
   onEdit,
+  onTogglePublish,
+  onRegenerateFaqs,
+  onHistory,
 }: {
   record: KnowledgeRecord;
   onDelete: (id: string) => void;
   onEdit: () => void;
+  onTogglePublish: (id: string, currentStatus: KnowledgeRecord["status"]) => Promise<void>;
+  onRegenerateFaqs: () => void;
+  onHistory: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   async function handleDelete() {
     setDeleting(true);
@@ -448,12 +580,36 @@ function RecordRow({
     setConfirming(false);
   }
 
+  // Guards against a double-click firing two overlapping toggles — the
+  // second click would otherwise read record.status from before the
+  // first click's response updated it, flipping the value right back
+  // and making a real, successful toggle look like nothing happened.
+  async function handleTogglePublishClick() {
+    if (publishing) return;
+    setPublishing(true);
+    await onTogglePublish(record.id, record.status);
+    setPublishing(false);
+  }
+
   return (
     <li className="rounded-xl border border-white/[0.07] bg-[#13151c] transition hover:border-white/10">
       <div className="flex items-start gap-3 px-4 py-3.5">
         <div className="min-w-0 flex-1">
           <button onClick={() => setExpanded((e) => !e)} className="w-full text-left">
-            <p className="truncate text-sm font-medium text-white/80">{record.title}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-medium text-white/80">{record.title}</p>
+              {record.status && (
+                <span
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wide ${
+                    record.status === "published"
+                      ? "bg-green-500/15 text-green-400"
+                      : "bg-amber-500/15 text-amber-400"
+                  }`}
+                >
+                  {record.status}
+                </span>
+              )}
+            </div>
             {!expanded && (
               <p className="mt-0.5 truncate text-xs text-white/30">{record.content}</p>
             )}
@@ -472,6 +628,31 @@ function RecordRow({
             aria-label={expanded ? "Collapse" : "Expand"}
           >
             <ChevronDownIcon expanded={expanded} />
+          </button>
+
+          {record.status && (
+            <button
+              onClick={handleTogglePublishClick}
+              disabled={publishing}
+              className="rounded-md px-2 py-1 text-[10px] font-medium text-white/30 transition hover:bg-white/5 hover:text-white/60 disabled:opacity-40"
+            >
+              {publishing ? "…" : record.status === "published" ? "Unpublish" : "Publish"}
+            </button>
+          )}
+
+          <button
+            onClick={onRegenerateFaqs}
+            className="rounded-md px-2 py-1 text-[10px] font-medium text-white/30 transition hover:bg-white/5 hover:text-white/60"
+          >
+            Regenerate FAQs
+          </button>
+
+          <button
+            onClick={onHistory}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-white/20 transition hover:bg-white/5 hover:text-white/50"
+            aria-label="View history"
+          >
+            <HistoryIcon />
           </button>
 
           <button
@@ -520,6 +701,34 @@ function PlusIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
       <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M7 1.5 8.2 5 11.7 6.2 8.2 7.4 7 10.9 5.8 7.4 2.3 6.2 5.8 5 7 1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+      <path
+        d="M6.5 1.5a5 5 0 1 1-4.33 2.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path d="M2 1.5v2.5h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6.5 4v3l2 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

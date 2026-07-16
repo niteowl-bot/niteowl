@@ -426,13 +426,20 @@ export async function POST(req: NextRequest) {
     return new Response("Too many requests", { status: 429 });
   }
 
-const { messages, conversationId, orgId, source } = await req.json();
+const { messages, conversationId, orgId, source, includeDrafts } = await req.json();
 
   if (!messages || !conversationId || !orgId) {
     return new Response("Missing required fields", { status: 400 });
   }
 
   const leadSource = source === "dashboard_preview" ? "dashboard_preview" : "chat";
+
+  // Draft Knowledge Base entries (AI-imported, not yet published) are
+  // only ever visible here — never to the public widget or voice — and
+  // only when the dashboard preview explicitly opts in, so an owner can
+  // test unpublished content before making it live. See
+  // docs/sql/2026-07-16_knowledge_import_extend_business_knowledge.sql.
+  const showDraftKnowledge = leadSource === "dashboard_preview" && includeDrafts === true;
 
 
   if (!messages || !conversationId || !orgId) {
@@ -529,11 +536,15 @@ let outsideBusinessHours = false;
         // check used for question/unknown intents here too.
         if (extracted.intent === "contact_update") {
           try {
-            const knowledgeResultForCheck = await supabase
+            let knowledgeCheckQuery = supabase
               .from("business_knowledge")
               .select("category, title, content")
               .eq("org_id", orgId)
               .eq("is_active", true);
+            if (!showDraftKnowledge) {
+              knowledgeCheckQuery = knowledgeCheckQuery.eq("status", "published");
+            }
+            const knowledgeResultForCheck = await knowledgeCheckQuery;
 
             const identitySummary = org
               ? [
@@ -664,11 +675,15 @@ let outsideBusinessHours = false;
         console.log("[post handler] intent not actionable — checking answer confidence");
 
         try {
-          const knowledgeResultForCheck = await supabase
+          let knowledgeCheckQuery = supabase
             .from("business_knowledge")
             .select("category, title, content")
             .eq("org_id", orgId)
             .eq("is_active", true);
+          if (!showDraftKnowledge) {
+            knowledgeCheckQuery = knowledgeCheckQuery.eq("status", "published");
+          }
+          const knowledgeResultForCheck = await knowledgeCheckQuery;
 
           const identitySummary = org
             ? [
@@ -765,11 +780,15 @@ let outsideBusinessHours = false;
 
 
   // ── Fetch knowledge (org was already fetched above) ──────────────
-  const { data: knowledgeData } = await supabase
+  let knowledgeQuery = supabase
     .from("business_knowledge")
     .select("category, title, content, display_order")
     .eq("org_id", orgId)
-    .eq("is_active", true)
+    .eq("is_active", true);
+  if (!showDraftKnowledge) {
+    knowledgeQuery = knowledgeQuery.eq("status", "published");
+  }
+  const { data: knowledgeData } = await knowledgeQuery
     .order("category", { ascending: true })
     .order("display_order", { ascending: true });
 

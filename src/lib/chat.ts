@@ -12,6 +12,7 @@ export async function streamChat({
   conversationId,
   orgId,
   source,
+  includeDrafts,
   onToken,
   onDone,
   onError,
@@ -20,6 +21,10 @@ export async function streamChat({
   conversationId: string;
   orgId: string;
   source?: string;
+  // Dashboard-preview-only: lets an owner test AI-imported Knowledge Base
+  // drafts before publishing them. The public widget never sets this and
+  // the API route ignores it unless source is "dashboard_preview".
+  includeDrafts?: boolean;
   onToken: (token: string) => void;
   onDone: (fullText: string) => void;
   onError: (err: string) => void;
@@ -37,7 +42,7 @@ export async function streamChat({
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, conversationId, orgId, source }),
+      body: JSON.stringify({ messages, conversationId, orgId, source, includeDrafts }),
       signal: AbortSignal.timeout(90_000),
     });
 

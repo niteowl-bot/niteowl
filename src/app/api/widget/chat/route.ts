@@ -538,7 +538,8 @@ export async function POST(req: NextRequest) {
               .from("business_knowledge")
               .select("category, title, content")
               .eq("org_id", orgId)
-              .eq("is_active", true);
+              .eq("is_active", true)
+              .eq("status", "published");
 
             const identitySummary = [
               `- Business name: ${org.business_name}`,
@@ -667,7 +668,8 @@ export async function POST(req: NextRequest) {
           .from("business_knowledge")
           .select("category, title, content")
           .eq("org_id", orgId)
-          .eq("is_active", true);
+          .eq("is_active", true)
+          .eq("status", "published");
 
         const identitySummary = [
           `- Business name: ${org.business_name}`,
@@ -755,6 +757,7 @@ export async function POST(req: NextRequest) {
     .select("category, title, content, display_order")
     .eq("org_id", orgId)
     .eq("is_active", true)
+    .eq("status", "published")
     .order("category", { ascending: true })
     .order("display_order", { ascending: true });
 

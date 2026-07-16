@@ -30,6 +30,10 @@ export default function ConversationView({
   const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  // Dashboard-preview-only: lets an owner test AI-imported Knowledge Base
+  // drafts before publishing them. Off by default so preview matches what
+  // real customers see unless the owner explicitly opts in.
+  const [includeDrafts, setIncludeDrafts] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -184,6 +188,7 @@ export default function ConversationView({
         conversationId: convoId,
         orgId,
         source: "dashboard_preview",
+        includeDrafts,
         onToken: (token) => {
 
         setStreamingContent((prev) => prev + token);
@@ -223,6 +228,7 @@ export default function ConversationView({
   if (isEmpty) {
     return (
       <div className="flex h-full flex-col">
+        <DraftsToggle includeDrafts={includeDrafts} onChange={setIncludeDrafts} />
         <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/15 text-blue-400">
             <WelcomeIcon />
@@ -268,6 +274,7 @@ export default function ConversationView({
   // ── Main thread ──────────────────────────────────────────────────
   return (
     <div className="flex h-full flex-col">
+      <DraftsToggle includeDrafts={includeDrafts} onChange={setIncludeDrafts} />
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
         {loadingHistory ? (
@@ -376,6 +383,38 @@ const SUGGESTED_PROMPTS = [
 ];
 
 // ── Small components ─────────────────────────────────────────────
+
+function DraftsToggle({
+  includeDrafts,
+  onChange,
+}: {
+  includeDrafts: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div
+      className={`flex shrink-0 items-center justify-between gap-3 border-b px-4 py-2 text-xs md:px-8 ${
+        includeDrafts
+          ? "border-amber-500/20 bg-amber-500/[0.06] text-amber-300"
+          : "border-white/[0.07] bg-transparent text-white/30"
+      }`}
+    >
+      <span>
+        Previewing: {includeDrafts ? "Draft + Published" : "Published only"}
+        {includeDrafts && " — this is not what customers currently see"}
+      </span>
+      <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+        <span>Include drafts</span>
+        <input
+          type="checkbox"
+          checked={includeDrafts}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-3.5 w-3.5"
+        />
+      </label>
+    </div>
+  );
+}
 
 function LoadingDots() {
   return (

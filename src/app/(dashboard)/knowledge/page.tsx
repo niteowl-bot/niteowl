@@ -24,7 +24,9 @@ export default async function KnowledgePage() {
 
   const { data: records } = await supabase
     .from("business_knowledge")
-    .select("id, category, title, content, display_order, is_active, created_at")
+    .select(
+      "id, category, title, content, display_order, is_active, created_at, status, price, currency, duration_minutes, notes, quote_required, starting_from, source, updated_at, updated_by"
+    )
     .eq("org_id", org.id)
     .eq("is_active", true)
     .order("category", { ascending: true })
