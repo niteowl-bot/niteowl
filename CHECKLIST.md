@@ -113,9 +113,20 @@
 - [x] Verify a phone booking flows through the existing engine — **verified via full dev simulation (2026-07-09)**: simulated end-of-call report → raw event stored + deduplicated → `voice_calls` row with cost → lead created with source `voice` (caller ID as phone, "tomorrow at 2pm" parsed to the correct Europe/London ISO datetime, status `booked` after the availability/capacity checks, `manage_token` issued) → lead linked back to the call → owner booking-confirmation + call-summary emails accepted by Resend (customer copy correctly skipped, phone-only caller). All test rows deleted afterwards; still needs re-confirming with a real Vapi call (item below)
 - [x] Confirm whether `leads.source` has a CHECK constraint blocking `'voice'` — **it does** (`leads_source_check`, confirmed via a real dev-project insert failure 2026-07-09); fix is `docs/sql/2026-07-09_leads_source_voice.sql`, tracked above
 
+## 🟡 Calendar & Appointment Management (Phase 3 — Step 1 connection foundation, code complete 2026-07-20, dark until setup below is done)
+> Feature is phased (approved plan). **Step 1 = connect/disconnect a Google Calendar + status only; ZERO change to booking, availability, or AI behaviour.** Later steps add availability-read, calendar writes on book, and reschedule/cancel. Owner setup is written up in **`docs/CALENDAR_SETUP_RUNBOOK.md`** — follow that; the items here track completion.
+- [x] Additive connection layer merged: new `calendar_connections` table, provider-agnostic `src/lib/calendar/` (Google impl via `google-auth-library`, Outlook-ready interface), OAuth connect/callback/disconnect routes, `Settings → Calendar` page. Refresh tokens encrypted at rest (AES-256-GCM). No existing booking/onboarding/voice/table touched — verified by diff. `tsc` + `next build` clean.
+- [ ] Run `docs/sql/2026-07-20_calendar_connections.sql` + its `_verify.sql` on **dev** (`kioljdihgbcboxlnwghv`) — needed before the connect flow can store anything
+- [ ] Run the same on **prod** (`sklcqvvnuigpewzarbiv`) — this environment can't reach prod
+- [ ] Complete the Google Cloud setup (runbook §2): project, Calendar API, OAuth consent screen (**External**), add pilot businesses as **Test users** (bypasses Google's weeks-long sensitive-scope verification during alpha), redirect URI
+- [ ] Generate `CALENDAR_TOKEN_ENC_KEY` (`openssl rand -base64 32`) and set it + `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` in `.env.local` and Vercel Production, then redeploy
+- [x] Verified from here (2026-07-20, without real Google creds): token crypto round-trip + tamper + wrong-key rejection all pass; unauth `/connect` → `/login`; authed `/connect` builds a correct Google consent URL (offline, `prompt=consent`, right redirect URI + scopes) and sets an httpOnly CSRF state cookie; callback rejects a missing/mismatched state; `Settings → Calendar` renders the "Not connected" state + new nav tab (and degrades gracefully even before the SQL is run). See CHANGELOG
+- [ ] End-to-end **real** OAuth connect once the SQL + Google Cloud setup + env vars are done: click Connect → Google consent → returns showing "Connected as `<email>`", confirm `calendar_connections` holds an **encrypted** refresh token; then Disconnect clears it. (Owner-gated — needs a real Google account added as a test user)
+- [ ] Later steps (own passes): read availability from Calendar free/busy layered onto the existing checks; write events on book (`capturePartialLead` seams); update/delete on reschedule/cancel (`bookings/manage`); then per-business timezone, structured services/staff, live in-call voice availability
+
 ## ⚪ Version 2
 - [x] Voice AI — in progress; moved to its own Phase 2 section above
-- [ ] Google Calendar
+- [x] Google Calendar — in progress; moved to its own Phase 3 section above (Step 1 code complete 2026-07-20)
 - [ ] Outlook Calendar
 - [ ] Multi-staff scheduling
 - [ ] Stripe subscriptions

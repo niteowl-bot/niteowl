@@ -2,6 +2,19 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-20 (Calendar & Appointment Management — Step 1: connection foundation)
+
+### Added — additive only, zero change to booking/availability/AI behaviour
+First step of the phased Google Calendar integration (per an approved architecture plan). Lets a business securely **connect and disconnect its own Google Calendar** from Settings and see connection status. Deliberately inert with respect to bookings — reading availability from the calendar and writing/updating/cancelling real calendar events are later steps (2–4), so deploying this changes nothing a customer or the booking engine sees.
+- **Schema**: new `calendar_connections` table (`docs/sql/2026-07-20_calendar_connections.sql` + `_verify.sql`), one row per org, mirroring the `voice_settings` pattern exactly — `org_id` PK, service-role-only writes, owner read-only RLS. `provider` carries a check constraint including `'outlook'` so a second provider needs no schema change. Not yet run on dev/prod; hand-run via the Supabase SQL editor per the repo's no-migrations convention.
+- **Provider abstraction** (`src/lib/calendar/`): `provider.ts` (`CalendarProvider` interface) + `google.ts` (Google impl via the new `google-auth-library` dependency; OAuth lifecycle + userinfo, Calendar REST left as raw `fetch` for later steps) + `connection.ts` (the token store: load/save/refresh/disconnect). Modelled on billing's provider/impl/agnostic split so Outlook slots in later with one line and no caller changes.
+- **Token encryption at rest** (`src/lib/calendar/tokenCrypto.ts`): OAuth access/refresh tokens are encrypted with AES-256-GCM (new `CALENDAR_TOKEN_ENC_KEY` env var) before touching the database and decrypted only server-side — refresh tokens are the one genuinely long-lived credential this app stores. Round-trip, tamper-detection, and wrong-key rejection all verified.
+- **OAuth routes** (`src/app/api/calendar/google/{connect,callback,disconnect}`): owner-auth'd connect issues the Google consent redirect (offline access, `prompt=consent` to guarantee a refresh token, minimal `calendar.events` + `calendar.readonly` + `openid email` scopes) with a random CSRF state stored in an httpOnly cookie; callback validates the state, re-resolves the org from the session (never trusts the redirect), exchanges the code, and stores the encrypted connection; disconnect revokes at Google (best-effort) and clears the row.
+- **UI**: `Settings → Calendar` page (new nav tab, additive) with Connect / "Connected as `<email>`" / Disconnect, reusing the existing design system.
+- **Setup runbook**: `docs/CALENDAR_SETUP_RUNBOOK.md` covers the owner's Google Cloud setup, using Google's **test-users** path to skip the weeks-long sensitive-scope verification during alpha (capped at 100 users).
+- **Verified from here** (without real Google credentials, 2026-07-20): token crypto (round-trip/tamper/wrong-key); `tsc --noEmit` + `next build` clean (`google-auth-library` bundles under Turbopack with no `serverExternalPackages` entry); unauth `/connect` → `/login`; authed `/connect` produces a correct Google consent URL + httpOnly state cookie; callback rejects a missing/mismatched state; the Settings page renders "Not connected" and degrades gracefully even before the SQL table exists. **Not touched** (confirmed by diff): `leadCapture.ts`, `availability.ts`, `bookings/manage`, chat/widget/voice, onboarding, pricing, or any existing table. Only pre-existing files modified: `package.json` (+dependency) and one additive line in the Settings nav.
+- **Owner-gated remainder**: the real end-to-end OAuth round-trip needs the dev/prod SQL run, a Google Cloud project + test user, and the three env vars set — tracked in CHECKLIST.md.
+
 ## 2026-07-20 (Website widget — verified on a real external site)
 
 ### Tested, end-to-end, against real production
