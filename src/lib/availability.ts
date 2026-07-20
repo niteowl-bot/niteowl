@@ -1,4 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  getCalendarBusy,
+  slotConflictsWithBusy,
+  type CalendarBusyResult,
+} from "@/lib/calendar/freebusy";
 
 // Every function here is called from both authenticated contexts (the
 // dashboard preview chat) and fully unauthenticated ones (the public
@@ -93,6 +98,25 @@ async function getOrgSettings(
   };
 }
 
+// Read in its OWN query, tolerant of the column not existing yet, so this
+// code is safe to deploy before docs/sql/2026-07-20_booking_buffer_minutes
+// .sql is run: a missing column just reads as 0 (no buffer = today's
+// behaviour) without failing the critical org-settings/capacity queries
+// above, which deliberately never select this new column.
+async function getBookingBufferMinutes(
+  supabase: ReturnType<typeof createAdminClient>,
+  orgId: string
+): Promise<number> {
+  const { data, error } = await supabase
+    .from("organisations")
+    .select("booking_buffer_minutes")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (error) return 0; // column not present yet, or transient error
+  return data?.booking_buffer_minutes ?? 0;
+}
+
 /**
  * Checks whether a given ISO datetime falls within the org's configured
  * business hours (accounting for closed days and lunch breaks).
@@ -166,9 +190,32 @@ export async function findNextAvailableSlot(
     return isoDatetime;
   }
 
+  const bookingBufferMinutes = await getBookingBufferMinutes(supabase, orgId);
+
   const hoursByDay = new Map(hours.map((h) => [h.day_of_week, h]));
   const stepMinutes = appointmentDurationMinutes > 0 ? appointmentDurationMinutes : 30;
   const maxIterations = Math.ceil((SEARCH_WINDOW_DAYS * 24 * 60) / stepMinutes);
+
+  // Fetch the connected calendar's busy list ONCE for the whole search
+  // window (widened by duration + buffer so a candidate near the end of
+  // the window is still fully covered) instead of one free/busy call per
+  // candidate slot. Passed into each isSlotAvailable check below.
+  const windowStart = new Date(isoDatetime);
+  const windowEnd = new Date(
+    windowStart.getTime() +
+      SEARCH_WINDOW_DAYS * 24 * 60 * 60 * 1000 +
+      (appointmentDurationMinutes + bookingBufferMinutes) * 60 * 1000
+  );
+  const calendarBusy = await getCalendarBusy(
+    orgId,
+    windowStart.toISOString(),
+    windowEnd.toISOString()
+  );
+  // A connected calendar we can't read must not yield a suggestion at all —
+  // suggesting a slot we couldn't verify risks offering a busy time.
+  if (calendarBusy.status === "error") {
+    return null;
+  }
 
   let cursor = new Date(isoDatetime);
 
@@ -191,7 +238,10 @@ export async function findNextAvailableSlot(
 
         if (minutesOfDay >= openMinutes && minutesOfDay < closeMinutes && !inLunch) {
           const candidateIso = cursor.toISOString();
-        const hasCapacity = await isSlotAvailable(orgId, candidateIso);
+        const hasCapacity = await isSlotAvailable(orgId, candidateIso, {
+          calendarBusy,
+          bufferMinutes: bookingBufferMinutes,
+        });
         if (hasCapacity) {
           return candidateIso;
         }
@@ -205,19 +255,33 @@ export async function findNextAvailableSlot(
   return null;
 }
 /**
- * Checks how many "booked" leads already occupy the same appointment slot
- * (based on exact appointment_datetime match) and compares against the
- * org's configured max_concurrent_bookings.
+ * Checks whether a slot is available. Two layered checks:
+ *  1. Internal capacity — how many "booked" leads already occupy the exact
+ *     same appointment_datetime, vs the org's max_concurrent_bookings.
+ *     Unchanged from before; fails OPEN on a query error.
+ *  2. Connected Google Calendar (Step 2) — only when the org has connected
+ *     a calendar. The slot must additionally not clash with any real
+ *     calendar event in [start - buffer, start + duration + buffer).
+ *     Fails CLOSED: if a calendar is connected but can't be read, the slot
+ *     is treated as unavailable, so a busy or unverifiable slot is never
+ *     offered. Orgs with no connected calendar are completely unaffected —
+ *     the calendar branch short-circuits to the capacity result.
+ *
+ * opts.calendarBusy lets a caller that already fetched the calendar's busy
+ * list for a range (e.g. findNextAvailableSlot scanning many candidates)
+ * pass it in, so the whole scan costs one free/busy call instead of one
+ * per candidate.
  */
 export async function isSlotAvailable(
   orgId: string,
-  isoDatetime: string
+  isoDatetime: string,
+  opts?: { calendarBusy?: CalendarBusyResult; bufferMinutes?: number }
 ): Promise<boolean> {
   const supabase = createAdminClient();
 
   const { data: orgData } = await supabase
     .from("organisations")
-    .select("max_concurrent_bookings")
+    .select("max_concurrent_bookings, appointment_duration_minutes")
     .eq("id", orgId)
     .maybeSingle();
 
@@ -235,5 +299,33 @@ export async function isSlotAvailable(
     return true; // fail open — don't block bookings on a query error
   }
 
-  return (count ?? 0) < maxConcurrent;
+  const withinCapacity = (count ?? 0) < maxConcurrent;
+  if (!withinCapacity) return false;
+
+  // Prefetched no_connection (from findNextAvailableSlot) means calendar
+  // plays no part — short-circuit before any further reads.
+  if (opts?.calendarBusy?.status === "no_connection") return true;
+
+  // ── Layer 2: connected Google Calendar free/busy (additive) ──────
+  const durationMinutes = orgData?.appointment_duration_minutes ?? 60;
+  const bufferMinutes = opts?.bufferMinutes ?? (await getBookingBufferMinutes(supabase, orgId));
+  const slotStartMs = new Date(isoDatetime).getTime();
+  const slotEndMs = slotStartMs + durationMinutes * 60 * 1000;
+  const bufferMs = bufferMinutes * 60 * 1000;
+  // Widen the tested window by the buffer on both sides so a new
+  // appointment can't sit flush against an existing calendar event.
+  const windowStartMs = slotStartMs - bufferMs;
+  const windowEndMs = slotEndMs + bufferMs;
+
+  const calendarBusy =
+    opts?.calendarBusy ??
+    (await getCalendarBusy(
+      orgId,
+      new Date(windowStartMs).toISOString(),
+      new Date(windowEndMs).toISOString()
+    ));
+
+  if (calendarBusy.status === "no_connection") return true;
+  if (calendarBusy.status === "error") return false; // fail closed — never offer an unverifiable slot
+  return !slotConflictsWithBusy(windowStartMs, windowEndMs, calendarBusy.busy);
 }
