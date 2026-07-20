@@ -84,7 +84,7 @@
 ## 🟡 Business onboarding
 - [x] Widget installation guide (WordPress, Wix, Squarespace, Shopify, Webflow, HTML, Google Tag Manager) — `Settings → Website Widget`, 2026-07-06, includes a live "verify installation" check
 - [ ] Dashboard "Getting Started" guide
-- [ ] Test the widget on several real websites
+- [x] Test the widget on a real website — done 2026-07-20: created a fresh production test org ("Claude Widget Test Co", real signup + email confirmation, no real customer touched) and a genuinely separate public site (GitHub Pages, `niteowl-bot.github.io`) with the real embed snippet. Confirmed `widget.js` loads from `niteowlhq.com`, the page satisfies `/api/widget/verify-install`'s checks, and a real cross-origin `/api/widget/chat` conversation succeeded with correct `Access-Control-Allow-Origin` — Remy correctly deferred rather than inventing an answer for this knowledge-less test org. Production test org and auth user deleted afterward; only one real site tested so far (a static GitHub Pages page), not yet WordPress/Wix/Squarespace/Shopify/Webflow/GTM specifically — those still open
 - [x] Verify email deliverability (2026-07-06 — `mail.niteowlhq.com` verified with Resend, `RESEND_FROM_EMAIL` switched to `remy@mail.niteowlhq.com`; confirmed via a real end-to-end send with SPF/DKIM passing and a real booking's confirmation emails checked via Resend's own send log)
 
 ## 🟡 Admin

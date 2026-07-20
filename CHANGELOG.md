@@ -2,6 +2,14 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-20 (Website widget — verified on a real external site)
+
+### Tested, end-to-end, against real production
+- Signed up a brand-new production test business ("Claude Widget Test Co", real signup + real email confirmation via a Gmail plus-alias, no existing customer touched) to get a genuine `widget_key` without risking any real org's data.
+- Published a minimal static page to a real, separate public domain (GitHub Pages, `niteowl-bot.github.io/niteowl-widget-test`) with the exact embed snippet a real business owner would copy from `Settings → Website Widget`.
+- Confirmed `widget.js` serves correctly from `niteowlhq.com`, the published page satisfies both checks `/api/widget/verify-install` looks for (script tag present, `widget_key` present), and a real cross-origin conversation against `/api/widget/chat` succeeded with the correct `Access-Control-Allow-Origin` header — Remy correctly said it didn't have an answer and offered to loop in the team, rather than inventing one, for this intentionally knowledge-empty test org.
+- Cleaned up afterward: production test org + auth user deleted via SQL; the temporary GitHub repo is pending manual deletion by the owner (API token used lacks the `delete_repo` scope).
+
 ## 2026-07-20 (Production deploy failure — missing RESEND_API_KEY)
 
 ### Fixed
