@@ -20,7 +20,17 @@ interface ImportFile {
   error?: string;
 }
 
-export default function ImportClient({ orgId, orgName }: { orgId: string; orgName: string }) {
+export default function ImportClient({
+  orgId,
+  orgName,
+  initialImportId = null,
+  initialImportStatus = null,
+}: {
+  orgId: string;
+  orgName: string;
+  initialImportId?: string | null;
+  initialImportStatus?: string | null;
+}) {
   const [step, setStep] = useState<Step>("upload");
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -42,6 +52,37 @@ export default function ImportClient({ orgId, orgName }: { orgId: string; orgNam
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
+
+  // Resume a batch that was still processing or awaiting review from a
+  // previous visit (e.g. the tab was reloaded while a multi-page PDF was
+  // still being read) instead of silently dropping back to "upload".
+  useEffect(() => {
+    if (!initialImportId) return;
+
+    if (initialImportStatus === "ready_for_review") {
+      (async () => {
+        const res = await fetch(`/api/knowledge/import/${initialImportId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        setImportId(initialImportId);
+        setFiles(json.files ?? []);
+        await loadDuplicateTitles(json.items ?? []);
+        setItems(json.items ?? []);
+        setStep("review");
+      })();
+    } else if (initialImportStatus === "uploaded" || initialImportStatus === "processing") {
+      (async () => {
+        const res = await fetch(`/api/knowledge/import/${initialImportId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        setImportId(initialImportId);
+        setFiles(json.files ?? []);
+        setStep("processing");
+        startPolling(initialImportId);
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialImportId, initialImportStatus]);
 
   function handleFileSelect(fileList: FileList | null) {
     if (!fileList) return;

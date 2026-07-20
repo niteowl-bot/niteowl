@@ -61,10 +61,36 @@ interface ScorableCandidate {
 // (findLikelyDuplicate) and against an in-memory list of items already
 // staged earlier in the SAME import batch (findLikelyDuplicateAmong) —
 // see the comment on that function for why the batch-local check exists.
+//
+// needleTitle gets one extra check ahead of the word-overlap score: an
+// exact (case/whitespace-insensitive) title match against a candidate is
+// treated as a duplicate outright, regardless of how much the content
+// differs. Found via real testing: re-importing an updated version of a
+// document (e.g. new opening hours) naturally repeats the old entry's
+// exact title with substantially different content — different enough
+// that title+content word overlap fell well under the threshold, so two
+// same-titled "Opening hours" entries silently coexisted with no
+// duplicate banner. Two org entries sharing one literal title are always
+// meant to represent the same fact, so this can't introduce a false
+// negative anywhere the threshold check already wouldn't; it only adds
+// coverage, matching this function's existing bias toward false
+// positives (a reviewer clicks "Keep both" once) over silently letting a
+// real duplicate/conflict through.
 function scoreCandidates(
+  needleTitle: string,
   needleWords: string[],
   candidates: ScorableCandidate[]
 ): DuplicateMatch | null {
+  const normalizedNeedleTitle = needleTitle.trim().toLowerCase();
+  if (normalizedNeedleTitle) {
+    const exactTitleMatch = candidates.find(
+      (record) => record.title.trim().toLowerCase() === normalizedNeedleTitle
+    );
+    if (exactTitleMatch) {
+      return { knowledgeId: exactTitleMatch.id, title: exactTitleMatch.title, matchedWordRatio: 1 };
+    }
+  }
+
   let best: DuplicateMatch | null = null;
   const uniqueNeedleWords = [...new Set(needleWords)];
 
@@ -124,7 +150,7 @@ export async function findLikelyDuplicate(
     return null;
   }
 
-  return scoreCandidates(needleWords, data);
+  return scoreCandidates(title, needleWords, data);
 }
 
 // Checks a candidate against items already extracted/staged EARLIER IN
@@ -149,5 +175,5 @@ export function findLikelyDuplicateAmong(
   const needleWords = meaningfulWords(`${title} ${content ?? ""}`);
   if (needleWords.length === 0 || candidates.length === 0) return null;
 
-  return scoreCandidates(needleWords, candidates);
+  return scoreCandidates(title, needleWords, candidates);
 }

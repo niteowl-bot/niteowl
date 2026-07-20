@@ -22,5 +22,25 @@ export default async function KnowledgeImportPage() {
 
   if (!org) redirect("/onboarding");
 
-  return <ImportClient orgId={org.id} orgName={org.business_name} />;
+  // Resume an in-flight or unreviewed batch instead of always starting at
+  // the upload step — otherwise a reload/tab-close while a multi-page PDF
+  // is still processing (the case this can easily take a minute for)
+  // strands a real ready_for_review batch with no way back to it from the UI.
+  const { data: resumableImport } = await supabase
+    .from("knowledge_imports")
+    .select("id, status")
+    .eq("org_id", org.id)
+    .in("status", ["uploaded", "processing", "ready_for_review"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return (
+    <ImportClient
+      orgId={org.id}
+      orgName={org.business_name}
+      initialImportId={resumableImport?.id ?? null}
+      initialImportStatus={resumableImport?.status ?? null}
+    />
+  );
 }
