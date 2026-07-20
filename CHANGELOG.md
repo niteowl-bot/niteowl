@@ -2,6 +2,12 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-20 (Production deploy failure — missing RESEND_API_KEY)
+
+### Fixed
+- **Bug found and fixed — missing `RESEND_API_KEY` in Vercel Production failed the entire build, not just email**: the AI Import fixes below failed to deploy with `Error: Missing API key. Pass it to the constructor 'new Resend("re_123")'` during "Collecting page data" for `/api/sales/chat`. Root cause: `src/lib/email.ts` does `new Resend(process.env.RESEND_API_KEY)` at module scope (not lazily inside a function), and Next.js's build-time page-data collection evaluates that module — so a missing key kills the whole production build. Confirmed via a local `next build` succeeding cleanly (`.env.local` has the key), isolating the problem to Vercel's Production environment variable rather than the code. Owner confirmed the var was missing from Vercel, re-added it from Resend's dashboard, and redeployed. No code changes were needed for this fix — deliberately left `email.ts`'s eager instantiation as-is rather than also refactoring a working file in the same pass; worth revisiting (lazy client construction) if this class of failure recurs.
+- **Verified end-to-end against real production**: ran a real 6-turn sales-chat demo-lead conversation directly against `niteowlhq.com` (no browser needed — the API contract is plain HTTP with a streamed plain-text reply) covering all 5 required fields plus explicit confirmation. No stream errors at any turn; the final reply used the completion message that the code only sends once `sendSalesLeadNotification` actually succeeds. Owner confirmed the real notification email arrived at `admin@niteowlhq.com`. The test lead row was verified and deleted from production afterward.
+
 ## 2026-07-20 (AI Import — real multi-page PDF test: 2 bugs found and fixed)
 
 ### Tested, end-to-end, against real dev data (`Plumbing Co 3`, `kioljdihgbcboxlnwghv`)
