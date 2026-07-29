@@ -7,6 +7,7 @@ const SETTINGS_TABS = [
   { href: "/settings/business", label: "Business" },
   { href: "/settings/hours", label: "Business Hours" },
   { href: "/settings/widget", label: "Website Widget" },
+  { href: "/settings/calendar", label: "Calendar" },
   { href: "/settings/billing", label: "Billing" },
   // Future tabs — add one line each, no other changes needed:
   // { href: "/settings/ai-behaviour", label: "AI Behaviour" },
