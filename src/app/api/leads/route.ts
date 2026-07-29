@@ -380,12 +380,25 @@ export async function PATCH(req: NextRequest) {
   // Fetch the lead and verify ownership via org
   const { data: existing, error: fetchError } = await supabase
     .from("leads")
-    .select("id, org_id")
+    .select("id, org_id, appointment_datetime")
     .eq("id", raw.id)
     .single();
 
   if (fetchError || !existing) {
     return NextResponse.json({ error: "Lead not found." }, { status: 404 });
+  }
+
+  // Invariant: a lead may only be Booked once it has a saved appointment
+  // date/time (the calendar renders leads by appointment_datetime). Refuse
+  // to mark Booked without one so status and calendar never disagree.
+  if (raw.status === "booked" && !existing.appointment_datetime) {
+    return NextResponse.json(
+      {
+        error:
+          "A lead can only be marked Booked once it has an appointment date/time. Set the appointment time first.",
+      },
+      { status: 422 }
+    );
   }
 
   const { data: org, error: orgError } = await supabase
