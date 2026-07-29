@@ -2,10 +2,84 @@ import SalesChatWidget from "./SalesChatWidget";
 import PricingPrice from "./PricingPrice";
 import HeroDemo from "./HeroDemo";
 
+// Objection-handling FAQ — every answer reflects real, shipped behaviour.
+// Reused for both the visible section and the FAQPage structured data so
+// they always match (a Google requirement for rich results).
+const FAQS = [
+  {
+    q: "Do I need any technical skills to set up Remy?",
+    a: "No. A short guided setup walks you through your business details, opening hours and a few knowledge entries, then you paste one snippet onto your website. Most owners are live in about 10 minutes.",
+  },
+  {
+    q: "How does Remy know how to answer my customers?",
+    a: "Remy answers from your Knowledge Base — your services, prices, hours, policies and FAQs. It never invents details, and anything it can't confidently answer is handed to you.",
+  },
+  {
+    q: "What happens when Remy can't answer something?",
+    a: "It politely takes the customer's details, saves the enquiry as a lead, and notifies you to follow up — so you never lose the enquiry, even out of hours.",
+  },
+  {
+    q: "Can Remy actually book appointments?",
+    a: "Yes. Remy checks your business hours and availability and books the appointment right in the chat, preventing double-bookings. Every booking appears in your dashboard and calendar.",
+  },
+  {
+    q: "What does it cost, and can I cancel anytime?",
+    a: "One simple plan with everything included, billed monthly. Start with a 14-day free trial — no card required — and cancel anytime.",
+  },
+  {
+    q: "Will Remy replace my team?",
+    a: "No. Remy handles routine questions and bookings around the clock and gracefully hands unusual requests to your team, so your people focus on the work only they can do.",
+  },
+];
+
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      name: "Remy",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      description:
+        "Remy is an AI receptionist that answers customer questions instantly, captures every enquiry, and books appointments 24/7 — then hands unusual requests to your team.",
+      offers: {
+        "@type": "Offer",
+        price: "79",
+        priceCurrency: "GBP",
+      },
+      provider: {
+        "@type": "Organization",
+        name: "NiteOwl AI Ltd",
+        url: "https://niteowlhq.com",
+      },
+    },
+    {
+      "@type": "FAQPage",
+      mainEntity: FAQS.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    },
+  ],
+};
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-white font-sans">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <SalesChatWidget />
+
+      {/* Accessibility: let keyboard/screen-reader users jump past the nav. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-slate-900 focus:shadow-lg"
+      >
+        Skip to content
+      </a>
 
       {/* ── NAV ── */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/90 backdrop-blur-sm border-b border-slate-800">
@@ -30,6 +104,7 @@ export default function Home() {
         </div>
       </nav>
 
+      <main id="main-content">
       {/* ── HERO ── */}
       <section className="bg-slate-950 pt-32 pb-24 px-6">
         <HeroDemo />
@@ -237,6 +312,43 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── FAQ ── */}
+      <section id="faq" className="bg-white py-24 px-6">
+        <div className="max-w-3xl mx-auto">
+          <div className="text-center mb-12">
+            <p className="text-indigo-600 text-sm font-semibold uppercase tracking-widest mb-3">
+              FAQ
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight">
+              Everything you need to know
+            </h2>
+          </div>
+
+          <div className="divide-y divide-slate-200 border-y border-slate-200">
+            {FAQS.map((item) => (
+              <details key={item.q} className="group py-5">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 list-none text-slate-900 font-semibold text-base marker:content-none">
+                  {item.q}
+                  <svg
+                    className="w-5 h-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                  </svg>
+                </summary>
+                <p className="mt-3 text-slate-500 text-sm leading-relaxed">
+                  {item.a}
+                </p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA STRIP ── */}
       <section className="bg-indigo-600 py-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
@@ -254,6 +366,7 @@ export default function Home() {
           </a>
         </div>
       </section>
+      </main>
 
       {/* ── FOOTER ── */}
       <footer className="bg-slate-950 border-t border-slate-800 py-10 px-6">
