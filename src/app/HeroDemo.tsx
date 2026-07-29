@@ -3,28 +3,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─────────────────────────────────────────────────────────────
-//  FINAL DEMO VIDEO URL GOES HERE
+//  PUBLIC DEMO CONFIG — public URLs only, no secrets.
 //
-//  Paste the hosted 2-minute Remy demo video URL below when it is
-//  ready. A direct file URL (.mp4 / .webm) is expected — it is played
-//  in a native <video> element inside the modal.
+//  Both values are safe to expose to the browser, so they use the
+//  NEXT_PUBLIC_ prefix (inlined at build time). Set them in `.env.local`
+//  for local dev and in Vercel → Project → Settings → Environment
+//  Variables for deployments (see the notes at the bottom of this file).
 //
-//  While this is left empty, the hero shows a branded Remy demo
-//  placeholder (poster + "coming soon" state) instead of a real video,
-//  so nothing fake is ever presented to visitors.
-// ─────────────────────────────────────────────────────────────
-const REMY_DEMO_VIDEO_URL = "";
-
-// ─────────────────────────────────────────────────────────────
-//  "BOOK A LIVE DEMO" DESTINATION
+//  NEXT_PUBLIC_REMY_DEMO_VIDEO_URL
+//    A direct, PUBLIC video file URL (.mp4 / .webm) — played in the
+//    native <video> element inside the modal for any signed-out visitor,
+//    no account required. This is NOT a YouTube/Vimeo watch-page URL.
+//    While unset, the modal shows the branded "See Remy in Action"
+//    placeholder instead of a fake video. Adding the URL immediately
+//    enables public playback — no code change needed.
 //
-//  Temporary placeholder until a scheduling flow (e.g. Cal.com /
-//  Calendly) is live. Swap the value below for that booking URL when
-//  ready — no other change is needed. Defaults to an email enquiry so
-//  the button is genuinely functional today rather than a dead link.
+//  NEXT_PUBLIC_REMY_BOOKING_URL
+//    A public scheduling page (e.g. Cal.com / Calendly), opened in a new
+//    tab by "Book a Live Demo". While unset, that button renders clearly
+//    disabled as "Live Demo Booking Coming Soon" — never a dead "#" link
+//    and never a sign-in redirect.
 // ─────────────────────────────────────────────────────────────
-const BOOK_DEMO_URL =
-  "mailto:contact@niteowlhq.com?subject=Book%20a%20live%20Remy%20demo";
+const REMY_DEMO_VIDEO_URL = process.env.NEXT_PUBLIC_REMY_DEMO_VIDEO_URL ?? "";
+const REMY_BOOKING_URL = process.env.NEXT_PUBLIC_REMY_BOOKING_URL ?? "";
 
 const DEMO_LABEL = "Watch the 2-minute Remy demo video";
 
@@ -238,7 +239,7 @@ function DemoModal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Remy 2-minute demo video"
+        aria-label="Remy product demo"
         onKeyDown={onKeyDown}
         className="relative w-full max-w-4xl"
       >
@@ -288,18 +289,64 @@ function DemoModal({
                 >
                   Start Your Free 14-Day Trial
                 </a>
-                <a
-                  href={BOOK_DEMO_URL}
-                  className="rounded-lg bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700"
-                >
-                  Book a Live Demo
-                </a>
+                <BookDemoButton />
               </div>
             </div>
           )}
         </div>
+
+        {/* When the real video is available, still offer the second choice
+            (book a live demo) + an optional, non-required trial link. */}
+        {videoUrl && (
+          <div className="mt-4 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <BookDemoButton />
+            <a
+              href="/signup"
+              className="text-sm font-medium text-slate-300 underline-offset-4 transition-colors hover:text-white hover:underline"
+            >
+              Or start your free 14-day trial
+            </a>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Book a Live Demo" action.
+ *
+ * Renders a real link that opens the public booking page in a new tab
+ * when NEXT_PUBLIC_REMY_BOOKING_URL is configured; otherwise renders a
+ * clearly-disabled button labelled "Live Demo Booking Coming Soon".
+ * Never a dead "#" link, a fake destination, or a sign-in redirect.
+ */
+function BookDemoButton({ className = "" }: { className?: string }) {
+  const base = "rounded-lg px-5 py-2.5 text-sm font-semibold transition-colors";
+
+  if (REMY_BOOKING_URL) {
+    return (
+      <a
+        href={REMY_BOOKING_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${base} bg-slate-800 text-slate-200 hover:bg-slate-700 ${className}`}
+      >
+        Book a Live Demo
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled
+      aria-disabled="true"
+      title="Live demo booking will be available soon"
+      className={`${base} cursor-not-allowed bg-slate-800/60 text-slate-500 ${className}`}
+    >
+      Live Demo Booking Coming Soon
+    </button>
   );
 }
 
