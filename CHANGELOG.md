@@ -2,6 +2,18 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-29 (Marketing homepage — hero demo & conversion refinements)
+
+### Changed — marketing homepage only; no product/app/auth/DB/booking/widget changes
+Refined the public marketing homepage (`src/app/page.tsx`) and added a new hero demo component (`src/app/HeroDemo.tsx`). Copy-and-layout only; the Remy chat widget, authentication, dashboard, booking engine, and all APIs are untouched. Homepage `/` remains statically prerendered (no added initial-load cost, no layout shift). Tagged `v0.9-marketing-ready`.
+- **Redesigned hero** (`HeroDemo.tsx`, new client component, still server-rendered for SEO): two-column layout — H1 "Never Miss Another Customer Enquiry", supporting copy (answers questions, captures enquiries, books appointments), primary CTA "Start Your Free 14-Day Trial" (→ `/signup`, unchanged destination) plus a "Watch 2-Minute Demo" button. The old missed-call phone mock-up was replaced by a 16:9 branded demo video preview built as an image-free CSS poster (no extra network request, no CLS). Video sits beside the copy on desktop, below it on mobile.
+- **Accessible demo modal**: opens from the button or the poster; `role="dialog"`, `aria-modal`, focus trap, Escape-to-close, backdrop click, body scroll-lock, video torn down on close, no autoplay audio. The real video URL is a single clearly-named placeholder `REMY_DEMO_VIDEO_URL` (empty for now → shows an honest "See Remy in Action" panel with trial + "Book a Live Demo" CTAs; `BOOK_DEMO_URL` is configurable, defaulting to an email enquiry rather than a dead link).
+- **Homepage cleanup**: removed the two now-duplicated legacy sections (old "How it works" missed-call 3-step, and "Who it's for" industry grid); replaced by a new "Perfect For" industry grid and a 5-step "How Remy Works". The one genuinely different element (the ROI/value line) was merged, reworded, into "Perfect For"; the `#how-it-works` anchor was preserved on the new process section.
+- **Truthful messaging alignment**: re-pointed remaining copy from missed-call/SMS framing to website enquiries → lead capture → bookings (pricing subtitle + feature list, CTA-strip headline, social-proof stat). Removed the green "Live demo" badge and the absolute "100%" stat; replaced "Trusted by local businesses" (implied customers we don't yet have) with "Built for local businesses". No fake testimonials or customer counts.
+- **Conversion refinements**: standardised the primary CTA to "Start Your Free 14-Day Trial" across hero, mid-page, pricing and CTA strip (nav stays short "Start free trial"); added a centred CTA after "How Remy Works" with "No credit card required • Cancel anytime".
+- **Accessibility**: single H1, clean H2/H3 hierarchy, decorative emoji `aria-hidden`, labelled buttons/dialog, keyboard-navigable modal.
+- **Verified** (2026-07-29): `eslint` (no new issues — the same 10 pre-existing, unrelated warnings/errors), `tsc --noEmit` clean, `next build` clean with `/` still statically prerendered. Live dev render confirmed all copy, both new sections, a single H1, and the chat widget launcher intact. Browser click-through (modal + breakpoints) left to the owner — browser automation was unavailable this session.
+
 ## 2026-07-20 (Calendar & Appointment Management — Step 2: read real-time availability)
 
 ### Added — additive; reuses the existing booking engine, no new booking system
