@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Out-of-band test/util scripts, run directly with node (not part of the app build).
+    "scripts/**",
   ]),
 ]);
 

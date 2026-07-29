@@ -129,12 +129,28 @@ function EditPanel({
     setSaving(true);
     setSaveError(null);
 
+    // When Booked, the appointment field is a datetime-local picker; parse it
+    // to an ISO timestamp. A lead may only be Booked with a valid appointment
+    // date/time (the calendar reads appointment_datetime), so refuse to save
+    // otherwise — the DB CHECK constraint is the final backstop.
+    const usesDatetimePicker = hasConfirmedAppointment || status === "booked";
+    const appointmentIso =
+      usesDatetimePicker && datetime.trim()
+        ? new Date(datetime).toISOString()
+        : null;
+
+    if (status === "booked" && (!appointmentIso || Number.isNaN(Date.parse(appointmentIso)))) {
+      setSaveError("Add an appointment date and time before marking this lead as Booked.");
+      setSaving(false);
+      return;
+    }
+
     const supabase = createClient();
-    const updates = hasConfirmedAppointment
+    const updates = usesDatetimePicker
       ? {
           status,
           service_needed: service.trim() || null,
-          appointment_datetime: datetime ? new Date(datetime).toISOString() : null,
+          appointment_datetime: appointmentIso,
           notes: notes.trim() || null,
         }
       : {
@@ -288,15 +304,26 @@ function EditPanel({
               {/* Appointment */}
               <div>
                 <label className={labelCls}>
-                  {hasConfirmedAppointment ? "Appointment time" : "Preferred time"}
+                  {hasConfirmedAppointment || status === "booked"
+                    ? "Appointment time"
+                    : "Preferred time"}
                 </label>
                 <input
-                  type={hasConfirmedAppointment ? "datetime-local" : "text"}
+                  type={hasConfirmedAppointment || status === "booked" ? "datetime-local" : "text"}
                   value={datetime}
                   onChange={(e) => setDatetime(e.target.value)}
-                  placeholder={hasConfirmedAppointment ? undefined : "e.g. Tomorrow at 4pm"}
+                  placeholder={
+                    hasConfirmedAppointment || status === "booked"
+                      ? undefined
+                      : "e.g. Tomorrow at 4pm"
+                  }
                   className={inputCls}
                 />
+                {status === "booked" && (
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Required to mark this lead as Booked — this is what appears on your calendar.
+                  </p>
+                )}
               </div>
 
               {/* Notes */}

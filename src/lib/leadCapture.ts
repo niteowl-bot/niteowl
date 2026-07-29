@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
 import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
+import { enforceBookedInvariant } from "@/lib/bookingInvariant";
 import { after } from "next/server";
 
 // ── Shared lead-capture engine ───────────────────────────────────
@@ -735,10 +736,11 @@ export async function capturePartialLead(
     const mergedEmail = extracted.email ?? existing.email;
     const mergedPhone = extracted.phone ?? existing.phone;
 
-    const updatedAppointmentIso =
-      extracted.intent === "reschedule" && extracted.preferred_datetime
-        ? resolvedIso
-        : resolvedIso ?? existing.appointment_datetime;
+    // Never discard an existing appointment when a (re)parse yields nothing:
+    // a failed reschedule keeps the already-confirmed time rather than
+    // nulling it, which would otherwise leave a "booked" lead with no
+    // calendar entry.
+    const updatedAppointmentIso = resolvedIso ?? existing.appointment_datetime;
 
     const nextStatus: LeadStatus =
       PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
@@ -765,6 +767,12 @@ export async function capturePartialLead(
         ? "needs_review"
         : "new";
 
+    // Invariant guard: a lead may only be "booked" with a saved appointment
+    // timestamp (the calendar reads appointment_datetime). If anything above
+    // resolves to "booked" without one, downgrade to needs_review so the
+    // stored status and the calendar can never disagree.
+    const safeNextStatus = enforceBookedInvariant(nextStatus, updatedAppointmentIso);
+
 
     // Every lead gets a manage_token so a booking-confirmation email can
     // always link to the self-service cancel/reschedule page, even for
@@ -784,7 +792,7 @@ export async function capturePartialLead(
       preferred_datetime: updatedDatetime,
       appointment_datetime: updatedAppointmentIso,
       message: deduplicateMessage(existing.message, userMessage),
-      status: nextStatus,
+      status: safeNextStatus,
       ai_confidence: extracted.confidence,
       manage_token: manageToken,
       ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
@@ -809,7 +817,7 @@ export async function capturePartialLead(
 
       if (
         !needsReview &&
-        nextStatus === "needs_review" &&
+        safeNextStatus === "needs_review" &&
         Boolean(mergedEmail || mergedPhone)
       ) {
         needsReviewContactCaptured = true;
@@ -865,7 +873,7 @@ export async function capturePartialLead(
         }
       }
 
-      if (nextStatus === "booked" && existing.status !== "booked") {
+      if (safeNextStatus === "booked" && existing.status !== "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
       // Not awaited on the request's own critical path — but a bare
       // fire-and-forget promise here is unsafe on Vercel's serverless
@@ -907,6 +915,10 @@ export async function capturePartialLead(
   ? "needs_review"
   : "new";
 
+  // Invariant guard (see update path): never insert a "booked" lead without
+  // a valid appointment timestamp.
+  const safeInsertStatus = enforceBookedInvariant(insertStatus, resolvedIso);
+
 
 
   const manageToken = crypto.randomUUID();
@@ -925,7 +937,7 @@ export async function capturePartialLead(
       appointment_datetime: resolvedIso,
       message: userMessage,
       ai_confidence: extracted.confidence,
-      status: insertStatus,
+      status: safeInsertStatus,
       manage_token: manageToken,
     })
     .select("id")
@@ -936,7 +948,7 @@ export async function capturePartialLead(
     console.error("[lead capture] insert failed:", insertError.message);
   } else {
     console.log("[lead capture] inserted new lead:", inserted?.id);
-    if (insertStatus === "booked") {
+    if (safeInsertStatus === "booked") {
       const ownerInfo = await getOrgOwnerEmail(orgId);
       after(() =>
         sendBookingConfirmationEmails({
