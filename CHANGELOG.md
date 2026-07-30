@@ -2,6 +2,13 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-30 (Booking weekday parsing + closing-time validation — summary)
+
+Concise summary of the booking-hours work; the detailed root-cause write-up is in the entry immediately below.
+- **Named weekdays resolved to the wrong day.** `parseDatetimeToIso` let the model decide which calendar date a weekday name meant, and it resolved "Monday" to Saturday 1 August. Business hours were then validated against the wrong day, so Monday 18:45 was refused as "outside business hours" against a 09:00–19:00 Monday. Weekday→date is now exact arithmetic in code (`snapToNamedWeekday`), with timezone-correct wall-clock→UTC conversion so 18:45 stays 18:45 in the business's timezone.
+- **Appointments could be booked past closing time.** `isWithinBusinessHours` only checked the start time, so a 60-minute appointment at 18:45 against a 19:00 close was silently accepted. It now rejects `start + duration > close` with a distinct `ends_after_close` reason, `findNextAvailableSlot` only offers slots that fit before closing, and both chat routes explain that the *appointment* would finish after closing rather than falsely calling the requested time outside business hours.
+- **28 regression tests added** for booking-date and availability logic (`tests/`), run with `npm test`. Node's built-in test runner and native TypeScript support — no new dependencies. The HTTP layer is stubbed rather than injecting fakes into working booking code, so the real `availability.ts` and `parseDatetime.ts` run unmodified with no Supabase project contacted, no dev record mutated and no OpenAI spend. Verified to genuinely catch the bugs: 6 of the 28 fail against the pre-fix code, and the other 22 guard behaviour that already worked (Sunday closed, per-day hours, emergency mode, no-hours-configured fail-open). `tsc --noEmit`, `next build` and `eslint` unaffected.
+
 ## 2026-07-30 (Business hours — Monday 18:45 wrongly rejected as "outside business hours")
 
 ### Fixed — two distinct defects; no schema, design, pricing, widget-appearance or unrelated changes
