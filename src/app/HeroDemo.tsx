@@ -39,10 +39,12 @@ const REMY_DEMO_VIDEO_URL =
   process.env.NEXT_PUBLIC_REMY_DEMO_VIDEO_URL || REMY_DEMO_VIDEO_FILE;
 const REMY_BOOKING_URL = process.env.NEXT_PUBLIC_REMY_BOOKING_URL ?? "";
 
-const DEMO_LABEL = "Watch the Remy 2-minute product demo";
+// Matches the button's visible text exactly, so the accessible name and
+// the name a visitor reads aloud are the same thing.
+const DEMO_LABEL = "Watch 90-Second Walkthrough";
 
-// The preview carries its own visible label now, and an accessible name
-// that contradicts it ("2-minute demo") would be worse than none.
+// The preview has no visible text of its own, so its accessible name
+// carries the extra context the overlay conveys visually.
 const PREVIEW_LABEL =
   "Watch the 90-second Remy walkthrough with narration";
 
@@ -88,7 +90,7 @@ export default function HeroDemo() {
               className="inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-8 py-3.5 rounded-lg transition-colors text-base"
             >
               <PlayIcon className="w-4 h-4" />
-              Watch 2-Minute Demo
+              Watch 90-Second Walkthrough
             </button>
           </div>
 
@@ -195,7 +197,7 @@ function DemoVideo({
           // that already carries the accessible name, so it is hidden from
           // assistive tech and lets clicks fall through to that button.
           {...(isModal
-            ? { controls: true, "aria-label": "Remy 2-minute product demo" }
+            ? { controls: true, "aria-label": "Remy 90-second walkthrough" }
             : { "aria-hidden": true, tabIndex: -1 })}
           onCanPlay={() => {
             setStatus("ready");

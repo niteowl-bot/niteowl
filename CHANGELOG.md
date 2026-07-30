@@ -2,6 +2,10 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-30 (Homepage demo CTA duration copy)
+
+- Homepage demo CTA and its accessibility labels updated from "2-Minute Demo" to "90-Second Walkthrough", matching the walkthrough's actual 90-second runtime. Copy only — no behaviour, styling or layout change.
+
 ## 2026-07-30 (Homepage walkthrough entry experience — narration is now discoverable)
 
 ### Changed — walkthrough entry and sound control only; no narration, captions, music, scene timing, visuals, homepage layout, booking, onboarding, chat, Knowledge Base, Leads, pricing, schema or API changes
