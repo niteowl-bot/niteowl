@@ -261,7 +261,7 @@ function buildSystemPrompt(
   knowledge: KnowledgeRecord[],
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
-  unavailableReason: "hours" | "capacity" | null = null,
+  unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null,
   handoffAskContact: boolean = false,
   handoffContactCaptured: boolean = false
 ): string {
@@ -368,6 +368,8 @@ function buildSystemPrompt(
         "## Availability Note",
 unavailableReason === "capacity"
   ? `The customer's requested time is unfortunately already booked (fully booked for that slot). Politely let them know it's no longer available, and suggest ${formatted} as the nearest available alternative instead. Do not confirm the original requested time as booked.`
+  : unavailableReason === "ends_after_close"
+  ? `The customer's requested start time IS within business hours, but the appointment would not finish before the business closes that day. Do NOT tell them the requested time is outside business hours or closed — that is wrong and confusing. Explain that the appointment itself would run past closing time, and suggest ${formatted} as the nearest time that fits in full instead. Do not confirm the original requested time as booked.`
   : `The customer's requested time is outside business hours. Politely let them know, and suggest ${formatted} as the nearest available alternative instead. Do not confirm the original requested time as booked.`
 
       ].join("\n")
@@ -473,7 +475,7 @@ const { messages, conversationId, orgId, source, includeDrafts } = await req.jso
 let detectedIntent: LeadIntent = "unknown";
 let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
-  let unavailableReason: "hours" | "capacity" | null = null;
+  let unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null;
   let handoffAskContact = false;
   let handoffContactCaptured = false;
 

@@ -26,7 +26,20 @@ export interface BusinessHoursRow {
 
 export interface AvailabilityResult {
   isAvailable: boolean;
-  reason?: "closed_day" | "outside_hours" | "lunch_break" | "no_hours_configured";
+  reason?:
+    | "closed_day"
+    | "outside_hours"
+    | "lunch_break"
+    | "no_hours_configured"
+    // Start time is inside opening hours, but the appointment would run
+    // past closing (e.g. 18:45 + 60 min against a 19:00 close). Kept
+    // distinct from "outside_hours" so Remy can explain that it's the
+    // length that doesn't fit, not the requested time itself.
+    | "ends_after_close";
+  /** Only set for "ends_after_close" — lets the reply state both numbers. */
+  appointmentDurationMinutes?: number;
+  /** Minutes between the requested start and closing time. */
+  minutesUntilClose?: number;
 }
 
 // Extract local Europe/London weekday (0=Sun) and minutes-since-midnight from an ISO datetime
@@ -105,7 +118,8 @@ export async function isWithinBusinessHours(
 ): Promise<AvailabilityResult> {
   const supabase = createAdminClient();
 
-  const { emergencyModeEnabled } = await getOrgSettings(supabase, orgId);
+  const { emergencyModeEnabled, appointmentDurationMinutes } =
+    await getOrgSettings(supabase, orgId);
   if (emergencyModeEnabled) {
     return { isAvailable: true };
   }
@@ -140,6 +154,19 @@ export async function isWithinBusinessHours(
     if (minutesOfDay >= lunchStart && minutesOfDay < lunchEnd) {
       return { isAvailable: false, reason: "lunch_break" };
     }
+  }
+
+  // The start time is open; check the appointment also finishes by closing.
+  // A 15-minute slot at 18:45 against a 19:00 close is fine; a 60-minute one
+  // is not — and that distinction is reported, rather than pretending the
+  // requested time was outside business hours.
+  if (minutesOfDay + appointmentDurationMinutes > closeMinutes) {
+    return {
+      isAvailable: false,
+      reason: "ends_after_close",
+      appointmentDurationMinutes,
+      minutesUntilClose: closeMinutes - minutesOfDay,
+    };
   }
 
   return { isAvailable: true };
@@ -189,7 +216,13 @@ export async function findNextAvailableSlot(
           minutesOfDay >= lunchStart &&
           minutesOfDay < lunchEnd;
 
-        if (minutesOfDay >= openMinutes && minutesOfDay < closeMinutes && !inLunch) {
+        // Mirrors isWithinBusinessHours: a suggested alternative must also
+        // finish before closing, or Remy would offer a slot it would then
+        // have to refuse.
+        const fitsBeforeClose =
+          minutesOfDay + appointmentDurationMinutes <= closeMinutes;
+
+        if (minutesOfDay >= openMinutes && fitsBeforeClose && !inLunch) {
           const candidateIso = cursor.toISOString();
         const hasCapacity = await isSlotAvailable(orgId, candidateIso);
         if (hasCapacity) {
