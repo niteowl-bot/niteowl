@@ -68,6 +68,12 @@ const COMPACT_BREAKPOINT = 660;
 // and keeps re-renders modest on a page that also runs the sales widget.
 const TICK_MS = 50;
 
+// How long the sound control stays in its inviting state at the top of a
+// loop. Long enough to read the one-line explanation and act on it,
+// short enough that it is out of the way well before the first scene ends
+// (6s) — and it only ever appears to someone who hasn't used the control.
+const SOUND_PROMPT_MS = 9000;
+
 const BUSINESS_NAME = "Bright Plumbing Co.";
 const BUSINESS_SITE = "brightplumbing.co.uk";
 const CUSTOMER_NAME = "Dan Whelan";
@@ -426,8 +432,13 @@ export default function RemyWalkthrough({
   /** Render the sound control. Only legal where the walkthrough is not
       inside a <button> — i.e. the modal, not the hero preview. */
   sound = false,
+  /** Begin narrating on mount. Only pass this where mounting was itself
+      caused by a click, which is the user gesture browsers require —
+      nothing here tries to autoplay sound on page load. */
+  autoStart = false,
 }: {
   sound?: boolean;
+  autoStart?: boolean;
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
@@ -481,12 +492,19 @@ export default function RemyWalkthrough({
     return () => window.clearInterval(id);
   }, [reducedMotion, visible]);
 
+  // Whether the visitor has ever pressed the sound control. Once they
+  // have, the invitation stops appearing — they know where it is. When
+  // narration auto-starts there is nothing to invite them to, so the
+  // control opens in its quiet state.
+  const [soundUsed, setSoundUsed] = useState(autoStart);
+
   // Narration + music. Silent until the visitor asks for sound, and it
   // follows the clock above rather than running one of its own.
   const audio = useWalkthroughAudio({
     elapsed,
     totalMs: TOTAL_MS,
     running: visible && !reducedMotion,
+    autoStart,
   });
 
   const compact = width > 0 ? width < COMPACT_BREAKPOINT : false;
@@ -638,8 +656,12 @@ export default function RemyWalkthrough({
     {!reducedMotion && sound && (
       <SoundToggle
         on={audio.enabled}
-        onClick={audio.toggle}
+        onClick={() => {
+          setSoundUsed(true);
+          audio.toggle();
+        }}
         compact={compact}
+        prominent={!soundUsed && elapsed < SOUND_PROMPT_MS}
       />
     )}
     </>
@@ -648,34 +670,71 @@ export default function RemyWalkthrough({
 
 /**
  * The one new control. Audio cannot start on its own — browsers refuse to
- * autoplay sound — so the walkthrough plays muted with captions until a
- * visitor presses this.
+ * autoplay sound, and nothing here tries to work around that — so the
+ * walkthrough plays muted with captions until a visitor presses this.
+ *
+ * It has two states. Until the visitor has touched it, it opens each loop
+ * as a filled blue pill carrying the invitation, then settles after
+ * PROMPT_MS into the quiet dark pill so it stops competing with the
+ * walkthrough. Once pressed it stays quiet permanently — someone who has
+ * already found the control does not need selling to again — but it never
+ * disappears, so sound can always be turned back off.
+ *
+ * Position is deliberately unchanged between states: it sits in the
+ * caption bar's empty right-hand corner, below the subtitle overlay and
+ * clear of the chapter text, and the prominent state grows downward-left
+ * into that same corner rather than moving somewhere new.
  */
 function SoundToggle({
   on,
   onClick,
   compact,
+  prominent,
 }: {
   on: boolean;
   onClick: () => void;
   compact: boolean;
+  /** Show the filled, explained state rather than the quiet pill. */
+  prominent: boolean;
 }) {
+  const label = on ? "Sound on" : "Turn sound on";
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
       aria-label={
-        on ? "Mute walkthrough narration" : "Play walkthrough narration"
+        on
+          ? "Mute walkthrough narration"
+          : "Turn sound on to hear the 90-second walkthrough narration"
       }
-      className={`absolute z-10 flex items-center gap-1.5 rounded-full bg-black/55 font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-black/75 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+      className={`absolute z-10 flex flex-col items-end rounded-2xl text-right backdrop-blur-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+        prominent
+          ? "bg-blue-600/95 text-white shadow-lg ring-1 ring-blue-300/40 hover:bg-blue-500"
+          : "bg-black/55 text-white/80 ring-1 ring-white/15 hover:bg-black/75 hover:text-white"
+      } ${
         compact
-          ? "bottom-1.5 right-1.5 px-2 py-1 text-[9px]"
-          : "bottom-3 right-3 px-3 py-1.5 text-[11px]"
+          ? "bottom-1.5 right-1.5 max-w-[190px] gap-0.5 px-2 py-1 text-[10px]"
+          : "bottom-3 right-3 max-w-[260px] gap-0.5 px-3 py-1.5 text-[12px]"
       }`}
     >
-      <SpeakerIcon on={on} compact={compact} />
-      {!compact && (on ? "Sound on" : "Sound")}
+      <span className="flex items-center gap-1.5 font-semibold">
+        <SpeakerIcon on={on} compact={compact} />
+        {label}
+      </span>
+
+      {/* Only while inviting: once sound is on, or the visitor has used the
+          control, the explanation is noise. */}
+      {prominent && !on && (
+        <span
+          className={`font-normal leading-snug text-white/90 ${
+            compact ? "text-[9px]" : "text-[11px]"
+          }`}
+        >
+          Click to hear the 90-second walkthrough
+        </span>
+      )}
     </button>
   );
 }

@@ -159,10 +159,22 @@ interface Options {
   totalMs: number;
   /** False while the walkthrough is paused (offscreen / reduced motion). */
   running: boolean;
+  /**
+   * Start with sound on. Legal only when this component was mounted by a
+   * click — the modal is opened from the hero preview, and that click is
+   * the user gesture browsers require. Nothing here attempts to autoplay
+   * sound on page load, and the hero preview itself never passes this.
+   */
+  autoStart?: boolean;
 }
 
-export function useWalkthroughAudio({ elapsed, totalMs, running }: Options) {
-  const [enabled, setEnabled] = useState(false);
+export function useWalkthroughAudio({
+  elapsed,
+  totalMs,
+  running,
+  autoStart = false,
+}: Options) {
+  const [enabled, setEnabled] = useState(autoStart);
   const [narrationFailed, setNarrationFailed] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);

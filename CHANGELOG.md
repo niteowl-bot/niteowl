@@ -2,6 +2,21 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-30 (Homepage walkthrough entry experience — narration is now discoverable)
+
+### Changed — walkthrough entry and sound control only; no narration, captions, music, scene timing, visuals, homepage layout, booking, onboarding, chat, Knowledge Base, Leads, pricing, schema or API changes
+The narration existed but almost nobody would ever have heard it: the sound control lived inside the demo modal, and the only prompt to open that modal was a hover overlay — which never fires on touch.
+- **The hero preview is the play button, and now says so.** The preview was already a single full-area `<button>`, so no layout or structural change was needed. Its overlay is now always visible and centred rather than hover-only: "▶ Watch 90-second walkthrough", with "🔊 Click to hear narration" beneath. Colours reuse the pill styling already present (`bg-white/95` / `text-slate-900`); the only new tone is a mild `bg-black/30` scrim so the text stays legible over the moving walkthrough. The overlay is hidden while the modal is open.
+- **Clicking the preview starts narration immediately, from the top.** `HeroDemo` passes `autoStart={isModal}`, which seeds the audio hook's initial `enabled` state. Because the modal can only be reached by clicking, that click *is* the user gesture browsers require — **nothing attempts to autoplay sound on page load**, and the hero preview itself always passes `autoStart={false}` and stays silent. Closing the modal unmounts it, so reopening is a fresh mount: clock back to 0, narration back to the first sentence.
+- **The sound control reads as a control.** It previously showed the word "Sound" on desktop and **no label at all** on mobile. It now always carries a label — "Turn sound on" when muted, "Sound on" when live — alongside the existing speaker icon. For the first 9 seconds of each loop, and only for a visitor who has never used it, it renders as a filled blue pill with the line "Click to hear the 90-second walkthrough", then settles into the quiet dark pill. It never moves between states and never disappears, so sound can always be turned back off.
+- **`aria-label` on the preview** was saying "Watch the Remy 2-minute product demo", which now contradicts its own visible text; the preview has its own `PREVIEW_LABEL`. The left-column "Watch 2-Minute Demo" button keeps the old wording — pre-existing copy, untouched, and still worth rewording separately since the walkthrough is 90 seconds.
+
+### Verified
+- Narration, captions, music, ducking, scene timings and the 90.000s runtime are unchanged — `src/app/walkthroughNarration.ts` and the mp3 do not appear in the diff at all.
+- Served homepage markup: overlay headline and subtext present, preview `aria-label` correct, **max button nesting depth 1** with tags balanced, and no sound control leaking into the preview (which would be an illegal nested button).
+- `tsc --noEmit`, `next build` and `eslint` clean; `npm test` **36 passing** (untouched).
+- **Not browser-tested by the assistant** (no browser tooling this session): narration actually starting on click, mute/unmute, caption sync while narrating, and desktop vs mobile rendering are logic-verified only. Safari carries the real risk — the modal mounts via a React state update, so the `AudioContext` is created milliseconds after the click rather than inside the handler's call stack. Chrome and Edge honour sticky activation; if Safari refuses, it degrades safely to muted playback with captions and the "Turn sound on" control in place.
+
 ## 2026-07-30 (Voice-over, captions and ambient music on the homepage walkthrough)
 
 ### Added — walkthrough presentation only; no booking logic, business hours, schema, pricing, chat, onboarding, Knowledge Base, Leads or CTA changes

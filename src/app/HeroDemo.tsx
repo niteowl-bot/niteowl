@@ -41,6 +41,11 @@ const REMY_BOOKING_URL = process.env.NEXT_PUBLIC_REMY_BOOKING_URL ?? "";
 
 const DEMO_LABEL = "Watch the Remy 2-minute product demo";
 
+// The preview carries its own visible label now, and an accessible name
+// that contradicts it ("2-minute demo") would be worse than none.
+const PREVIEW_LABEL =
+  "Watch the 90-second Remy walkthrough with narration";
+
 export default function HeroDemo() {
   const [open, setOpen] = useState(false);
 
@@ -98,16 +103,27 @@ export default function HeroDemo() {
             type="button"
             onClick={openModal}
             aria-haspopup="dialog"
-            aria-label={DEMO_LABEL}
+            aria-label={PREVIEW_LABEL}
             className="group relative block w-full aspect-video overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl ring-1 ring-white/5 transition-shadow hover:shadow-indigo-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
           >
             <DemoVideo src={REMY_DEMO_VIDEO_URL} variant="preview" />
-            <span className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-lg">
-                <PlayIcon className="h-3.5 w-3.5" />
-                Watch full demo
+
+            {/* The preview is the primary play button, so the invitation
+                sits in the middle of it and is always visible rather than
+                waiting for a hover that never happens on touch. It is
+                purely decorative — the click target is the whole preview
+                — and it goes away while the modal is open. */}
+            {!open && (
+              <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/30 transition-colors duration-200 group-hover:bg-black/40 group-focus-visible:bg-black/40">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-semibold text-slate-900 shadow-lg">
+                  <PlayIcon className="h-4 w-4" />
+                  Watch 90-second walkthrough
+                </span>
+                <span className="text-xs font-medium text-white/90 drop-shadow-md">
+                  🔊 Click to hear narration
+                </span>
               </span>
-            </span>
+            )}
           </button>
         </div>
       </div>
@@ -154,8 +170,13 @@ function DemoVideo({
   return (
     <>
       {/* The preview is wrapped in a <button> by its caller, so the
-          walkthrough must not render one of its own there. */}
-      {status !== "ready" && <RemyWalkthrough sound={isModal} />}
+          walkthrough must not render one of its own there. The modal is
+          only ever reached by clicking that button, which is the user
+          gesture browsers require before any sound — so the modal's copy
+          starts narrating straight away, from the top. */}
+      {status !== "ready" && (
+        <RemyWalkthrough sound={isModal} autoStart={isModal} />
+      )}
 
       {status !== "error" && (
         <video
