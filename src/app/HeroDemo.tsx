@@ -153,7 +153,9 @@ function DemoVideo({
 
   return (
     <>
-      {status !== "ready" && <RemyWalkthrough />}
+      {/* The preview is wrapped in a <button> by its caller, so the
+          walkthrough must not render one of its own there. */}
+      {status !== "ready" && <RemyWalkthrough sound={isModal} />}
 
       {status !== "error" && (
         <video

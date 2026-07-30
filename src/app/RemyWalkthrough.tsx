@@ -7,6 +7,8 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { captionAt } from "./walkthroughNarration";
+import { useWalkthroughAudio } from "./useWalkthroughAudio";
 
 // ─────────────────────────────────────────────────────────────────────
 //  Remy product walkthrough (homepage hero demo)
@@ -41,6 +43,14 @@ import {
 //
 //  Respects prefers-reduced-motion by rendering a static summary instead
 //  of animating, and pauses entirely while scrolled out of view.
+//
+//  Narration, captions and music are layered on top of this clock, not
+//  woven into it: walkthroughNarration.ts holds the measured sentence
+//  timings, useWalkthroughAudio.ts plays the voice track and the ambient
+//  bed. Captions render from the same `elapsed` value as the visuals, so
+//  they cannot drift. Sound is off until the visitor asks for it (browser
+//  autoplay policy) and is offered only in the demo modal, since the hero
+//  preview is itself a button; the captions read the same either way.
 // ─────────────────────────────────────────────────────────────────────
 
 // Stage design sizes (both 16:9). Content is authored in these pixel
@@ -386,7 +396,10 @@ const SCENES: Scene[] = [
     caption: "Remy answers enquiries, captures leads and books appointments—24/7.",
     captionShort:
       "Remy answers enquiries, captures leads and books appointments—24/7.",
-    ms: 6000,
+    // 9s rather than 6s so the closing narration and the call to action
+    // land on the closing visual instead of overrunning the loop. This is
+    // the only scene duration the voice-over changed; TOTAL_MS is 90s.
+    ms: 9000,
     render: (ctx) => <SceneClosing {...ctx} />,
   },
 ];
@@ -409,7 +422,13 @@ function usePrefersReducedMotion(): boolean {
   );
 }
 
-export default function RemyWalkthrough() {
+export default function RemyWalkthrough({
+  /** Render the sound control. Only legal where the walkthrough is not
+      inside a <button> — i.e. the modal, not the hero preview. */
+  sound = false,
+}: {
+  sound?: boolean;
+}) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -462,6 +481,14 @@ export default function RemyWalkthrough() {
     return () => window.clearInterval(id);
   }, [reducedMotion, visible]);
 
+  // Narration + music. Silent until the visitor asks for sound, and it
+  // follows the clock above rather than running one of its own.
+  const audio = useWalkthroughAudio({
+    elapsed,
+    totalMs: TOTAL_MS,
+    running: visible && !reducedMotion,
+  });
+
   const compact = width > 0 ? width < COMPACT_BREAKPOINT : false;
   const stage = compact ? COMPACT_STAGE : WIDE_STAGE;
   const scale = width > 0 ? width / stage.w : 0;
@@ -479,8 +506,10 @@ export default function RemyWalkthrough() {
   }
   const scene = SCENES[sceneIndex];
   const chip = WORLD_CHIPS[scene.world];
+  const spoken = reducedMotion ? null : captionAt(elapsed);
 
   return (
+    <>
     <div
       ref={wrapperRef}
       role="img"
@@ -539,6 +568,32 @@ export default function RemyWalkthrough() {
             {/* ── Screen ── */}
             <div className="relative flex-1 overflow-hidden bg-[#0d0f14]">
               {scene.render({ t: sceneT, compact, dates })}
+
+              {/* ── Narration captions ──
+                  Subtitles for the voice-over, laid over the screen the way
+                  a video player draws them, so the chapter caption bar below
+                  keeps saying what the *scene* is while this says what is
+                  being *said*. Driven by the same `elapsed` as every frame,
+                  so it cannot fall out of step with the audio — and it is
+                  shown whether or not sound is on, which is the whole point:
+                  most visitors will never press the sound button. */}
+              {spoken && (
+                <div
+                  className={`pointer-events-none absolute inset-x-0 bottom-0 flex justify-center ${
+                    compact ? "px-2 pb-1.5" : "px-8 pb-4"
+                  }`}
+                >
+                  <p
+                    className={`max-w-[85%] rounded-md bg-black/70 text-center font-medium leading-snug text-white ring-1 ring-white/10 backdrop-blur-[2px] ${
+                      compact
+                        ? "px-1.5 py-0.5 text-[8px]"
+                        : "px-3 py-1.5 text-[15px]"
+                    }`}
+                  >
+                    {spoken.text}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* ── Caption ── */}
@@ -570,6 +625,85 @@ export default function RemyWalkthrough() {
         )
       )}
     </div>
+
+    {/* Sits outside the role="img" element on purpose: a button nested
+        inside an image role is invisible to assistive tech. Hidden under
+        reduced motion, where there is no clock for audio to follow.
+
+        `sound` is false in the hero preview because that whole preview is
+        itself a <button> that opens the modal, and a button cannot legally
+        contain another one — React refuses to hydrate the tree if it does.
+        Sound therefore lives in the modal, which is where the demo is
+        actually watched. Captions run in both. */}
+    {!reducedMotion && sound && (
+      <SoundToggle
+        on={audio.enabled}
+        onClick={audio.toggle}
+        compact={compact}
+      />
+    )}
+    </>
+  );
+}
+
+/**
+ * The one new control. Audio cannot start on its own — browsers refuse to
+ * autoplay sound — so the walkthrough plays muted with captions until a
+ * visitor presses this.
+ */
+function SoundToggle({
+  on,
+  onClick,
+  compact,
+}: {
+  on: boolean;
+  onClick: () => void;
+  compact: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      aria-label={
+        on ? "Mute walkthrough narration" : "Play walkthrough narration"
+      }
+      className={`absolute z-10 flex items-center gap-1.5 rounded-full bg-black/55 font-medium text-white/80 ring-1 ring-white/15 backdrop-blur-sm transition hover:bg-black/75 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+        compact
+          ? "bottom-1.5 right-1.5 px-2 py-1 text-[9px]"
+          : "bottom-3 right-3 px-3 py-1.5 text-[11px]"
+      }`}
+    >
+      <SpeakerIcon on={on} compact={compact} />
+      {!compact && (on ? "Sound on" : "Sound")}
+    </button>
+  );
+}
+
+function SpeakerIcon({ on, compact }: { on: boolean; compact: boolean }) {
+  const s = compact ? 10 : 13;
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      {on ? (
+        <>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+        </>
+      ) : (
+        <path d="m16 9 5 6m0-6-5 6" />
+      )}
+    </svg>
   );
 }
 

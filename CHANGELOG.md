@@ -2,6 +2,23 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-30 (Voice-over, captions and ambient music on the homepage walkthrough)
+
+### Added — walkthrough presentation only; no booking logic, business hours, schema, pricing, chat, onboarding, Knowledge Base, Leads or CTA changes
+The walkthrough played silent, so a visitor with the sound on learned nothing extra and a visitor skim-reading got no narrative thread at all.
+- **New `public/audio/remy-walkthrough-narration.mp3`** — one continuous 90-second track (mono, 24 kHz, 56 kbps, 616 KB) carrying eleven spoken sentences with silence between them. Rendered per sentence with OpenAI `gpt-4o-mini-tts` (voice `fable`, instructed for calm, confident, professional British English at a measured pace), silence-trimmed, then mixed to fixed offsets with ffmpeg.
+- **New `src/app/walkthroughNarration.ts`** — the timing table, and the single source of truth for caption display, audio position and music ducking. `startMs`/`endMs` are the *measured* speech boundaries of each sentence in the mixed track (ffmpeg `silencedetect` at −45 dB), not estimates, so captions cannot claim a word that isn't there.
+- **New `src/app/useWalkthroughAudio.ts`** — narration playback plus a synthesised ambient bed. The narration track is exactly `TOTAL_MS` long and is *slaved* to the walkthrough's existing clock, which stays the master; the hook only ever seeks the audio to match, resyncing past 250 ms of drift. There is no second clock, which is why captions, visuals and voice cannot drift apart. Music is a five-note major-9 pad built in the Web Audio API rather than a loaded file — no asset, no stock-music licensing, seamless looping, and ducking becomes exact gain automation. Bed sits at 0.17, ducks to 0.051 under narration (fast down at 0.12 s, gentle back up at 0.4 s, as a broadcast ducker behaves), fades in over 2.5 s and out over the final 3 s.
+- **Captions render for everyone, sound or not.** They are drawn as subtitles over the stage, from the same `elapsed` value as every frame; the existing chapter caption bar is untouched and still describes the *scene* rather than the sentence.
+- **`src/app/RemyWalkthrough.tsx`** — the closing scene runs 9 s rather than 6 s so the call to action lands on the call-to-action visual instead of overrunning the loop. That is the only scene duration the voice-over changed, and the only line removed from the file; everything else is additive. Total runtime is now exactly 90.000 s.
+- **Sound is offered only in the demo modal.** Browsers will not autoplay audio, so a control is required — but the hero preview is itself a `<button>`, and a button cannot legally contain another one. `RemyWalkthrough` takes a `sound` prop (default `false`) and `HeroDemo` passes `sound={isModal}`. The preview plays silent with captions; the modal gets the control. Enabling sound in one mounted instance mutes the other.
+
+### Verified
+- Narration placement measured in the mixed track rather than assumed: the scripted one-second pause before "Start your free 14-day trial today" measures 1.018 s, and the longest remaining silence is 4.38 s.
+- Button nesting depth across the served homepage is 1 — no nested buttons anywhere — with the walkthrough wrapper correctly inside the preview button and tags balanced 6/6.
+- `tsc --noEmit`, `next build` and `eslint` clean; `npm test` **36 passing** (untouched — no booking, availability or parsing code was modified).
+- Not auditioned by the assistant: timing, levels, gaps and markup were verified numerically and structurally, but the recording's tone and the modal's sound control were confirmed by the maintainer in a browser, not by automated check.
+
 ## 2026-07-30 (Homepage demo replaced with a full product walkthrough)
 
 ### Changed — homepage demo presentation only; no booking logic, schema, pricing, homepage copy, chat, onboarding, Knowledge Base or Leads changes
