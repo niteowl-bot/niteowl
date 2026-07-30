@@ -11,13 +11,16 @@ import RemyDemoAnimation from "./RemyDemoAnimation";
 //  for local dev and in Vercel → Project → Settings → Environment
 //  Variables for deployments (see the notes at the bottom of this file).
 //
-//  NEXT_PUBLIC_REMY_DEMO_VIDEO_URL
+//  NEXT_PUBLIC_REMY_DEMO_VIDEO_URL  (optional override)
 //    A direct, PUBLIC video file URL (.mp4 / .webm) — played in the
-//    native <video> element inside the modal for any signed-out visitor,
-//    no account required. This is NOT a YouTube/Vimeo watch-page URL.
-//    While unset, the modal shows the branded "See Remy in Action"
-//    placeholder instead of a fake video. Adding the URL immediately
-//    enables public playback — no code change needed.
+//    native <video> element for any signed-out visitor, no account
+//    required. This is NOT a YouTube/Vimeo watch-page URL. Use it to
+//    serve the demo from a CDN/blob store instead of this repo.
+//
+//    When it is unset (the normal case) the demo is served from the
+//    local file below, committed under `public/`. If neither the URL
+//    nor the local file resolves, the player falls back to the branded
+//    RemyDemoAnimation rather than showing a broken/black box.
 //
 //  NEXT_PUBLIC_REMY_BOOKING_URL
 //    A public scheduling page (e.g. Cal.com / Calendly), opened in a new
@@ -25,7 +28,14 @@ import RemyDemoAnimation from "./RemyDemoAnimation";
 //    disabled as "Live Demo Booking Coming Soon" — never a dead "#" link
 //    and never a sign-in redirect.
 // ─────────────────────────────────────────────────────────────
-const REMY_DEMO_VIDEO_URL = process.env.NEXT_PUBLIC_REMY_DEMO_VIDEO_URL ?? "";
+// Local demo file, served straight out of `public/`. `public/videos/remy-demo.mp4`
+// is reachable at `/videos/remy-demo.mp4`. The path is case-sensitive on Vercel
+// (Linux) even though it is not on Windows — keep the file lowercase-hyphenated
+// exactly as written here.
+const REMY_DEMO_VIDEO_FILE = "/videos/remy-demo.mp4";
+
+const REMY_DEMO_VIDEO_URL =
+  process.env.NEXT_PUBLIC_REMY_DEMO_VIDEO_URL || REMY_DEMO_VIDEO_FILE;
 const REMY_BOOKING_URL = process.env.NEXT_PUBLIC_REMY_BOOKING_URL ?? "";
 
 const DEMO_LABEL = "Watch the Remy 2-minute product demo";
@@ -90,7 +100,7 @@ export default function HeroDemo() {
             aria-label={DEMO_LABEL}
             className="group relative block w-full aspect-video overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl ring-1 ring-white/5 transition-shadow hover:shadow-indigo-950/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
           >
-            <RemyDemoAnimation compact />
+            <DemoVideo src={REMY_DEMO_VIDEO_URL} variant="preview" />
             <span className="pointer-events-none absolute inset-0 flex items-end justify-center bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
               <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-lg">
                 <PlayIcon className="h-3.5 w-3.5" />
@@ -108,6 +118,78 @@ export default function HeroDemo() {
   );
 }
 
+/**
+ * The hero's inline demo player.
+ *
+ * Renders the real recorded demo — responsive (fills its 16:9 parent at every
+ * breakpoint), autoplaying, muted, looping and inline on mobile Safari, which
+ * refuses to autoplay without both `muted` and `playsInline`.
+ *
+ * The video is layered over the existing branded animation: the animation is
+ * what a visitor sees until the file reports `canplay`, and it stays put if the
+ * file is missing or the codec is unsupported (`onError`). That way a missing
+ * asset degrades to today's animation instead of a black rectangle.
+ */
+function DemoVideo({
+  src,
+  variant,
+  videoRef,
+  onFallbackChange,
+}: {
+  src: string;
+  variant: "preview" | "modal";
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
+  /** Called with `false` once the real video plays, `true` if it can't load. */
+  onFallbackChange?: (showingFallback: boolean) => void;
+}) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading"
+  );
+
+  const isModal = variant === "modal";
+
+  return (
+    <>
+      {status !== "ready" && <RemyDemoAnimation compact={!isModal} />}
+
+      {status !== "error" && (
+        <video
+          // `key` keeps React from reusing a previously-errored element if the
+          // source ever changes at runtime.
+          key={src}
+          ref={videoRef}
+          src={src}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          // In the modal the video is the content, so it is focusable and
+          // labelled. In the hero preview it is decoration inside a button
+          // that already carries the accessible name, so it is hidden from
+          // assistive tech and lets clicks fall through to that button.
+          {...(isModal
+            ? { controls: true, "aria-label": "Remy 2-minute product demo" }
+            : { "aria-hidden": true, tabIndex: -1 })}
+          onCanPlay={() => {
+            setStatus("ready");
+            onFallbackChange?.(false);
+          }}
+          onError={() => {
+            setStatus("error");
+            onFallbackChange?.(true);
+          }}
+          className={`absolute inset-0 h-full w-full transition-opacity duration-500 ${
+            isModal ? "object-contain" : "pointer-events-none object-cover"
+          } ${status === "ready" ? "opacity-100" : "opacity-0"}`}
+        >
+          Your browser does not support embedded video.
+        </video>
+      )}
+    </>
+  );
+}
+
 function DemoModal({
   videoUrl,
   onClose,
@@ -117,6 +199,10 @@ function DemoModal({
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // True until the recorded demo actually plays — drives the caption below,
+  // which describes the animated stand-in rather than the real video.
+  const [showingFallback, setShowingFallback] = useState(true);
 
   // Lock background scroll while the modal is open, restore on close.
   useEffect(() => {
@@ -217,23 +303,13 @@ function DemoModal({
           </button>
         </div>
 
-        <div className="aspect-video w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl">
-          {videoUrl ? (
-            <video
-              ref={videoRef}
-              className="h-full w-full"
-              src={videoUrl}
-              controls
-              autoPlay
-              muted
-              playsInline
-              aria-label="Remy 2-minute product demo"
-            >
-              Your browser does not support embedded video.
-            </video>
-          ) : (
-            <RemyDemoAnimation />
-          )}
+        <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl">
+          <DemoVideo
+            src={videoUrl}
+            variant="modal"
+            videoRef={videoRef}
+            onFallbackChange={setShowingFallback}
+          />
         </div>
 
         {/* Offer both choices — book a live demo + an optional, non-required
@@ -248,7 +324,7 @@ function DemoModal({
           </a>
         </div>
 
-        {!videoUrl && (
+        {showingFallback && (
           <p className="mt-3 text-center text-xs text-slate-500">
             An animated preview of a real Remy conversation.
           </p>
