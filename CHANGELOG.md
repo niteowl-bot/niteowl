@@ -2,6 +2,22 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-07-30 (Homepage demo replaced with a full product walkthrough)
+
+### Changed — homepage demo presentation only; no booking logic, schema, pricing, homepage copy, chat, onboarding, Knowledge Base or Leads changes
+The hero demo was a single looping chat conversation, which showed what Remy *says* but never what the product *is* — a prospect couldn't see setup, the Knowledge Base, where captured leads land, or that the business gets notified.
+- **New `src/app/RemyWalkthrough.tsx`** — a self-contained, asset-free ~87-second walkthrough of the real journey in ten scenes: the two assistants distinguished, onboarding step 1 (business details) and step 2 (opening hours), Settings → Hours (appointment length + capacity), Knowledge Base records being added, a customer question answered from that Knowledge Base, the booking taken against the configured hours, the captured lead in the Leads table, the owner's booking notification email, and the closing message plus call to action.
+- **Every screen mirrors UI that exists in this repo today** — the onboarding wizard's step dots and fields, Settings → Hours' "Appointment Duration (minutes)" and "Max Concurrent Bookings" cards, the Knowledge Base category badges, the Leads table's real columns (desktop table *and* the real mobile card layout) and the owner email from `src/lib/email.ts`. Nothing depicts a page, field or behaviour the product does not have. Where the product differs from an obvious demo script it follows the product: appointment length is shown in Settings → Hours, not the onboarding wizard (the wizard itself defers it), and business contact details appear as a Knowledge Base record because no such field exists in onboarding or Settings.
+- **The HQ website assistant and a tenant's own Remy are never conflated** — a persistent chip names the world for every scene (`niteowlhq.com — our website assistant` / `Your Niteowl AI dashboard` / `<site> — your customer, your Remy`), and the opening scene contrasts the two directly: ours answers questions about Remy and books demos, theirs answers their customers from their Knowledge Base and books appointments.
+- **Desktop and mobile** — the walkthrough is laid out on a fixed 16:9 stage that is CSS-scaled to its container, so composition is identical at every width; below 660px a smaller stage shows fewer, larger elements, the same way the product's own responsive UI drops from a table to cards. One clock drives scenes, captions and the chapter bar, so they cannot drift apart.
+- **`src/app/HeroDemo.tsx`** — swapped the fallback component (one import, one JSX line) and refreshed the stale comments plus the modal caption. The video precedence is unchanged: `NEXT_PUBLIC_REMY_DEMO_VIDEO_URL` → `/videos/remy-demo.mp4` → the walkthrough. No recording is committed, so the walkthrough is what plays today; dropping an mp4 in later takes over with no code change. `src/app/RemyDemoAnimation.tsx` is now unreferenced but left in place.
+
+### Verified
+- `tsc --noEmit`, `next build` and `eslint` clean on the changed files; `npm test` **36 passing** (untouched — no booking, availability or parsing code was modified).
+- Homepage served 200 in dev with the walkthrough present in the SSR markup. Dates in the Leads row and the email are computed client-side (so they never go stale) behind a `useSyncExternalStore` client snapshot, keeping SSR and hydration identical; until they resolve, those cells show the same `—` the real Leads table uses for a missing value.
+- Degrades deliberately: an absent or unplayable video leaves the walkthrough in place rather than a black box, `prefers-reduced-motion` gets a static chapter summary with no timers, and the animation pauses while scrolled out of view.
+- Not verified in a browser this session (no browser tooling available) — responsive layouts were sized against the stage by hand rather than eyeballed.
+
 ## 2026-07-30 (Chat assistant could not read the configured business hours)
 
 ### Fixed — chat prompt and one additive helper only; no schema, design, pricing, homepage or video changes
