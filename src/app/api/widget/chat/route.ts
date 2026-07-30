@@ -14,6 +14,7 @@ import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
 import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { getBusinessHoursSummary, type BusinessHoursSummary } from "@/lib/availability";
 
 export const runtime = "nodejs";
 
@@ -242,7 +243,8 @@ function buildSystemPrompt(
   suggestedAlternativeIso: string | null = null,
   unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null,
   handoffAskContact: boolean = false,
-  handoffContactCaptured: boolean = false
+  handoffContactCaptured: boolean = false,
+  hoursSummary: BusinessHoursSummary | null = null
 ): string {
   const sections: string[] = [];
 
@@ -280,6 +282,35 @@ function buildSystemPrompt(
       sections.push(
         ["## Your Behaviour Rules", "Follow these instructions precisely in every response:",
           ...customInstructions.map((r) => `- ${r.content}`)].join("\n")
+      );
+    }
+  }
+
+  // Configured opening hours — from Settings, not the Knowledge Base.
+  // Without this the assistant had no access to the hours the booking
+  // engine enforces: it answered "I don't have those hours", or quoted
+  // out-of-date hours text that happened to sit in the Knowledge Base.
+  if (hoursSummary) {
+    if (hoursSummary.emergencyModeEnabled) {
+      sections.push(
+        [
+          "## Opening Hours (authoritative — from the business's own settings)",
+          "This business is currently accepting bookings 24/7 (emergency mode is on), so no time is outside its opening hours.",
+          "If anything in the business knowledge above states fixed opening hours, it is out of date — never quote it.",
+        ].join("\n")
+      );
+    } else if (hoursSummary.lines.length > 0) {
+      sections.push(
+        [
+          "## Opening Hours (authoritative — from the business's own settings)",
+          "These are the business's real configured opening hours and the single source of truth:",
+          ...hoursSummary.lines.map((line) => `- ${line}`),
+          `Standard appointment length: ${hoursSummary.appointmentDurationMinutes} minutes.`,
+          "When a customer asks when the business opens or closes, answer directly from these hours. Never say you do not have the opening hours.",
+          "If anything in the business knowledge above states different opening or closing times, that text is out of date: these hours win, and you must never quote the out-of-date ones.",
+          "Use these hours for answering questions only. Do NOT work out for yourself whether a requested appointment can be booked, and do not do arithmetic with the appointment length — availability is already checked for you.",
+          "If a requested time cannot be booked, an \"Availability Note\" section below will say so and give the reason to use. If there is no such note, never tell the customer their requested time is unavailable, outside opening hours, or too late in the day.",
+        ].join("\n")
       );
     }
   }
@@ -765,7 +796,12 @@ export async function POST(req: NextRequest) {
 
   const knowledge: KnowledgeRecord[] = knowledgeData ?? [];
 
-  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured);
+  // Read live per request, exactly like the knowledge above — so hours
+  // edited in Settings take effect on the next message, with no cache to
+  // invalidate and no draft/published state of their own.
+  const hoursSummary = await getBusinessHoursSummary(orgId);
+
+  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured, hoursSummary);
 
   // ── Streaming response (identical pattern to chat/route.ts) ─────
   const encoder = new TextEncoder();

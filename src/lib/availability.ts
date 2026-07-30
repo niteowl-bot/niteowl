@@ -106,6 +106,92 @@ async function getOrgSettings(
   };
 }
 
+// ── Business hours as knowledge for the chat assistant ───────────────
+// The booking validator reads the business_hours table, but the chat
+// system prompt was built only from business_knowledge (the Knowledge
+// Base). So Remy had no access to the hours configured in Settings: it
+// could not answer "what time do you close on Monday?", and when the
+// Knowledge Base happened to contain its own (often out-of-date) hours
+// text, Remy quoted that instead — contradicting the hours the booking
+// engine actually enforces. This exposes the same rows the validator
+// uses, formatted for the prompt, so both read one source of truth.
+
+const DAY_NAMES = [
+  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+];
+
+export interface BusinessHoursSummary {
+  /** False when the org has no business_hours rows at all. */
+  hasConfiguredHours: boolean;
+  emergencyModeEnabled: boolean;
+  appointmentDurationMinutes: number;
+  /** One human-readable line per configured day, Monday first. */
+  lines: string[];
+}
+
+/** Trims a "HH:MM:SS" time to "HH:MM". */
+function toHhMm(time: string): string {
+  return time.slice(0, 5);
+}
+
+/**
+ * The org's configured opening hours, formatted for the chat system
+ * prompt. Reuses the same queries as the availability checks above, so
+ * what Remy says and what the booking engine enforces cannot diverge.
+ */
+export async function getBusinessHoursSummary(
+  orgId: string
+): Promise<BusinessHoursSummary> {
+  const supabase = createAdminClient();
+
+  const [settings, hours] = await Promise.all([
+    getOrgSettings(supabase, orgId),
+    getBusinessHoursForOrg(supabase, orgId),
+  ]);
+
+  // No rows at all is the "no hours configured" case, which the checks
+  // above deliberately fail open on. Listing seven closed days here would
+  // contradict that, so nothing is stated and the prompt omits the section.
+  if (hours.length === 0) {
+    return {
+      hasConfiguredHours: false,
+      emergencyModeEnabled: settings.emergencyModeEnabled,
+      appointmentDurationMinutes: settings.appointmentDurationMinutes,
+      lines: [],
+    };
+  }
+
+  const lines: string[] = [];
+
+  // Monday-first ordering, which is how a UK business states its hours.
+  for (let offset = 1; offset <= 7; offset++) {
+    const dayOfWeek = offset % 7;
+    const row = hours.find((h) => h.day_of_week === dayOfWeek);
+    const name = DAY_NAMES[dayOfWeek];
+
+    // A day with no row is what isWithinBusinessHours treats as closed, so
+    // it is stated as closed rather than omitted — an omitted day invites
+    // the assistant to fill the gap with an invented time.
+    if (!row || row.is_closed || !row.open_time || !row.close_time) {
+      lines.push(`${name}: closed`);
+      continue;
+    }
+
+    let line = `${name}: ${toHhMm(row.open_time)} to ${toHhMm(row.close_time)}`;
+    if (row.lunch_start && row.lunch_end) {
+      line += ` (closed for lunch ${toHhMm(row.lunch_start)} to ${toHhMm(row.lunch_end)})`;
+    }
+    lines.push(line);
+  }
+
+  return {
+    hasConfiguredHours: hours.length > 0,
+    emergencyModeEnabled: settings.emergencyModeEnabled,
+    appointmentDurationMinutes: settings.appointmentDurationMinutes,
+    lines,
+  };
+}
+
 /**
  * Checks whether a given ISO datetime falls within the org's configured
  * business hours (accounting for closed days and lunch breaks).

@@ -23,7 +23,11 @@ import {
   londonHhMm,
 } from "./support.mjs";
 
-import { isWithinBusinessHours, findNextAvailableSlot } from "@/lib/availability";
+import {
+  isWithinBusinessHours,
+  findNextAvailableSlot,
+  getBusinessHoursSummary,
+} from "@/lib/availability";
 
 let stubs;
 afterEach(() => stubs?.restore());
@@ -184,6 +188,99 @@ describe("findNextAvailableSlot", () => {
     const result = await isWithinBusinessHours(ORG_ID, SUNDAY_1400);
     assert.equal(result.isAvailable, true);
     assert.equal(result.reason, "no_hours_configured");
+  });
+});
+
+describe("getBusinessHoursSummary — what the chat assistant is told", () => {
+  test("exposes the configured hours, so Remy can answer closing-time questions", async () => {
+    stubs = installStubs({ appointmentDurationMinutes: 60 });
+    const summary = await getBusinessHoursSummary(ORG_ID);
+
+    assert.equal(summary.hasConfiguredHours, true);
+    assert.equal(summary.appointmentDurationMinutes, 60);
+    // Monday's real close time must be stated, not a Knowledge Base value.
+    assert.ok(
+      summary.lines.some((l) => l === "Monday: 09:00 to 19:00"),
+      `Monday's configured hours missing from: ${JSON.stringify(summary.lines)}`
+    );
+    assert.ok(summary.lines.some((l) => l === "Tuesday: 09:00 to 17:00"));
+    assert.ok(summary.lines.some((l) => l === "Sunday: closed"));
+  });
+
+  test("reads the same business_hours rows the validator uses", async () => {
+    stubs = installStubs({ appointmentDurationMinutes: 60 });
+    await getBusinessHoursSummary(ORG_ID);
+    assert.ok(stubs.calls.business_hours > 0, "business_hours was never queried");
+  });
+
+  test("lists days Monday first", async () => {
+    stubs = installStubs({ appointmentDurationMinutes: 60 });
+    const { lines } = await getBusinessHoursSummary(ORG_ID);
+    assert.match(lines[0], /^Monday:/);
+    assert.match(lines.at(-1), /^Sunday:/);
+  });
+
+  test("a changed closing time is reflected immediately", async () => {
+    // Mirrors the owner editing Monday to 19:30 in Settings: no cache, so
+    // the very next message sees it.
+    stubs = installStubs({
+      appointmentDurationMinutes: 60,
+      hours: REPORTED_HOURS.map((h) =>
+        h.day_of_week === 1 ? { ...h, close_time: "19:30:00" } : h
+      ),
+    });
+    const { lines } = await getBusinessHoursSummary(ORG_ID);
+    assert.ok(lines.some((l) => l === "Monday: 09:00 to 19:30"));
+  });
+
+  test("reports a lunch break", async () => {
+    stubs = installStubs({
+      hours: [
+        {
+          day_of_week: 1,
+          is_closed: false,
+          open_time: "09:00:00",
+          close_time: "19:00:00",
+          lunch_start: "13:00:00",
+          lunch_end: "14:00:00",
+        },
+      ],
+    });
+    const { lines } = await getBusinessHoursSummary(ORG_ID);
+    assert.equal(lines[0], "Monday: 09:00 to 19:00 (closed for lunch 13:00 to 14:00)");
+  });
+
+  test("a day with no row is stated as closed, matching the validator", async () => {
+    // isWithinBusinessHours treats a missing row as closed_day. Omitting the
+    // day instead would let the assistant invent hours for it.
+    stubs = installStubs({
+      hours: [
+        { day_of_week: 1, is_closed: false, open_time: "09:00:00", close_time: "19:30:00" },
+      ],
+    });
+    const { lines } = await getBusinessHoursSummary(ORG_ID);
+    assert.equal(lines.length, 7, "every day should be accounted for");
+    assert.equal(lines[0], "Monday: 09:00 to 19:30");
+    for (const day of ["Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]) {
+      assert.ok(lines.includes(`${day}: closed`), `${day} should be stated as closed`);
+    }
+
+    // And the two must actually agree.
+    const tuesday = await isWithinBusinessHours(ORG_ID, TUESDAY_1845);
+    assert.equal(tuesday.reason, "closed_day");
+  });
+
+  test("emergency mode is surfaced so no time is called out-of-hours", async () => {
+    stubs = installStubs({ emergencyModeEnabled: true });
+    const summary = await getBusinessHoursSummary(ORG_ID);
+    assert.equal(summary.emergencyModeEnabled, true);
+  });
+
+  test("an org with no configured hours is reported as such, not as closed", async () => {
+    stubs = installStubs({ hours: [] });
+    const summary = await getBusinessHoursSummary(ORG_ID);
+    assert.equal(summary.hasConfiguredHours, false);
+    assert.deepEqual(summary.lines, []);
   });
 });
 
