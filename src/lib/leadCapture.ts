@@ -669,7 +669,7 @@ export async function capturePartialLead(
   leadSource: string = "chat",
   needsReview: boolean = false,
   conversationTranscript: string | null = null
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | null; leadId: string | null; needsReviewContactCaptured?: boolean }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | "ends_after_close" | null; leadId: string | null; needsReviewContactCaptured?: boolean }> {
 
 
   const safeConversationId =
@@ -686,7 +686,7 @@ export async function capturePartialLead(
   }
   let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
-  let unavailableReason: "hours" | "capacity" | null = null;
+  let unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null;
 
     if (resolvedIso) {
     const availability = await isWithinBusinessHours(orgId, resolvedIso);
@@ -696,7 +696,11 @@ export async function capturePartialLead(
 
     if (!availability.isAvailable || !slotAvailable) {
       outsideBusinessHours = true;
-      unavailableReason = !availability.isAvailable ? "hours" : "capacity";
+      unavailableReason = !availability.isAvailable
+        ? availability.reason === "ends_after_close"
+          ? "ends_after_close"
+          : "hours"
+        : "capacity";
       suggestedAlternativeIso = await findNextAvailableSlot(orgId, resolvedIso);
       console.log(
         "[lead capture] requested time unavailable:",
@@ -705,6 +709,9 @@ export async function capturePartialLead(
         availability.isAvailable,
         "| reason:",
         availability.reason,
+        availability.reason === "ends_after_close"
+          ? `(duration ${availability.appointmentDurationMinutes}min, only ${availability.minutesUntilClose}min until close)`
+          : "",
         "| slotAvailable:",
         slotAvailable,
         "| suggested:",
