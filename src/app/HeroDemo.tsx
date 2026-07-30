@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import RemyDemoAnimation from "./RemyDemoAnimation";
+import RemyWalkthrough from "./RemyWalkthrough";
 
 // ─────────────────────────────────────────────────────────────
 //  PUBLIC DEMO CONFIG — public URLs only, no secrets.
@@ -19,8 +19,9 @@ import RemyDemoAnimation from "./RemyDemoAnimation";
 //
 //    When it is unset (the normal case) the demo is served from the
 //    local file below, committed under `public/`. If neither the URL
-//    nor the local file resolves, the player falls back to the branded
-//    RemyDemoAnimation rather than showing a broken/black box.
+//    nor the local file resolves — which is the situation today, since no
+//    recording is committed — the player falls back to the animated
+//    RemyWalkthrough rather than showing a broken/black box.
 //
 //  NEXT_PUBLIC_REMY_BOOKING_URL
 //    A public scheduling page (e.g. Cal.com / Calendly), opened in a new
@@ -125,10 +126,12 @@ export default function HeroDemo() {
  * breakpoint), autoplaying, muted, looping and inline on mobile Safari, which
  * refuses to autoplay without both `muted` and `playsInline`.
  *
- * The video is layered over the existing branded animation: the animation is
- * what a visitor sees until the file reports `canplay`, and it stays put if the
- * file is missing or the codec is unsupported (`onError`). That way a missing
- * asset degrades to today's animation instead of a black rectangle.
+ * The video is layered over the animated product walkthrough: the walkthrough
+ * is what a visitor sees until the file reports `canplay`, and it stays put if
+ * the file is missing or the codec is unsupported (`onError`). No recording is
+ * committed today, so the walkthrough is what actually plays — the video path
+ * exists so a real screen recording can be dropped in later with no code
+ * change.
  */
 function DemoVideo({
   src,
@@ -150,7 +153,7 @@ function DemoVideo({
 
   return (
     <>
-      {status !== "ready" && <RemyDemoAnimation compact={!isModal} />}
+      {status !== "ready" && <RemyWalkthrough />}
 
       {status !== "error" && (
         <video
@@ -200,8 +203,8 @@ function DemoModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // True until the recorded demo actually plays — drives the caption below,
-  // which describes the animated stand-in rather than the real video.
+  // True until a recorded demo actually plays — drives the caption below,
+  // which describes the animated walkthrough rather than a real video.
   const [showingFallback, setShowingFallback] = useState(true);
 
   // Lock background scroll while the modal is open, restore on close.
@@ -326,7 +329,7 @@ function DemoModal({
 
         {showingFallback && (
           <p className="mt-3 text-center text-xs text-slate-500">
-            An animated preview of a real Remy conversation.
+            An animated walkthrough of the real Remy product.
           </p>
         )}
       </div>

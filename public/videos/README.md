@@ -33,7 +33,7 @@ playback can start before the whole file has downloaded.
 
 The player autoplays on every homepage visit, so this file is downloaded by
 every visitor. Keep it **under ~10 MB**; aim for 5 MB. A 16:9 clip at 1280x720
-and CRF 24 gets a 2-minute demo comfortably into that range.
+and CRF 24 gets a 90-second demo comfortably into that range.
 
 If the demo has to be larger, host it on a CDN or blob store instead and set
 `NEXT_PUBLIC_REMY_DEMO_VIDEO_URL` to that public URL — the player prefers the
@@ -41,5 +41,14 @@ env var over this file when it is set, no code change needed.
 
 ## Behaviour when the file is absent
 
-The player falls back to the branded `RemyDemoAnimation` rather than showing a
-black box, so a missing or unplayable file degrades gracefully.
+**This is the situation today — no recording is committed.** The player falls
+back to `src/app/RemyWalkthrough.tsx`, an animated ~87-second walkthrough of
+the real product journey (onboarding → Knowledge Base → a customer question →
+booking → Leads → notification email → call to action). It needs no asset, so
+a missing or unplayable file degrades gracefully rather than showing a black
+box.
+
+Dropping a real `remy-demo.mp4` in here replaces the animation with the
+recording automatically — no code change. Keep any recording to the same
+60–90 second story and the same order, so the two never tell different
+versions of the product.
