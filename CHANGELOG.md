@@ -2,6 +2,25 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-03 (Appointment requests: confirmed calendar dates and a completion gate) — ✅ LIVE PRODUCTION TEST PASSED
+
+### Fixed — voice system prompt only; no change to date parsing, caller-ID infrastructure, spoken-email normalisation, service extraction, lead isolation, status handling, booking, calendar, Knowledge Base, dashboard, chat, widget, pricing, schema or Vapi/Twilio configuration
+Two commits, each driven by a real call: `d16b343` (confirm the calendar date behind a spoken weekday) and `c2d311b` (close the completion gate on appointment requests).
+
+- **Remy now knows what day it is.** The voice prompt carried no date at all, so when a caller said "Thursday at 2 PM" Remy had nothing to resolve it against — it accepted the weekday, never said a date aloud, and closed with "this Thursday at 2 PM". The dashboard still stored 06/08/2026 correctly, because `parseDatetimeToIso` resolves *after* the call; the caller simply never heard or agreed a date. Today's date is now rendered into the prompt (`Europe/London`, matching the parser's default so the two agree), passed in as an optional `now` argument so the builder stays pure and testable.
+- **Rule 6 owns date and time** with four branches: time only → ask which day; day only → ask what time; weekday or relative day → resolve and CONFIRM ("Just to confirm, you mean Thursday, 6 August at 2pm?"), settled only once the caller agrees; explicit date → do not ask again. Ambiguity is asked about, never guessed. The existing vague-answer rules were folded in unchanged.
+- **A requested time is not a booking.** Rule 9 now states the time taken is the caller's requested/preferred time; "confirmed", "booked", "booked in" and "see you then" are banned *while on the call*, conditionally — the ban turns on whether the business has actually confirmed, not on the words. Rule 11's recap gives the weekday AND the calendar date, never a bare weekday, and the owner's summary reports a settled calendar date rather than reducing it to a weekday.
+- **A second live call then exposed the completion gate leaking.** A boiler-service call collected date, time, name and email, then asked "Is there anything else I can help you with?" without ever requesting the service address — the caller had to interrupt. Remy also said the team would ring "on the number you're calling from" without asking whether that was the best number. A gate already existed; two wordings let the model past it. **Email was not a required field** (it was a sub-clause of the name step) and **address and number carried "only when…" conditionals** the model could judge its way out of — the address step said "ONLY for jobs at the caller's premises (plumbing, electrical, heating…)", leaving Remy to decide whether a boiler service qualified.
+- **The gate is now named, enumerated, and blocks all three exits** — "anything else?", the rule 11 recap, *and* the goodbye. Previously only the goodbye was blocked, which is exactly how the call reached "anything else?" with the address missing. Email is step 5 in its own right; the address step reads "EVERY job at the caller's premises: boiler and heating work, plumbing, electrical, repairs, installations, inspections, cleaning"; the number step states caller ID does not excuse asking rule 7's question and getting a yes.
+
+### Verified — real production phone call, 2026-08-03
+The final call passed every requirement: resolved and confirmed "Thursday, 6 August at 2 PM"; collected and confirmed the caller's name; collected and confirmed the email; **proactively asked for the service address without being prompted**; asked whether the caller ID was the best callback number; accepted an alternate number and repeated it back for confirmation; stored the correct calendar date/time; and included the address and the alternate callback number in the owner notification.
+
+- `npm test` **163 passing** (was 130 before this work). `tsc --noEmit` and `next build` clean throughout.
+- Prompt length held under the 11,399-character ceiling at every step (11,327 as shipped). The gate cost ~250 characters; ~370 was recovered by tightening rules 1, 2, 3, 8, 9 and 11 — duplicated examples and redundant phrasing, no behaviour dropped.
+- **A deployment lesson worth recording.** The first "failed" live test was not a code failure: the fix had never been committed, so production was still running `0b81e6f` and the prompt genuinely contained no date. Verifying that a fix is *in the pushed commit* — `git show HEAD:<file>` — is now part of the routine, not just that tests pass locally.
+- **A testing limitation worth recording.** These tests assert that instructions are present in the built prompt. They cannot prove the model obeys them; only a live call does. Both live failures were behaviours a green suite had already "passed".
+
 ## 2026-08-03 (Spoken emails said as a sentence)
 
 ### Fixed — `normaliseSpokenEmail` only; no change to lead isolation, caller ID, alternate numbers, booking, calendar, Knowledge Base, dashboard, chat, widget, pricing, schema or Vapi/Twilio configuration
