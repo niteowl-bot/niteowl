@@ -10,6 +10,7 @@ import {
 import { sendCallSummaryEmail } from "@/lib/email";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
+import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -201,7 +202,10 @@ function toExtractedLead(
   return {
     intent,
     name: details.name,
-    email: details.email,
+    // Spoken aloud, so the same treatment the phone field gets: convert
+    // "michael ryan at hotmail dot com", and store nothing at all rather
+    // than a spoken form that would bounce a confirmation email.
+    email: normaliseSpokenEmail(details.email),
     // Caller ID first, exactly as before. The spoken number only ever
     // reaches this field when caller ID is withheld — and then only if
     // it survives normalisation, because an unusable number here would

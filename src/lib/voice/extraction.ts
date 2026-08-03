@@ -53,10 +53,13 @@ return ONLY a valid JSON object describing what the caller wanted.
 ## Field rules
 name — the caller's name as given on the call. Spoken spellings may be
   fragmented ("E r n e s t o") — join them naturally. Null if never given.
-email — the caller's email address. Spoken emails arrive as words
-  ("john dot smith at gmail dot com") — convert to a normal address.
-  Prefer the version the receptionist read back and the caller confirmed.
-  Null if never given.
+email — the caller's email address, ALWAYS in normal format
+  ("john.smith@gmail.com") and never the spoken wording. Spoken emails
+  arrive as words ("john dot smith at gmail dot com", "michael ryan at
+  hotmail dot com" → "michaelryan@hotmail.com"): convert "at" to @, "dot"
+  to ., "underscore" to _, "dash"/"hyphen" to -, and close up the spaces
+  between spoken words. Prefer the version the receptionist read back and
+  the caller confirmed. Null if never given.
 phone — ONLY an additional number the caller spoke aloud to be reached on
   (e.g. "call me back on the office line instead"), digits as spoken. The
   number they are calling from is already known and recorded separately —

@@ -2,6 +2,22 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-03 (Spoken email addresses, and clearer service descriptions)
+
+### Fixed — voice contact normalisation and two prompt rules only; no change to lead isolation, caller ID, alternate numbers, booking, calendar, Knowledge Base, chat, widget, dashboard, pricing, schema or Vapi/Twilio configuration
+An email given over the phone arrives as words — "michael ryan at hotmail dot com" — and could be written into `leads.email` in that form. That field is the address `sendBookingConfirmationEmails` sends to, so a spoken form there is a confirmation the customer never receives.
+
+- **Deterministic normalisation before the lead is written.** New `normaliseSpokenEmail` (`src/lib/voice/spokenEmail.ts`), applied in `toExtractedLead` exactly where `normaliseSpokenNumber` already handles the phone field. Converts spoken punctuation — "at", "dot"/"point", "underscore", "dash"/"hyphen" — and closes up the spaces between spoken words: "michael ryan at hotmail dot com" → `michaelryan@hotmail.com`. An address that already arrives well-formed short-circuits before that pass, so real addresses containing those letters (`pat@`, `dorothy.dotson@`, `matt@atlas.com`) are never rewritten; word-boundary matching protects them where conversion is still needed.
+- **Unusable input is dropped, not guessed.** Anything that cannot be made into a valid address returns null rather than saving the spoken wording — the same rule already applied to unusable phone numbers, and it avoids a guaranteed bounce. The caller's actual words are not lost: they remain in the call transcript and the owner's summary email.
+- **Remy reads the address back and waits for a yes** (rule 5 step 4). Previously it confirmed an email without being told to convert the spoken form first. It now turns the spoken words into an address, reads *that* back — "Thanks, I've got that as michaelryan@hotmail.com — is that right?" — and treats it as confirmed only once the caller agrees. The extraction schema and the fallback transcript extractor both now require normal email format and never the spoken wording.
+- **Garbled service descriptions get the same one clarification as mis-heard names** (rule 8, widened). The rule previously covered only a service *name* close to something in the Knowledge Base ("valer service" → "boiler service"). "Leaking kitchen tap" arriving as "leaking kitchen cap" matches nothing listed, so it fell through. The rule now also covers "just an odd way to describe a job", and states that a corrected description replaces the version first heard.
+
+### Verified
+- `npm test` **130 passing** (was 110 — 20 new: 14 for the normaliser including the reported case, multi-part domains, underscore/dash forms, valid-address passthrough and the "pat"/"dorothy" safety cases, plus 6 prompt assertions). All 7 voice-lead isolation tests and the caller-ID/alternate-number suites unchanged and passing.
+- `tsc --noEmit` and `next build` clean.
+- **Known limitation, not yet fixed:** normalisation assumes the extracted field holds the address alone. If a whole sentence reaches it ("My email is michael dot ryan at hotmail dot com"), the leading words are absorbed into the local part — `myemailismichael.ryan@hotmail.com`. The extraction prompts ask for the address only, so this should not occur in practice; a follow-up should strip leading filler and reject a local part that looks like a sentence.
+- **Not tested with a real phone call by the assistant.** Outstanding: say an email in words on a call, and confirm the lead stores the normalised address.
+
 ## 2026-08-03 (Remy can no longer end a call on an incomplete lead)
 
 ### Fixed — voice conversation flow and post-call summary only; no booking logic, availability, capacity, chat, widget, onboarding, Knowledge Base, Leads UI, email template, pricing, schema or API changes

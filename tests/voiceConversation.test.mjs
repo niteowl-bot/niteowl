@@ -143,12 +143,57 @@ describe("conversation order — the job comes before the caller", () => {
   });
 });
 
+describe("spoken email addresses", () => {
+  test("the address is converted from speech, not repeated as spoken", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /An email address will be SPOKEN in words/);
+    assert.match(prompt, /michael ryan at hotmail dot com/);
+    assert.match(prompt, /turn it into a normal address/i);
+  });
+
+  test("the normalised address is read back and confirmed before it counts", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /I've got that as michaelryan@hotmail\.com — is that right\?/);
+    assert.match(prompt, /only once they say yes/i);
+    assert.match(prompt, /never letter by letter/i);
+  });
+
+  test("a corrected address is read back the same way", () => {
+    assert.match(promptFor(), /read the corrected address back the same way/i);
+  });
+
+  test("the extraction schema demands normal format, never the spoken wording", () => {
+    const email = configFor().structuredDataSchema.properties.email.description;
+    assert.match(email, /normal format/i);
+    assert.match(email, /NEVER the spoken wording/);
+    assert.match(email, /only the version the caller confirmed/i);
+  });
+});
+
 describe("unclear service names", () => {
   test("one short clarification before the service is treated as settled", () => {
     const prompt = promptFor();
     assert.match(prompt, /ask ONE short clarifying question/);
     assert.match(prompt, /Sorry, did you say boiler service\?/);
     assert.match(prompt, /Ask this once only/i);
+  });
+
+  test("a garbled service DESCRIPTION is clarified, not just a mis-heard name", () => {
+    // "leaking kitchen tap" arriving as "leaking kitchen cap" matches
+    // nothing in the Knowledge Base, so the rule must cover an odd
+    // description and not only a near-miss on a listed service.
+    const prompt = promptFor();
+    assert.match(prompt, /leaking kitchen tap" as "leaking kitchen cap/);
+    assert.match(prompt, /just an odd way to describe a job/i);
+    assert.match(prompt, /Sorry, is that a leaking kitchen tap\?/);
+  });
+
+  test("only the corrected description survives the clarification", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /their corrected wording is the service from then on and the version you first heard is gone/i
+    );
   });
 
   test("a correction to the service is carried through, not held alongside", () => {
