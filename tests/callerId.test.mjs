@@ -230,13 +230,15 @@ describe("assistant prompt — when Remy asks for a number", () => {
   });
 
   test("the pre-close checklist covers every mandatory field", () => {
+    // Consolidated into rule 5's ordered steps — same fields, now one
+    // rule instead of an order rule plus a duplicate checklist.
     const prompt = promptFor("+353861234567");
     for (const line of [
-      /the caller's name/i,
-      /the best callback number/i,
-      /the callback DAY/,
-      /the exact callback TIME/,
-      /the service address/i,
+      /What the caller needs, in their own words/i,
+      /The day and time they want/i,
+      /Their name — repeat it back/i,
+      /The address where the work is needed/i,
+      /The callback number/i,
     ]) {
       assert.match(prompt, line, String(line));
     }
@@ -245,7 +247,7 @@ describe("assistant prompt — when Remy asks for a number", () => {
 
   test("the call closes only after a final read-back is confirmed", () => {
     const prompt = promptFor("+353861234567");
-    assert.match(prompt, /Just to confirm, I have Brian/i);
+    assert.match(prompt, /Just to confirm, Brian/i);
     assert.match(prompt, /Only after they confirm/i);
     assert.match(prompt, /never state a time they did not say/i);
   });
@@ -326,7 +328,8 @@ describe("assistant prompt — the caller ID is never read aloud", () => {
 
   test("the final read-back refers to the line, not the digits", () => {
     const prompt = promptFor("+353861234567");
-    assert.match(prompt, /callback on the number you're calling from/i);
+    assert.match(prompt, /contact you on the number you're calling from/i);
+    assert.match(prompt, /never the digits/i);
     assert.match(prompt, /read back only a DIFFERENT number they gave you aloud/i);
   });
 });
@@ -362,11 +365,11 @@ describe("assistant prompt — mis-heard service names", () => {
     assert.match(prompt, /Ask this once only/i);
   });
 
-  test("rule 15 defers to it before deciding a service is not listed", () => {
+  test("the booking rule defers to it before deciding a service is not listed", () => {
     const prompt = promptFor("+353861234567");
     assert.match(
       prompt,
-      /Before you decide a service is not listed.*apply rule 21 first/i
+      /make sure you actually heard it correctly first \(rule 8\)/i
     );
   });
 

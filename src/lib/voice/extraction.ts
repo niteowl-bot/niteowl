@@ -78,6 +78,13 @@ urgent — true only if the caller was urgent, upset, or needs a same-day
 ## Critical rules
 - Return ONLY the JSON object — no markdown, no explanation, no code fences.
 - Extract only what the caller actually said; never invent details.
+- CORRECTIONS WIN. Where the caller corrected the receptionist — "boiler
+  service, not buzzer", "no, Tuesday, not Thursday", "it's Brian, with an i" —
+  record ONLY the caller's corrected value. Never record the mis-heard version,
+  never record both, and never combine them into one string ("buzzer/boiler
+  service"). This holds for every field: the caller's last word on a detail is
+  the value. It does not apply to the number they are calling from, which is
+  recorded separately and never comes from the transcript.
 
 Transcript:
 """
