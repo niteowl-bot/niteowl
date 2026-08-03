@@ -41,9 +41,26 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CUSTOM_INSTRUCTION_CATEGORY = "custom_instruction";
 
+/**
+ * Rule 5 — the caller's phone number. Rendered from the network caller
+ * ID because the assistant has no other way to know whether it already
+ * holds a number: when it does, asking for one invites a mis-heard or
+ * simply different number into the lead, and that spoken number used
+ * to end up as the lead's phone. Deliberately overriding — rules 4, 10
+ * and 15 all say "collect their name and best contact number", written
+ * before caller ID was wired through.
+ */
+function buildPhoneNumberRule(callerPhone: string | null): string {
+  if (callerPhone) {
+    return `5. Your goal on every call: capture the caller's name, what they need, and when they'd like it. You ALREADY have the number they are calling from (${callerPhone}) and it is recorded automatically — never ask the caller for their phone number, and never read this number back to them. This overrides every other rule below that mentions collecting a contact number: collect the name and the details, not the number. If the caller volunteers a different number to reach them on, thank them and move on — it is saved as an additional contact number, never as a replacement for the number they are calling from.`;
+  }
+  return `5. Your goal on every call: capture the caller's name, what they need, and when they'd like it. The caller's number is withheld or unavailable, so you DO need to ask for the best contact number — ask for it once, as its own question, and confirm it back in one short sentence ("Thanks, I've got your number as 086 123 4567.").`;
+}
+
 function buildVoiceSystemPrompt(
   org: VoiceOrgProfile,
-  knowledge: VoiceKnowledgeRecord[]
+  knowledge: VoiceKnowledgeRecord[],
+  callerPhone: string | null
 ): string {
   const sections: string[] = [];
 
@@ -107,7 +124,7 @@ function buildVoiceSystemPrompt(
       "2. Ask exactly one question at a time — at most ONE question mark per turn, never a second request tacked on (not: \"May I have your name? Also, what's the best phone number to reach you?\"; not: \"Is this an urgent issue? Also, could I get your phone number?\"). Ask, wait for the answer, acknowledge it briefly, then ask the next question. A brief acknowledgement is a few words (\"Thank you. I'll make sure our team knows this is urgent.\") — never a read-back of everything collected so far (\"I have your name and phone number...\").",
       "3. Use the business knowledge above when answering. Do not invent prices, hours, services, or policies not listed above.",
       "4. If a question falls outside the knowledge above, NEVER guess. Say a team member will call them back with the answer, then collect their name and best contact number.",
-      "5. Your goal on every call: capture the caller's name, what they need, and when they'd like it. You already have the number they are calling from, but confirm it is the best number to reach them on.",
+      buildPhoneNumberRule(callerPhone),
       "6. Confirm names by repeating them back. If the caller gives an email address, confirm it naturally in one sentence — \"Thanks, I've got your email as john@example.com.\" — never spell it out letter by letter. If the caller corrects it, acknowledge the correction once and continue.",
       "7. For bookings: collect the service and preferred day and time, then confirm the details back clearly. Never say you are unable to book appointments. Once the details are confirmed, say: \"I've noted your preferred time and sent your request to our team. They'll confirm your appointment shortly.\" Never promise the slot is guaranteed on the spot.",
       "8. If the caller is urgent or upset: apologise, take their details, and assure them someone will call back as soon as possible. Do not attempt to transfer the call.",
@@ -149,7 +166,7 @@ function buildStructuredDataSchema(): Record<string, unknown> {
       phone: {
         type: "string",
         description:
-          "The best contact number for the caller, if they gave one different from the number they called from.",
+          "ONLY an ADDITIONAL number the caller explicitly spoke aloud that is different from the number they are calling from. Never the number they are calling from, and never a number you inferred or guessed. Null if they did not say one.",
       },
       service: {
         type: "string",
@@ -180,7 +197,12 @@ export function buildVoiceAssistantConfig(
   org: VoiceOrgProfile,
   knowledge: VoiceKnowledgeRecord[],
   settings: VoiceOrgSettings,
-  serverUrl: string | null
+  serverUrl: string | null,
+  /**
+   * Network caller ID for this call, already normalised (null when
+   * withheld). Decides whether Remy asks for a phone number at all.
+   */
+  callerPhone: string | null = null
 ): VoiceAssistantConfig {
   // The leading ellipsis renders as a short TTS pause so start-of-call
   // audio clipping eats silence, not the first words (both 2026-07-10
@@ -190,7 +212,7 @@ export function buildVoiceAssistantConfig(
     `... Thanks for calling ${org.business_name}. This is Remy, your AI receptionist. How can I help you today?`;
 
   return {
-    systemPrompt: buildVoiceSystemPrompt(org, knowledge),
+    systemPrompt: buildVoiceSystemPrompt(org, knowledge, callerPhone),
     firstMessage,
     language: settings.language?.trim() || "en-GB",
     voiceId: settings.voice_id?.trim() || null,

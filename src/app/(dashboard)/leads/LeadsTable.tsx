@@ -19,8 +19,18 @@ export type Lead = {
   status: string | null;
   ai_confidence: number | null;
   notes: string | null;
+  // Voice calls record phone provenance here: caller_id is the number
+  // the call came from, alternate_phone a different number the caller
+  // asked to be reached on. Absent on chat/widget leads.
+  metadata: Record<string, unknown> | null;
   created_at: string;
 };
+
+// Reads a string field out of the lead's metadata JSONB, or null.
+function metadataString(lead: Lead, key: string): string | null {
+  const value = lead.metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
 type LeadStatus =
   | "new"
@@ -224,9 +234,22 @@ function EditPanel({
             </p>
             <div className="grid gap-2 rounded-xl border border-slate-800 bg-slate-800/50 p-4 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-400">Phone</span>
+                {/* For a phone lead this is the network caller ID — the
+                    number the call actually came from, not one spoken
+                    during it. */}
+                <span className="text-slate-400">
+                  {metadataString(lead, "caller_id") ? "Caller ID" : "Phone"}
+                </span>
                 <span className="text-slate-200">{valueOrDash(lead.phone)}</span>
               </div>
+              {metadataString(lead, "alternate_phone") && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Alternate number</span>
+                  <span className="text-slate-200">
+                    {metadataString(lead, "alternate_phone")}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-400">Email</span>
                 <span className="text-slate-200 break-all">{valueOrDash(lead.email)}</span>

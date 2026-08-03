@@ -410,7 +410,10 @@ export async function sendSalesLeadNotification(
 interface CallSummaryParams {
   businessOwnerEmail: string | null;
   businessName: string;
+  /** Network caller ID — the number the call actually came from. */
   callerPhone: string | null;
+  /** A different number the caller asked to be reached on, if any. */
+  alternatePhone?: string | null;
   callerName: string | null;
   startedAt: string | null; // ISO string
   durationSeconds: number | null;
@@ -441,6 +444,7 @@ export async function sendCallSummaryEmail(
     businessOwnerEmail,
     businessName,
     callerPhone,
+    alternatePhone,
     callerName,
     startedAt,
     durationSeconds,
@@ -461,6 +465,9 @@ export async function sendCallSummaryEmail(
     callerName?.trim() || callerPhone?.trim() || "Unknown caller"
   );
   const safePhone = callerPhone ? escapeHtml(callerPhone) : null;
+  const safeAlternatePhone = alternatePhone?.trim()
+    ? escapeHtml(alternatePhone.trim())
+    : null;
   const formattedTime = startedAt ? formatAppointmentDate(startedAt) : null;
   const formattedDuration = formatCallDuration(durationSeconds);
   const safeSummary = summary
@@ -487,7 +494,11 @@ export async function sendCallSummaryEmail(
         <p style="margin:0 0 4px;">Remy answered a phone call for ${escapeHtml(businessName)}.</p>
         ${detailsBlock([
           ["Caller", displayCaller],
-          safePhone ? ["Number", safePhone] : null,
+          // The number the call came from, not one spoken on the call —
+          // labelled so the owner knows which they are looking at when
+          // both are present.
+          safePhone ? ["Caller ID", safePhone] : ["Caller ID", "Withheld"],
+          safeAlternatePhone ? ["Alternate number", safeAlternatePhone] : null,
           formattedTime ? ["Time", formattedTime] : null,
           formattedDuration ? ["Duration", formattedDuration] : null,
         ])}

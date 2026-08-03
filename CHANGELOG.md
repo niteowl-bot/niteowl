@@ -2,6 +2,22 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-03 (Voice leads now keep the real caller ID)
+
+### Fixed — voice lead phone resolution only; no booking logic, availability, capacity, chat, widget, onboarding, Knowledge Base, pricing, schema or API changes
+A number the caller **spoke** during a call could replace the network caller ID on the lead and in the owner's summary email, so a mis-transcribed or simply different number produced a lead nobody could ring back.
+
+- **The precedence was backwards.** `toExtractedLead` in `src/lib/voice/calls.ts` resolved the lead's phone as `details.phone ?? callerPhone` — the transcribed number won and the caller ID was only a backstop. It is now `callerPhone ?? details.phone`. Caller ID is the one contact detail a call supplies that no transcription step can mangle; a spoken number is still used when there is no caller ID, which is exactly when Remy is told to ask for one.
+- **A spoken number is kept, not discarded.** When the caller genuinely gives a different line ("try the office instead"), it is saved as `alternate_phone` in the existing `leads.metadata` JSONB alongside `caller_id`, read-merged so it cannot clobber the needs-review notification flag. **No schema change.** Comparison is digit-based on the last 9 significant digits, so a caller reading their own number back in national form (`086 123 4567` vs `+353861234567`) is recognised as the same line and not filed as an alternate.
+- **Remy no longer asks for a number it already has.** Prompt rule 5 is now rendered from the live caller ID (`buildPhoneNumberRule`, `src/lib/voice/assistant.ts`), which `incoming.ts` passes through from the assistant-request. With caller ID: the number is stated in the prompt and Remy is told never to ask for one and never to read it back — explicitly overriding rules 4, 10 and 15, which were written before caller ID was wired through and all say "collect their best contact number". Withheld: Remy is told to ask. The structured-extraction `phone` field and the fallback transcript extractor now both describe that field as an *additional* number only.
+- **Withheld numbers are recognised as withheld.** Carriers send a placeholder rather than an empty field, so `anonymous`, `unknown`, `restricted`, `private`, `blocked` and the keypad spellings (`+266696687` = ANONYMOUS, `+2568378` = BLOCKED) used to be storable as a lead's phone number. New `src/lib/voice/callerId.ts` normalises these to null in the Vapi adapter — the anti-corruption layer, so nothing downstream ever sees them. The raw payload is still stored verbatim in `voice_events`.
+- **Displayed where the owner reads it.** The summary email's "Number" row is now labelled **"Caller ID"** (and reads "Withheld" when there is none), with an "Alternate number" row when one exists. The dashboard lead drawer labels the phone row "Caller ID" for calls that have one and shows the alternate beneath it; `leads/page.tsx` selects `metadata` to do so.
+
+### Verified
+- `npm test` **50 passing** (was 45 — 9 new: caller-ID normalisation including every blocked placeholder, national-vs-E.164 matching, the adapter carrying/nulling caller ID, and the two prompt variants; existing 41 untouched).
+- `tsc --noEmit` and `next build` clean. `eslint` reports only the 7 pre-existing errors in `ConversationView.tsx`, `CalendarView.tsx`, `ImportClient.tsx`, `api/chat/route.ts`, `global-error.tsx`, `not-found.tsx` and `onboarding/page.tsx` — none in any file touched here.
+- **Not tested with a real phone call by the assistant** (no way to place one, and firing a synthetic webhook would write test rows and send a live email). The end-to-end check — ring the number from a `+353` mobile, give a different number aloud, and confirm the email's Caller ID row and the dashboard lead both show the number actually called from — is still outstanding.
+
 ## 2026-07-30 (Homepage demo CTA duration copy)
 
 - Homepage demo CTA and its accessibility labels updated from "2-Minute Demo" to "90-Second Walkthrough", matching the walkthrough's actual 90-second runtime. Copy only — no behaviour, styling or layout change.

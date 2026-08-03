@@ -56,8 +56,10 @@ email — the caller's email address. Spoken emails arrive as words
   ("john dot smith at gmail dot com") — convert to a normal address.
   Prefer the version the receptionist read back and the caller confirmed.
   Null if never given.
-phone — a contact number the caller stated on the call, digits only as
-  spoken. Null if they never stated one.
+phone — ONLY an additional number the caller spoke aloud to be reached on
+  (e.g. "call me back on the office line instead"), digits as spoken. The
+  number they are calling from is already known and recorded separately —
+  never guess or reconstruct it. Null if they stated no number.
 service — short summary of what the caller wants, e.g. "Boiler repair",
   "Product demo". Only when intent is new_booking; otherwise null.
 preferred_datetime — the caller's requested day and time EXACTLY as they

@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { normaliseCallerId } from "@/lib/voice/callerId";
 import type {
   VoiceAssistantConfig,
   VoiceCallEndedEvent,
@@ -87,8 +88,12 @@ function extractCallContext(message: UnknownRecord): {
   const businessPhone = asString(phoneNumber?.number);
 
   // The caller: message.customer.number, falling back to call.customer.
+  // Normalised here, in the anti-corruption layer, so a withheld number
+  // arrives downstream as null rather than as the literal placeholder
+  // the carrier sent ("anonymous", "+266696687"); the raw payload is
+  // still stored verbatim in voice_events.
   const customer = asRecord(message.customer) ?? asRecord(call?.customer);
-  const callerPhone = asString(customer?.number);
+  const callerPhone = normaliseCallerId(asString(customer?.number));
 
   const callType = asString(call?.type) ?? "";
   const direction: "inbound" | "outbound" = callType

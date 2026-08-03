@@ -9,6 +9,7 @@ import {
 } from "@/lib/leadCapture";
 import { sendCallSummaryEmail } from "@/lib/email";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
+import { isSameNumber } from "@/lib/voice/callerId";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -171,11 +172,21 @@ const VALID_INTENTS: LeadIntent[] = [
 
 /**
  * Maps the call's structured extraction onto the existing
- * ExtractedLead shape. Caller ID backstops the phone field — the one
- * detail a phone call always provides. Confidence is a fixed banding
- * (no numeric score exists for voice extraction): actionable intents
- * sit in the extractor's "details incomplete" band, everything else
- * low.
+ * ExtractedLead shape.
+ *
+ * Caller ID WINS the phone field. It is the one contact detail a call
+ * supplies that no transcription step can mangle and no caller can
+ * misstate; a number spoken during the call is transcribed speech and
+ * may be a different line entirely. This used to be
+ * `details.phone ?? callerPhone`, which let a spoken number replace
+ * the real caller ID on the lead — the spoken number is now kept
+ * separately (see resolveAlternatePhone). The spoken number is still
+ * used when caller ID is withheld, which is exactly when the assistant
+ * is told to ask for one.
+ *
+ * Confidence is a fixed banding (no numeric score exists for voice
+ * extraction): actionable intents sit in the extractor's "details
+ * incomplete" band, everything else low.
  */
 function toExtractedLead(
   details: VoiceExtractedDetails | null,
@@ -191,11 +202,69 @@ function toExtractedLead(
     intent,
     name: details.name,
     email: details.email,
-    phone: details.phone ?? callerPhone,
+    phone: callerPhone ?? details.phone,
     service: details.service,
     preferred_datetime: details.preferred_datetime,
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
   };
+}
+
+/**
+ * The spoken number, when the caller genuinely gave a DIFFERENT one to
+ * be reached on ("try the office line instead"). Returns null when
+ * they spoke their own number back, when they spoke none, or when
+ * there is no caller ID to be an alternative to — in that last case the
+ * spoken number is already the lead's primary phone.
+ */
+function resolveAlternatePhone(
+  details: VoiceExtractedDetails | null,
+  callerPhone: string | null
+): string | null {
+  const spoken = details?.phone?.trim();
+  if (!spoken || !callerPhone) return null;
+  return isSameNumber(spoken, callerPhone) ? null : spoken;
+}
+
+/**
+ * Records the call's phone provenance on the lead: which number the
+ * call actually came from, and any different number the caller asked
+ * to be reached on. Written to the existing leads.metadata JSONB (the
+ * same column the needs-review notification flag uses) — read-merged
+ * so it can never clobber a flag another writer set. Voice-only and
+ * non-fatal: a failure here must not fail the call's processing.
+ */
+async function recordLeadPhoneProvenance(
+  admin: AdminClient,
+  leadId: string,
+  callerPhone: string | null,
+  alternatePhone: string | null
+): Promise<void> {
+  if (!callerPhone && !alternatePhone) return;
+
+  try {
+    const { data } = await admin
+      .from("leads")
+      .select("metadata")
+      .eq("id", leadId)
+      .maybeSingle();
+
+    const metadata = {
+      ...((data?.metadata as Record<string, unknown>) ?? {}),
+      ...(callerPhone ? { caller_id: callerPhone } : {}),
+      ...(alternatePhone ? { alternate_phone: alternatePhone } : {}),
+    };
+
+    const { error } = await admin
+      .from("leads")
+      .update({ metadata })
+      .eq("id", leadId);
+
+    if (error) {
+      console.error("[voice] failed to record caller ID on lead:", error.message);
+    }
+  } catch (err) {
+    console.error("[voice] failed to record caller ID on lead:", err);
+  }
 }
 
 // ── End-of-call processing ─────────────────────────────────────────
@@ -276,8 +345,16 @@ export async function processCallEnded(
   }
 
   const extracted = toExtractedLead(details, event.callerPhone);
+  const alternatePhone = resolveAlternatePhone(details, event.callerPhone);
   let leadId: string | null = null;
   let serviceConfirmed = true;
+
+  if (alternatePhone) {
+    console.log(
+      "[voice] caller gave an additional number — kept as alternate, caller ID retained:",
+      event.providerCallId
+    );
+  }
 
   if (extracted) {
     // Unconfirmed-service guard — new_booking only, and only when a
@@ -347,6 +424,13 @@ export async function processCallEnded(
           }
         }
 
+        await recordLeadPhoneProvenance(
+          admin,
+          leadId,
+          event.callerPhone,
+          alternatePhone
+        );
+
         const { error: linkError } = await admin
           .from("voice_calls")
           .update({ lead_id: leadId, updated_at: new Date().toISOString() })
@@ -367,6 +451,7 @@ export async function processCallEnded(
     businessOwnerEmail: ownerInfo?.email ?? null,
     businessName: ownerInfo?.businessName ?? "the business",
     callerPhone: event.callerPhone,
+    alternatePhone,
     callerName: details?.name ?? null,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,

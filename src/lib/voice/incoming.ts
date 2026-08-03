@@ -107,6 +107,15 @@ export async function buildAssistantRequestResponse(
   }
   const serverUrl = appUrl ? `${appUrl}/api/voice/webhook` : null;
 
-  const config = buildVoiceAssistantConfig(org, knowledge, settings, serverUrl);
+  // event.callerPhone is already normalised by the adapter — null here
+  // means the number is genuinely withheld, which is the one case where
+  // Remy should ask the caller for a number.
+  const config = buildVoiceAssistantConfig(
+    org,
+    knowledge,
+    settings,
+    serverUrl,
+    event.callerPhone
+  );
   return { status: 200, body: buildVapiAssistantResponse(config) };
 }
