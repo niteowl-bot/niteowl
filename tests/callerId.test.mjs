@@ -13,7 +13,11 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { normaliseCallerId, isSameNumber } from "@/lib/voice/callerId";
+import {
+  normaliseCallerId,
+  isSameNumber,
+  normaliseSpokenNumber,
+} from "@/lib/voice/callerId";
 import { parseVapiWebhook, buildVapiAssistantResponse } from "@/lib/voice/vapi";
 import { buildVoiceAssistantConfig } from "@/lib/voice/assistant";
 
@@ -103,6 +107,50 @@ describe("isSameNumber", () => {
   });
 });
 
+describe("normaliseSpokenNumber", () => {
+  // A number the caller SAYS is transcribed speech. Formatting is
+  // stripped; obvious non-numbers are refused rather than written to
+  // the lead as something that looks dialable but is not.
+  test("strips the punctuation speech-to-text puts in a spoken number", () => {
+    assert.equal(normaliseSpokenNumber("086 123 4567"), "0861234567");
+    assert.equal(normaliseSpokenNumber("086-123-4567"), "0861234567");
+    assert.equal(normaliseSpokenNumber("(086) 123 4567"), "0861234567");
+    assert.equal(normaliseSpokenNumber("086.123.4567"), "0861234567");
+  });
+
+  test("keeps the leading + that marks an international number", () => {
+    assert.equal(normaliseSpokenNumber("+353 86 123 4567"), "+353861234567");
+  });
+
+  test("accepts legitimate international numbers", () => {
+    assert.equal(normaliseSpokenNumber("+1 415 555 2671"), "+14155552671");
+    assert.equal(normaliseSpokenNumber("+44 20 7946 0958"), "+442079460958");
+    assert.equal(normaliseSpokenNumber("00353 86 123 4567"), "00353861234567");
+  });
+
+  test("refuses a number too short to dial", () => {
+    assert.equal(normaliseSpokenNumber("086 12"), null);
+    assert.equal(normaliseSpokenNumber("4567"), null);
+  });
+
+  test("refuses transcription that is not a number at all", () => {
+    assert.equal(normaliseSpokenNumber("the office line"), null);
+    assert.equal(normaliseSpokenNumber("anonymous"), null);
+    assert.equal(normaliseSpokenNumber(""), null);
+    assert.equal(normaliseSpokenNumber(null), null);
+    assert.equal(normaliseSpokenNumber(undefined), null);
+  });
+
+  test("refuses more digits than any real number has", () => {
+    // Two numbers run together, or a spoken extension tacked on.
+    assert.equal(normaliseSpokenNumber("086 123 4567 01 555 1234"), null);
+  });
+
+  test("never invents digits — what comes back is what was heard", () => {
+    assert.equal(normaliseSpokenNumber("0861234567"), "0861234567");
+  });
+});
+
 describe("parseVapiWebhook caller ID", () => {
   test("carries a real caller ID through to the internal event", () => {
     const event = parseVapiWebhook(endOfCallReport("+353861234567"));
@@ -158,7 +206,7 @@ describe("assistant prompt — when Remy asks for a number", () => {
     const prompt = promptFor("+353861234567");
     assert.match(prompt, /\+353861234567/);
     assert.match(prompt, /never ask them to recite a number from scratch/i);
-    assert.match(prompt, /is this the best number to reach you on/i);
+    assert.match(prompt, /is that the best number to reach you on/i);
   });
 
   test("a different spoken number stays an additional contact, not a replacement", () => {
@@ -237,5 +285,102 @@ describe("assistant prompt — when Remy asks for a number", () => {
       "+353861234567"
     );
     assert.doesNotMatch(config.firstMessage, /\+353861234567/);
+  });
+});
+
+describe("assistant prompt — the caller ID is never read aloud", () => {
+  // Regression, 2026-08-03 test call: Remy recited "I see you're
+  // calling from plus three five three eight seven..." back at a
+  // caller who already knows their own number. It still has to HOLD
+  // the number (to answer "what number have you got for me?"), so the
+  // prompt keeps it exactly once, as reference, never as a script.
+  test("no scripted line speaks the digits", () => {
+    const prompt = promptFor("+353861234567");
+    const occurrences = prompt.split("+353861234567").length - 1;
+    assert.equal(occurrences, 1, "caller ID should appear once, as reference");
+    assert.doesNotMatch(prompt, /calling from \+353861234567/i);
+  });
+
+  test("it is told explicitly not to say the number out loud", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /NEVER say that number out loud/);
+    assert.match(prompt, /do not read it out, in full or digit by digit/i);
+    assert.match(prompt, /for your reference only/i);
+  });
+
+  test("the confirmation question names the number without speaking it", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /I can use the number you're calling from/i);
+    assert.match(prompt, /is that the best number to reach you on/i);
+  });
+
+  test("a caller who asks may still be told the number", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /if the caller directly asks you which number you have/i);
+  });
+
+  test("declining sends Remy to the open question, not to the digits", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /What's the best number to reach you on\?/);
+  });
+
+  test("the final read-back refers to the line, not the digits", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /callback on the number you're calling from/i);
+    assert.match(prompt, /read back only a DIFFERENT number they gave you aloud/i);
+  });
+});
+
+describe("assistant prompt — spoken callback numbers are checked", () => {
+  test("an unclear number is asked for again, never guessed", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /NEVER guess or fill in the missing digits/);
+    assert.match(prompt, /I may not have caught the full number/i);
+    assert.match(prompt, /Could you repeat it for me\?/);
+  });
+
+  test("the same check applies when the caller ID is withheld", () => {
+    const prompt = promptFor(null);
+    assert.match(prompt, /NEVER guess or fill in the missing digits/);
+    assert.match(prompt, /I may not have caught the full number/i);
+  });
+
+  test("a number that is heard clearly is still confirmed back", () => {
+    assert.match(promptFor("+353861234567"), /Thanks, I've got 086 123 4567/);
+    assert.match(promptFor(null), /Thanks, I've got your number as 086 123 4567/);
+  });
+});
+
+describe("assistant prompt — mis-heard service names", () => {
+  // Regression, 2026-08-03 test call: "boiler service" was transcribed
+  // as "valer service" and Remy went straight to treating it as a
+  // service the business does not provide.
+  test("one clarifying question comes before ruling a service out", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /ask ONE short clarifying question/);
+    assert.match(prompt, /Sorry, did you say boiler service\?/);
+    assert.match(prompt, /Ask this once only/i);
+  });
+
+  test("rule 15 defers to it before deciding a service is not listed", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(
+      prompt,
+      /Before you decide a service is not listed.*apply rule 21 first/i
+    );
+  });
+
+  test("still-unsure falls back to the team, never to a guess", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /I'll pass that request to the team to confirm/i);
+    assert.match(
+      prompt,
+      /Never tell a caller a service is available because it merely sounds like one/i
+    );
+  });
+
+  test("clarifying never becomes a booking on its own", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /asking this question never confirms a booking/i);
   });
 });

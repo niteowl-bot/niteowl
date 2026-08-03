@@ -65,6 +65,57 @@ export function normaliseCallerId(raw: string | null | undefined): string | null
 }
 
 /**
+ * Longest a real number can be: E.164 caps a subscriber number at 15
+ * digits including the country code. Anything longer is two numbers
+ * run together, a number with a spoken extension, or transcription
+ * noise — not something to ring back.
+ */
+const MAX_SPOKEN_NUMBER_DIGITS = 15;
+
+/**
+ * Normalises a number the caller SPOKE during the call, or null when
+ * what was heard cannot plausibly be a phone number.
+ *
+ * Speech arrives with the punctuation of speech: "oh eight six... one
+ * two three, four five six seven" reaches us as "086 123 4567",
+ * "086-123-4567" or "(086) 123 4567". Stripping that formatting is
+ * safe. Judging the RESULT is what this adds: a transcript that
+ * yielded four digits, a word, or two numbers run together used to be
+ * written to the lead verbatim, giving the owner a number that cannot
+ * be dialled — and, because the lead engine merges on phone, a junk
+ * value shared by two callers could merge unrelated leads.
+ *
+ * Deliberately lenient: the only judgements made are "too few digits
+ * to dial" and "more digits than any number has". Country codes, trunk
+ * prefixes and international formats are none of this function's
+ * business — rejecting a legitimate foreign number would lose a lead,
+ * which is the exact failure this is meant to prevent.
+ *
+ * NEVER used for network caller ID — that keeps normaliseCallerId
+ * above and its own rules. This is only for spoken numbers, which are
+ * stored as the ALTERNATE contact.
+ */
+export function normaliseSpokenNumber(
+  raw: string | null | undefined
+): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // A leading "+" is the one piece of formatting worth preserving: it
+  // marks the number as already international, so the owner knows not
+  // to add a country code before dialling.
+  const isInternational = trimmed.startsWith("+");
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length < MIN_CALLER_ID_DIGITS) return null;
+  if (digits.length > MAX_SPOKEN_NUMBER_DIGITS) return null;
+  if (BLOCKED_CALLER_IDS.has(digits)) return null;
+
+  return isInternational ? `+${digits}` : digits;
+}
+
+/**
  * True when two numbers refer to the same line despite different
  * formatting. A caller reading their own number aloud gives the
  * national form ("086 123 4567") while caller ID arrives in E.164

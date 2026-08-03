@@ -9,7 +9,7 @@ import {
 } from "@/lib/leadCapture";
 import { sendCallSummaryEmail } from "@/lib/email";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
-import { isSameNumber } from "@/lib/voice/callerId";
+import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -202,7 +202,11 @@ function toExtractedLead(
     intent,
     name: details.name,
     email: details.email,
-    phone: callerPhone ?? details.phone,
+    // Caller ID first, exactly as before. The spoken number only ever
+    // reaches this field when caller ID is withheld — and then only if
+    // it survives normalisation, because an unusable number here would
+    // become the lead's primary phone and its merge key.
+    phone: callerPhone ?? normaliseSpokenNumber(details.phone),
     service: details.service,
     preferred_datetime: details.preferred_datetime,
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
@@ -215,13 +219,30 @@ function toExtractedLead(
  * they spoke their own number back, when they spoke none, or when
  * there is no caller ID to be an alternative to — in that last case the
  * spoken number is already the lead's primary phone.
+ *
+ * A spoken number that cannot plausibly be a phone number is dropped
+ * rather than recorded: half a number in the owner's inbox is worse
+ * than none, because it looks dialable. The assistant is told to ask
+ * the caller to repeat an unclear number (rule 5), so this only fires
+ * when that still produced nothing usable.
  */
 function resolveAlternatePhone(
   details: VoiceExtractedDetails | null,
   callerPhone: string | null
 ): string | null {
-  const spoken = details?.phone?.trim();
-  if (!spoken || !callerPhone) return null;
+  const raw = details?.phone?.trim();
+  const spoken = normaliseSpokenNumber(raw);
+  if (!spoken) {
+    if (raw) {
+      // Digit count only — the number itself stays out of the logs.
+      console.warn(
+        "[voice] spoken callback number discarded as implausible; digits heard:",
+        raw.replace(/\D/g, "").length
+      );
+    }
+    return null;
+  }
+  if (!callerPhone) return null;
   return isSameNumber(spoken, callerPhone) ? null : spoken;
 }
 
