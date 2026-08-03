@@ -22,12 +22,16 @@ const ORG = {
 const SETTINGS = { greeting: null, voice_id: null, language: null };
 const CALLER = "+353861234567";
 
-function configFor(callerPhone = CALLER) {
-  return buildVoiceAssistantConfig(ORG, [], SETTINGS, null, callerPhone);
+// Monday 3 August 2026 — so "Thursday" that week is 6 August, the date
+// from the production call this behaviour came out of.
+const MONDAY_3_AUG_2026 = new Date("2026-08-03T09:00:00+01:00");
+
+function configFor(callerPhone = CALLER, now = MONDAY_3_AUG_2026) {
+  return buildVoiceAssistantConfig(ORG, [], SETTINGS, null, callerPhone, now);
 }
 
-function promptFor(callerPhone = CALLER) {
-  return configFor(callerPhone).systemPrompt;
+function promptFor(callerPhone = CALLER, now = MONDAY_3_AUG_2026) {
+  return configFor(callerPhone, now).systemPrompt;
 }
 
 /**
@@ -140,6 +144,159 @@ describe("conversation order — the job comes before the caller", () => {
     assert.match(prompt, /Still work through every step of rule 5/i);
     assert.match(prompt, /work through rule 5 and promise a callback/i);
     assert.doesNotMatch(prompt, /collect their name and best contact number/i);
+  });
+});
+
+describe("appointment date and time", () => {
+  // From the 2026-08 production call: the caller said "Thursday at 2 PM",
+  // Remy accepted it, and 06/08/2026 14:00 was stored without the caller
+  // ever hearing a date. The prompt carried no date at all, so Remy had
+  // nothing to resolve "Thursday" against.
+  test("Remy is told today's date, so a weekday can become a calendar date", () => {
+    assert.match(promptFor(), /Today is Monday, 3 August 2026\./);
+    assert.match(promptFor(), /work out the calendar date behind any day the caller names/i);
+  });
+
+  test("the date moves with the clock", () => {
+    assert.match(
+      promptFor(CALLER, new Date("2026-12-25T09:00:00Z")),
+      /Today is Friday, 25 December 2026\./
+    );
+  });
+
+  test("a named weekday is resolved and confirmed before it counts", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /work out the calendar date from today's date above and CONFIRM it/);
+    assert.match(
+      prompt,
+      /Just to confirm, you mean Thursday, 6 August at 2pm\?/
+    );
+    assert.match(prompt, /only once they agree/i);
+  });
+
+  test("a time with no day gets a day question", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /They gave only a TIME \("2pm"\): ask which day/);
+    assert.match(prompt, /Which day would suit you best\?/);
+  });
+
+  test("a day with no time gets a time question", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /They gave only a DAY \("Thursday"\): ask for the time/);
+    assert.match(prompt, /What time on Thursday would suit you\?/);
+  });
+
+  test("an explicit date is not asked for a second time", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /They gave an explicit DATE and time \("6 August at 2pm"\)/);
+    assert.match(prompt, /Do NOT ask for the date again/);
+  });
+
+  test("an ambiguous relative date is asked about, never guessed", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /NEVER guess a calendar date/);
+    assert.match(prompt, /never say a date you have not had confirmed/i);
+    assert.match(prompt, /could mean either of two weeks/i);
+    assert.match(prompt, /ask plainly which date they mean rather than picking one/i);
+  });
+
+  test("vague answers are still refused", () => {
+    // Unchanged behaviour — the rule absorbed this, it did not replace it.
+    const prompt = promptFor();
+    assert.match(prompt, /NEVER accept a vague answer about when/);
+    assert.match(prompt, /What time tomorrow would suit you best\?/);
+  });
+});
+
+describe("the real call: 'Thursday at 2 PM' must not pass unconfirmed", () => {
+  // Reproduces the production sequence that failed:
+  //   Caller: "Thursday at 2 PM."
+  //   Remy:   "Thank you. May I have your name, please?"   <- wrong
+  // Remy moved straight to the name without ever saying a calendar
+  // date, and closed with "this Thursday at 2 PM".
+  //
+  // NOTE ON WHAT THIS CAN PROVE: these assert the INSTRUCTION is in the
+  // prompt. They cannot prove the model obeys it — and in the failing
+  // call the instruction was not in the deployed prompt at all, because
+  // the change was never committed. A passing test here means the
+  // wording is present in the built prompt, nothing more.
+  test("the ordered steps gate step 4 behind a confirmed date", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /say the calendar date back and get their agreement BEFORE step 4/
+    );
+    assert.match(prompt, /never carry an unconfirmed date into the call/);
+  });
+
+  test("the gate sits on the date step, ahead of the name step", () => {
+    const lines = checklistOrder(promptFor());
+    const dateStep = lines.findIndex((l) => /BEFORE step 4/.test(l));
+    const nameStep = lines.findIndex((l) => /Their name/.test(l));
+    assert.notEqual(dateStep, -1, "the date step should carry the gate");
+    assert.ok(dateStep < nameStep, "the date must be confirmed before the name");
+  });
+
+  test("a bare weekday is never the final word on the date", () => {
+    const prompt = promptFor();
+    // "this Thursday at 2 PM" — what the failing call actually closed with.
+    assert.match(prompt, /the weekday AND the calendar date — never a bare weekday/);
+    assert.match(prompt, /Just to confirm, you mean Thursday, 6 August at 2pm\?/);
+  });
+
+  test("the owner's summary reports the settled calendar date", () => {
+    // The email said "Callback date: Thursday". The summary is generated
+    // from the transcript, so it can only be as good as what Remy said —
+    // but where a date WAS settled, it must not be reduced to a weekday.
+    const { summaryInstructions } = configFor();
+    assert.match(summaryInstructions, /Callback date: if the transcript settled on a calendar date/);
+    assert.match(summaryInstructions, /write that full date, not the bare weekday/);
+    assert.match(summaryInstructions, /never work out a date yourself/);
+  });
+
+  test("the summary still refuses to invent a date that was never said", () => {
+    const { summaryInstructions } = configFor();
+    assert.match(
+      summaryInstructions,
+      /If a bare weekday or a vague phrase was all that was ever said, write exactly that/
+    );
+    assert.match(summaryInstructions, /Use ONLY what was actually said/i);
+  });
+});
+
+describe("a requested time is not a booking", () => {
+  test("the time taken on the call is described as requested or preferred", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /the caller's REQUESTED or PREFERRED time, not an appointment/);
+    assert.match(
+      prompt,
+      /I've noted your preferred time as Thursday, 6 August at 2pm\. The team will contact you to confirm the appointment\./
+    );
+  });
+
+  test("confirmed-booking wording is banned while on the call", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /NEVER tell a caller their appointment is confirmed or booked/);
+    assert.match(prompt, /booked in/);
+    assert.match(prompt, /see them/);
+    assert.match(prompt, /never promise the slot is guaranteed/i);
+  });
+
+  test("but a genuinely confirmed booking may still be called confirmed", () => {
+    // The ban is conditional, not absolute — it turns on whether the
+    // business has actually confirmed, not on the words themselves.
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Booked or confirmed wording is only ever correct once the business has actually confirmed the appointment/
+    );
+    // The listed-service path still promises a confirmation to follow.
+    assert.match(prompt, /They'll confirm your appointment shortly/);
+  });
+
+  test("the final recap gives the calendar date, not a bare weekday", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /the weekday AND the calendar date — never a bare weekday/);
   });
 });
 
@@ -288,7 +445,7 @@ describe("final confirmation", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /Just to confirm, Brian, I've got your request for a boiler service next Tuesday at 4pm/
+      /Just to confirm, Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/
     );
     assert.match(prompt, /the team will contact you on the number you're calling from/i);
   });
