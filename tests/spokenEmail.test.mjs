@@ -76,6 +76,82 @@ describe("normaliseSpokenEmail — spoken forms", () => {
   });
 });
 
+describe("normaliseSpokenEmail — conversational lead-ins", () => {
+  // The extraction prompts ask for the address alone, but a model that
+  // hands over the whole sentence must not fold the filler into the
+  // local part: myemailismichael.ryan@hotmail.com is wrong yet
+  // well-formed enough to be saved and emailed.
+  const EXPECTED = "michael.ryan@hotmail.com";
+
+  test("'My email is ...'", () => {
+    assert.equal(
+      normaliseSpokenEmail("My email is michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+  });
+
+  test("'It's ...'", () => {
+    assert.equal(
+      normaliseSpokenEmail("It's michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+    assert.equal(
+      normaliseSpokenEmail("Its michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+  });
+
+  test("'You can email me at ...' — the filler 'at' is not the @", () => {
+    // Two "at"s: only the second is the separator. Getting this wrong
+    // strips to "@michael.ryan@hotmail.com".
+    assert.equal(
+      normaliseSpokenEmail("You can email me at michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+    assert.equal(
+      normaliseSpokenEmail("You can contact me on michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+    assert.equal(
+      normaliseSpokenEmail("Please email me at michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+  });
+
+  test("'The email address is ...'", () => {
+    assert.equal(
+      normaliseSpokenEmail("The email address is michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+    assert.equal(
+      normaliseSpokenEmail("My email address is michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+    assert.equal(
+      normaliseSpokenEmail("Email address is michael dot ryan at hotmail dot com"),
+      EXPECTED
+    );
+  });
+
+  test("a lead-in in front of an already-valid address", () => {
+    assert.equal(
+      normaliseSpokenEmail("My email is michael.ryan@hotmail.com"),
+      EXPECTED
+    );
+    assert.equal(normaliseSpokenEmail("It's pat@gmail.com"), "pat@gmail.com");
+  });
+
+  test("the lead-in list is closed — unknown filler is not guessed away", () => {
+    // Deliberately NOT stripped: inventing a rule for arbitrary words
+    // risks deleting part of a real address. Rejecting is the safe
+    // outcome, and the caller's words survive in the transcript.
+    assert.equal(
+      normaliseSpokenEmail("erm hang on it is probably michael dot ryan at hotmail dot com"),
+      null
+    );
+  });
+});
+
 describe("normaliseSpokenEmail — valid addresses pass through", () => {
   test("an already-valid address is returned unchanged", () => {
     assert.equal(
@@ -113,6 +189,24 @@ describe("normaliseSpokenEmail — unusable input is dropped", () => {
   test("plain speech that is not an address at all is null", () => {
     assert.equal(normaliseSpokenEmail("I'd rather not give one"), null);
     assert.equal(normaliseSpokenEmail("no email"), null);
+  });
+
+  test("a lead-in with no address behind it is null, not a fragment", () => {
+    // Stripping a prefix must never be enough on its own to produce a
+    // "result" — what is left still has to be a real address.
+    assert.equal(normaliseSpokenEmail("My email is"), null);
+    assert.equal(normaliseSpokenEmail("It's"), null);
+    assert.equal(normaliseSpokenEmail("You can email me at"), null);
+    assert.equal(
+      normaliseSpokenEmail("My email is not something I want to give out"),
+      null
+    );
+    assert.equal(normaliseSpokenEmail("The email address is on our website"), null);
+  });
+
+  test("a lead-in in front of a half-heard address is still null", () => {
+    assert.equal(normaliseSpokenEmail("My email is michael dot ryan at"), null);
+    assert.equal(normaliseSpokenEmail("It's michael ryan at hotmail"), null);
   });
 
   test("empty and missing values are null", () => {

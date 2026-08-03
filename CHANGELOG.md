@@ -2,6 +2,20 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-03 (Spoken emails said as a sentence)
+
+### Fixed — `normaliseSpokenEmail` only; no change to lead isolation, caller ID, alternate numbers, booking, calendar, Knowledge Base, dashboard, chat, widget, pricing, schema or Vapi/Twilio configuration
+Resolves the limitation recorded in the entry below. Normalisation assumed the extracted field held the address alone, so a whole sentence had its leading words folded into the local part: "My email is michael dot ryan at hotmail dot com" became `myemailismichael.ryan@hotmail.com` — wrong, but well-formed enough to be saved and emailed.
+
+- **A closed list of conversational lead-ins** is stripped from the start: "my/the email (address) is", "email address is", "it's"/"that's"/"this is", "you can/please email|contact|reach me at|on". Deliberately a fixed list, not a general "drop unknown words" pass — deleting a word that turned out to be part of the address would produce a plausible but wrong result. Lead-ins ending in "at"/"on" consume that word, because "you can email me **at** michael dot ryan **at** hotmail dot com" has two and only the second is the `@`.
+- **Filler phrased any other way is rejected, not absorbed.** Before spaces are closed up, the words destined for the local part are counted; more than four means a sentence rather than a name, and the result is dropped. "erm hang on it is probably michael dot ryan at hotmail dot com" returns null instead of an address nobody has.
+- All four requested phrasings now resolve to `michael.ryan@hotmail.com`, and a lead-in in front of an already-valid address ("My email is michael.ryan@hotmail.com", "It's pat@gmail.com") passes through unchanged.
+
+### Verified
+- `npm test` **138 passing** (was 130 — 8 new: the four sentence forms plus variants, a lead-in before a valid address, a lead-in with nothing behind it, a lead-in before a half-heard address, and unknown filler being rejected). The voice-lead isolation and caller-ID suites are untouched and passing.
+- `tsc --noEmit` and `next build` clean.
+- **Still unhandled:** trailing filler. "michael dot ryan at hotmail dot com thanks" yields `michael.ryan@hotmail.comthanks`, since the pattern accepts a long TLD. Scoped out deliberately — the fix is prefix-only.
+
 ## 2026-08-03 (Spoken email addresses, and clearer service descriptions)
 
 ### Fixed — voice contact normalisation and two prompt rules only; no change to lead isolation, caller ID, alternate numbers, booking, calendar, Knowledge Base, chat, widget, dashboard, pricing, schema or Vapi/Twilio configuration
