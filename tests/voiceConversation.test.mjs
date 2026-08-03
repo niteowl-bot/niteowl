@@ -123,7 +123,10 @@ describe("conversation order — the job comes before the caller", () => {
   });
 
   test("nothing was dropped from the mandatory checklist", () => {
-    assert.equal(checklistOrder(promptFor()).length, 6);
+    // 7 since email became a required step of its own — it used to be a
+    // sub-clause of the name step, which is how a call reached
+    // "anything else?" without one.
+    assert.equal(checklistOrder(promptFor()).length, 7);
   });
 
   test("details the caller volunteered are not asked for again", () => {
@@ -264,6 +267,92 @@ describe("the real call: 'Thursday at 2 PM' must not pass unconfirmed", () => {
   });
 });
 
+describe("the real call: boiler service closed without an address", () => {
+  // Production sequence that failed:
+  //   "boiler service" -> "Thursday at 2 PM" -> date confirmed -> name
+  //   -> email -> "Is there anything else I can help you with?"
+  // No service address was ever requested; the caller had to interrupt
+  // with "What about my address?". Remy also said the team would ring
+  // "on the number you're calling from" without ever asking whether
+  // that was the best number.
+  //
+  // Two wordings let that happen: email was a sub-clause of the name
+  // step rather than a required field, and the address and number steps
+  // carried "only when..." conditionals the model could judge its way
+  // out of. Both are now unconditional entries in a named gate.
+  test("the gate names every required field, email and address included", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /COMPLETION GATE/);
+    assert.match(
+      prompt,
+      /check you hold each of: service, calendar date, time, name, email, confirmed callback number, and the address whenever the job happens at their premises/
+    );
+  });
+
+  test("the gate blocks 'anything else?', the recap AND the goodbye", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /before you may ask "anything else\?"/);
+    assert.match(prompt, /give the rule 11 recap/);
+    assert.match(prompt, /say anything that sounds like goodbye/);
+    assert.match(prompt, /Ask for anything missing NOW, one at a time/);
+  });
+
+  test("an on-site job always needs an address — boiler work named explicitly", () => {
+    // The old wording was "ONLY for jobs at the caller's premises
+    // (plumbing, electrical, heating...)", which left the model to
+    // decide whether a boiler service qualified. It now says EVERY, and
+    // names boiler work first.
+    const prompt = promptFor();
+    assert.match(prompt, /EVERY job at the caller's premises: boiler and heating work/);
+    assert.doesNotMatch(prompt, /skip it entirely otherwise/);
+  });
+
+  test("email is its own required step, not an aside on the name step", () => {
+    const lines = checklistOrder(promptFor());
+    const nameStep = lines.findIndex((l) => /Their name/.test(l));
+    const emailStep = lines.findIndex((l) => /Their email/.test(l));
+    const addressStep = lines.findIndex((l) => /The address where the work is needed/.test(l));
+    const numberStep = lines.findIndex((l) => /The callback number/.test(l));
+
+    for (const [label, i] of Object.entries({ nameStep, emailStep, addressStep, numberStep })) {
+      assert.notEqual(i, -1, `${label} should be its own step`);
+    }
+    assert.ok(nameStep < emailStep, "name then email");
+    assert.ok(emailStep < addressStep, "email then address");
+    assert.ok(addressStep < numberStep, "address then number");
+  });
+
+  test("caller ID must still be verified out loud, not assumed", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /Caller ID does not excuse you: you must still ASK the rule 7 question and get a yes/);
+    assert.match(prompt, /Assuming the number is fine is not confirming it/);
+    // Rule 7 still owns the wording, and still speaks no digits.
+    assert.match(prompt, /I can use the number you're calling from\. Is that the best number to reach you on\?/);
+  });
+
+  test("a withheld caller ID still means asking for a number", () => {
+    const prompt = promptFor(null);
+    assert.match(prompt, /withheld or unavailable/i);
+    assert.match(prompt, /ask for the best number to reach them on/i);
+    assert.match(prompt, /COMPLETION GATE/);
+  });
+
+  test("the recap carries every collected field", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /Just to confirm, Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/);
+    assert.match(prompt, /the weekday AND the calendar date — never a bare weekday/);
+  });
+
+  test("the date-confirmation behaviour that now works is untouched", () => {
+    // Guard: this hardening must not weaken the fix verified on the
+    // last live call.
+    const prompt = promptFor();
+    assert.match(prompt, /Today is Monday, 3 August 2026\./);
+    assert.match(prompt, /Just to confirm, you mean Thursday, 6 August at 2pm\?/);
+    assert.match(prompt, /say the calendar date back and get their agreement BEFORE step 4/);
+  });
+});
+
 describe("a requested time is not a booking", () => {
   test("the time taken on the call is described as requested or preferred", () => {
     const prompt = promptFor();
@@ -303,7 +392,7 @@ describe("a requested time is not a booking", () => {
 describe("spoken email addresses", () => {
   test("the address is converted from speech, not repeated as spoken", () => {
     const prompt = promptFor();
-    assert.match(prompt, /An email address will be SPOKEN in words/);
+    assert.match(prompt, /Their email\. It will be SPOKEN in words/);
     assert.match(prompt, /michael ryan at hotmail dot com/);
     assert.match(prompt, /turn it into a normal address/i);
   });

@@ -242,7 +242,7 @@ describe("assistant prompt — when Remy asks for a number", () => {
     ]) {
       assert.match(prompt, line, String(line));
     }
-    assert.match(prompt, /before you say anything that sounds like goodbye/i);
+    assert.match(prompt, /say anything that sounds like goodbye/i);
   });
 
   test("the call closes only after a final read-back is confirmed", () => {
