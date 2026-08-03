@@ -122,6 +122,7 @@ function parseStructuredDetails(value: unknown): VoiceExtractedDetails | null {
     phone: asString(data.phone),
     service: asString(data.service),
     preferred_datetime: asString(data.preferred_datetime),
+    service_address: asString(data.service_address),
     urgent: data.urgent === true,
   };
 }
@@ -252,7 +253,28 @@ export function buildVapiAssistantResponse(
         // on the first real production call, where the summary arrived
         // but structuredData was null. 30s trades a slower end-of-call
         // report for reliable extraction.
-        summaryPlan: { enabled: true, timeoutSeconds: 30 },
+        // Custom summary messages replace Vapi's default prompt
+        // ("summarize the call in 2-3 sentences"), which was happy to
+        // report details the call never actually collected. Shape and
+        // template variables are per SummaryPlan.messages in Vapi's
+        // OpenAPI spec ({{transcript}}, {{systemPrompt}}, {{messages}},
+        // {{endedReason}}); the user message mirrors their documented
+        // default so only the instructions change. If a future Vapi
+        // change breaks this, the summary comes back empty rather than
+        // wrong — the email says so, and the lead itself comes from
+        // structuredData, not from here.
+        summaryPlan: {
+          enabled: true,
+          timeoutSeconds: 30,
+          messages: [
+            { role: "system", content: config.summaryInstructions },
+            {
+              role: "user",
+              content:
+                "Here is the transcript:\n\n{{transcript}}\n\n. Here is the ended reason of the call:\n\n{{endedReason}}\n\n",
+            },
+          ],
+        },
         structuredDataPlan: {
           enabled: true,
           schema: config.structuredDataSchema,

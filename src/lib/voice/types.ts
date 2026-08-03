@@ -22,6 +22,12 @@ export interface VoiceExtractedDetails {
   phone: string | null;
   service: string | null;
   preferred_datetime: string | null;
+  /**
+   * Where the work is needed, for on-site trades. No column exists for
+   * it on leads (ExtractedLead has no address field), so it is recorded
+   * in leads.metadata rather than changing the shared lead schema.
+   */
+  service_address: string | null;
   urgent: boolean;
 }
 
@@ -101,12 +107,17 @@ export interface VoiceAssistantConfig {
   maxDurationSeconds: number;
   /**
    * JSON schema for post-call structured extraction. The provider's
-   * default analysis prompts are used against this schema — custom
-   * analysis prompts are deliberately not configured yet, since their
-   * wire format (template variables) should be confirmed against live
-   * payloads before relying on them.
+   * default analysis prompt is used against this schema — the schema's
+   * own field descriptions carry the "never invent a detail" rules.
    */
   structuredDataSchema: Record<string, unknown>;
+  /**
+   * Instructions for the post-call summary the owner is emailed —
+   * the system message only, with no provider template syntax in it.
+   * The adapter pairs this with the provider's transcript variable, so
+   * this stays portable (Vapi's summaryPlan.messages today).
+   */
+  summaryInstructions: string;
   /**
    * Absolute URL that call events should be posted back to; null
    * falls back to the server URL configured provider-side.

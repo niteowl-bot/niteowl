@@ -35,6 +35,7 @@ return ONLY a valid JSON object describing what the caller wanted.
   "phone": string or null,
   "service": string or null,
   "preferred_datetime": string or null,
+  "service_address": string or null,
   "urgent": boolean
 }
 
@@ -64,7 +65,13 @@ service — short summary of what the caller wants, e.g. "Boiler repair",
   "Product demo". Only when intent is new_booking; otherwise null.
 preferred_datetime — the caller's requested day and time EXACTLY as they
   said it (e.g. "tomorrow at 2pm", "the twelfth of July at 10 AM"). Do NOT
-  convert to a calendar date. Null only if no time or date was mentioned.
+  convert to a calendar date. If the caller only gave a vague answer
+  ("tomorrow", "the afternoon", "later") and never narrowed it down, record
+  that vague phrase verbatim — NEVER turn it into a specific clock time and
+  never borrow a time the receptionist suggested but the caller did not
+  accept. Null only if no time or date was mentioned.
+service_address — the address or location where the work is needed, exactly
+  as the caller gave it. Null if they gave none.
 urgent — true only if the caller was urgent, upset, or needs a same-day
   callback.
 
@@ -142,6 +149,7 @@ export async function extractVoiceLeadFromTranscript(
       phone: asString(parsed.phone),
       service: asString(parsed.service),
       preferred_datetime: asString(parsed.preferred_datetime),
+      service_address: asString(parsed.service_address),
       urgent: parsed.urgent === true,
     };
   } catch (err) {

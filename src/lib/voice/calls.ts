@@ -226,20 +226,24 @@ function resolveAlternatePhone(
 }
 
 /**
- * Records the call's phone provenance on the lead: which number the
- * call actually came from, and any different number the caller asked
- * to be reached on. Written to the existing leads.metadata JSONB (the
- * same column the needs-review notification flag uses) — read-merged
- * so it can never clobber a flag another writer set. Voice-only and
- * non-fatal: a failure here must not fail the call's processing.
+ * Records call-derived detail on the lead that has no column of its
+ * own: which number the call actually came from, any different number
+ * the caller asked to be reached on, and the on-site service address
+ * (ExtractedLead carries no address field, and the shared lead schema
+ * is deliberately left alone). Written to the existing leads.metadata
+ * JSONB (the same column the needs-review notification flag uses) —
+ * read-merged so it can never clobber a flag another writer set.
+ * Voice-only and non-fatal: a failure here must not fail the call's
+ * processing.
  */
-async function recordLeadPhoneProvenance(
+async function recordLeadCallDetails(
   admin: AdminClient,
   leadId: string,
   callerPhone: string | null,
-  alternatePhone: string | null
+  alternatePhone: string | null,
+  serviceAddress: string | null
 ): Promise<void> {
-  if (!callerPhone && !alternatePhone) return;
+  if (!callerPhone && !alternatePhone && !serviceAddress) return;
 
   try {
     const { data } = await admin
@@ -252,6 +256,7 @@ async function recordLeadPhoneProvenance(
       ...((data?.metadata as Record<string, unknown>) ?? {}),
       ...(callerPhone ? { caller_id: callerPhone } : {}),
       ...(alternatePhone ? { alternate_phone: alternatePhone } : {}),
+      ...(serviceAddress ? { service_address: serviceAddress } : {}),
     };
 
     const { error } = await admin
@@ -424,11 +429,12 @@ export async function processCallEnded(
           }
         }
 
-        await recordLeadPhoneProvenance(
+        await recordLeadCallDetails(
           admin,
           leadId,
           event.callerPhone,
-          alternatePhone
+          alternatePhone,
+          details?.service_address ?? null
         );
 
         const { error: linkError } = await admin

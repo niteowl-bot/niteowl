@@ -14,7 +14,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { normaliseCallerId, isSameNumber } from "@/lib/voice/callerId";
-import { parseVapiWebhook } from "@/lib/voice/vapi";
+import { parseVapiWebhook, buildVapiAssistantResponse } from "@/lib/voice/vapi";
 import { buildVoiceAssistantConfig } from "@/lib/voice/assistant";
 
 const ORG = {
@@ -118,17 +118,114 @@ describe("parseVapiWebhook caller ID", () => {
   });
 });
 
+describe("vapi summaryPlan rendering", () => {
+  function summaryPlan() {
+    const config = buildVoiceAssistantConfig(
+      ORG,
+      [],
+      SETTINGS,
+      null,
+      "+353861234567"
+    );
+    return buildVapiAssistantResponse(config).assistant.analysisPlan.summaryPlan;
+  }
+
+  test("sends the custom instructions as the system message", () => {
+    const plan = summaryPlan();
+    assert.equal(plan.enabled, true);
+    assert.equal(plan.messages[0].role, "system");
+    assert.match(plan.messages[0].content, /precise note-taker/i);
+  });
+
+  test("passes the transcript through Vapi's template variable", () => {
+    const plan = summaryPlan();
+    assert.equal(plan.messages[1].role, "user");
+    assert.match(plan.messages[1].content, /\{\{transcript\}\}/);
+    assert.match(plan.messages[1].content, /\{\{endedReason\}\}/);
+  });
+
+  test("keeps the raised analysis timeout", () => {
+    assert.equal(summaryPlan().timeoutSeconds, 30);
+  });
+});
+
 describe("assistant prompt — when Remy asks for a number", () => {
-  test("with caller ID it is told the number and told not to ask", () => {
+  // Remy CONFIRMS the caller ID rather than asking for a number from
+  // scratch: the lead must carry a number the caller can be reached on,
+  // but a yes/no confirmation speaks no digits, so the mis-transcription
+  // this file's fix was written for still cannot reach the lead.
+  test("with caller ID it confirms that number instead of asking for one", () => {
     const prompt = promptFor("+353861234567");
     assert.match(prompt, /\+353861234567/);
-    assert.match(prompt, /never ask the caller for their phone number/i);
+    assert.match(prompt, /never ask them to recite a number from scratch/i);
+    assert.match(prompt, /is this the best number to reach you on/i);
+  });
+
+  test("a different spoken number stays an additional contact, not a replacement", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /saved as an additional contact number/i);
   });
 
   test("with a withheld number it is told to ask", () => {
     const prompt = promptFor(null);
     assert.match(prompt, /withheld or unavailable/i);
-    assert.match(prompt, /ask for the best contact number/i);
+    assert.match(prompt, /ask for the best number to reach them on/i);
+  });
+
+  // Regression: an urgent ceiling-leak call ended after Remy accepted
+  // "tomorrow" as a callback time — no exact time, no number confirmed,
+  // no address. The prompt must forbid closing on an incomplete lead.
+  test("vague callback answers must be followed up", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /NEVER accept a vague answer/i);
+    assert.match(prompt, /What time tomorrow would suit you best/i);
+  });
+
+  test("the pre-close checklist covers every mandatory field", () => {
+    const prompt = promptFor("+353861234567");
+    for (const line of [
+      /the caller's name/i,
+      /the best callback number/i,
+      /the callback DAY/,
+      /the exact callback TIME/,
+      /the service address/i,
+    ]) {
+      assert.match(prompt, line, String(line));
+    }
+    assert.match(prompt, /before you say anything that sounds like goodbye/i);
+  });
+
+  test("the call closes only after a final read-back is confirmed", () => {
+    const prompt = promptFor("+353861234567");
+    assert.match(prompt, /Just to confirm, I have Brian/i);
+    assert.match(prompt, /Only after they confirm/i);
+    assert.match(prompt, /never state a time they did not say/i);
+  });
+
+  test("the summary is grounded in the transcript and marks gaps", () => {
+    const { summaryInstructions } = buildVoiceAssistantConfig(
+      ORG,
+      [],
+      SETTINGS,
+      null,
+      "+353861234567"
+    );
+    assert.match(summaryInstructions, /Use ONLY what was actually said/i);
+    assert.match(summaryInstructions, /write exactly "Not provided"/i);
+    assert.match(summaryInstructions, /never turn it into a specific date or clock time/i);
+    // Provider template syntax belongs to the adapter, not here.
+    assert.doesNotMatch(summaryInstructions, /\{\{/);
+  });
+
+  test("the extraction schema carries the service address", () => {
+    const config = buildVoiceAssistantConfig(
+      ORG,
+      [],
+      SETTINGS,
+      null,
+      "+353861234567"
+    );
+    assert.ok(config.structuredDataSchema.properties.service_address);
   });
 
   test("the caller's number is never leaked into the greeting", () => {
