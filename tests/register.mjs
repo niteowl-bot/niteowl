@@ -12,8 +12,17 @@ import path from "node:path";
 
 const SRC = path.resolve(import.meta.dirname, "..", "src");
 
+// Framework modules the lead engine imports but Node cannot resolve
+// outside the Next build. See tests/stubs/next-server.mjs.
+const STUBS = {
+  "next/server": path.resolve(import.meta.dirname, "stubs", "next-server.mjs"),
+};
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (STUBS[specifier]) {
+      return { url: pathToFileURL(STUBS[specifier]).href, shortCircuit: true };
+    }
     if (specifier.startsWith("@/")) {
       const base = path.join(SRC, specifier.slice(2));
       const candidates = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")];

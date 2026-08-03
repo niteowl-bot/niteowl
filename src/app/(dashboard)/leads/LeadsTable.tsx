@@ -32,31 +32,50 @@ function metadataString(lead: Lead, key: string): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+// Must list every status the lead engine can write (see LeadStatus in
+// leadCapture.ts). A status missing here has no <option> to select, so
+// the dropdown falls back to showing the first one ("New") while the
+// badge beside it shows the real value — the row and the editor
+// disagreeing about the same lead. awaiting_confirmation (a voice
+// appointment request the business still has to confirm) and
+// needs_review were both missing.
 type LeadStatus =
   | "new"
+  | "awaiting_confirmation"
   | "contacted"
   | "qualified"
   | "booked"
+  | "needs_review"
   | "lost"
   | "cancelled";
 
 const STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "new", label: "New" },
+  { value: "awaiting_confirmation", label: "Awaiting confirmation" },
   { value: "contacted", label: "Contacted" },
   { value: "qualified", label: "Qualified" },
   { value: "booked", label: "Booked" },
+  { value: "needs_review", label: "Needs review" },
   { value: "lost", label: "Lost" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
   new: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+  awaiting_confirmation: "bg-amber-500/15 text-amber-300 border-amber-500/30",
   contacted: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30",
   qualified: "bg-purple-500/15 text-purple-300 border-purple-500/30",
   booked: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+  needs_review: "bg-orange-500/15 text-orange-300 border-orange-500/30",
   lost: "bg-slate-500/15 text-slate-400 border-slate-500/30",
   cancelled: "bg-red-500/15 text-red-300 border-red-500/30",
 };
+
+/** The label the dropdown uses, so a row and the editor read the same. */
+function statusLabel(value: string | null): string | null {
+  if (!value) return null;
+  return STATUS_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -306,8 +325,8 @@ function EditPanel({
                   </span>
                 </div>
                 <div className="mt-2">
-                  <span className={`rounded-full border px-2.5 py-0.5 text-xs capitalize ${statusStyle}`}>
-                    {status}
+                  <span className={`rounded-full border px-2.5 py-0.5 text-xs ${statusStyle}`}>
+                    {statusLabel(status)}
                   </span>
                 </div>
               </div>
@@ -518,8 +537,8 @@ export default function LeadsTable({
                           </td>
                           <td className="whitespace-nowrap px-5 py-4">{displayAppointment(lead)}</td>
                           <td className="px-5 py-4">
-                            <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusStyle}`}>
-                              {valueOrDash(lead.status)}
+                            <span className={`rounded-full border px-3 py-1 text-xs ${statusStyle}`}>
+                              {valueOrDash(statusLabel(lead.status))}
                             </span>
                           </td>
                           <td className="px-5 py-4 capitalize">{valueOrDash(lead.source)}</td>
@@ -560,8 +579,8 @@ export default function LeadsTable({
                             {formatDate(lead.created_at)}
                           </p>
                         </div>
-                        <span className={`rounded-full border px-3 py-1 text-xs capitalize ${statusStyle}`}>
-                          {valueOrDash(lead.status)}
+                        <span className={`rounded-full border px-3 py-1 text-xs ${statusStyle}`}>
+                          {valueOrDash(statusLabel(lead.status))}
                         </span>
                       </div>
 

@@ -443,6 +443,31 @@ async function findOpenLeadForCapture(
     }
   }
 
+  // ── A phone call is a complete episode, never merged across calls ─
+  // Chat reaches this function once per MESSAGE, so it must merge
+  // turn-by-turn into the lead the conversation already opened. A voice
+  // call reaches it once per CALL, at end-of-call, already carrying the
+  // caller's final corrected details — there is nothing to merge into.
+  //
+  // Layers 2 and 3 below match on contact details and recency, and for
+  // voice the lead's phone IS the network caller ID. Two calls from the
+  // same handset therefore resolved to each other's lead: a second
+  // caller inherited the first one's service (shouldUpdateService keeps
+  // the existing value unless the intent is new_booking and the new
+  // service is longer than two words) and had their call summary
+  // APPENDED to the previous one by deduplicateMessage. Observed
+  // 2026-08: a Jason O'Dwyer call landing on Brian Murphy's lead,
+  // carrying Brian's "leak coming from my ceiling" and a stack of his
+  // summaries.
+  //
+  // Layer 1 above still applies, keyed on the provider's call id, so
+  // replaying the same end-of-call event updates that call's own lead
+  // instead of creating a duplicate.
+  if (leadSource === "voice") {
+    console.log("[lead resolve] voice call — isolated lead, no cross-call merge");
+    return null;
+  }
+
   // ── Layer 2: known contact details on a mergeable lead ───────────
   if (extracted.email || extracted.phone) {
     let query = supabase
