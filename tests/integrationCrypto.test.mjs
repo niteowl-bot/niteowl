@@ -33,6 +33,22 @@ function keyring(currentVersion = 1, entries = [[1, KEY_A]]) {
 
 const TOKEN = "1//0eXaMpLe-refresh-token_value.with~punctuation";
 
+/**
+ * Flips one bit of the ciphertext, at the BYTE level.
+ *
+ * Editing the last base64url character is not reliable tampering: for
+ * some payload lengths its low bits are padding that decoding discards,
+ * so the bytes come back identical and the blob still authenticates.
+ * Decoding, flipping a byte and re-encoding always changes the data.
+ */
+function tamperCiphertext(blob) {
+  const parts = blob.split(".");
+  const bytes = Buffer.from(parts[3], "base64url");
+  bytes[0] ^= 0xff;
+  parts[3] = bytes.toString("base64url");
+  return parts.join(".");
+}
+
 describe("encrypt / decrypt round trip", () => {
   test("a token survives a round trip unchanged", () => {
     const ring = keyring();
@@ -67,11 +83,22 @@ describe("tampering and wrong keys", () => {
   test("a modified ciphertext fails authentication", () => {
     const ring = keyring();
     const blob = encryptSecret(TOKEN, ring);
-    const parts = blob.split(".");
-    // Flip the final character of the ciphertext.
-    const data = parts[3];
-    parts[3] = data.slice(0, -1) + (data.endsWith("A") ? "B" : "A");
-    assert.throws(() => decryptSecret(parts.join("."), ring), SecretCryptoError);
+    assert.throws(() => decryptSecret(tamperCiphertext(blob), ring), SecretCryptoError);
+  });
+
+  test("tampering is caught at every payload length", () => {
+    // Guards the test itself as much as the code: a short payload's
+    // trailing base64 bits are padding, so a naive character edit can
+    // decode back to the original bytes and appear to pass.
+    const ring = keyring();
+    for (let length = 1; length <= 48; length++) {
+      const blob = encryptSecret("x".repeat(length), ring);
+      assert.throws(
+        () => decryptSecret(tamperCiphertext(blob), ring),
+        SecretCryptoError,
+        `length ${length}`
+      );
+    }
   });
 
   test("a swapped auth tag fails", () => {
@@ -237,9 +264,7 @@ describe("credential documents", () => {
   test("a tampered credential blob fails authentication rather than parsing", () => {
     const ring = keyring();
     const blob = encryptCredentials({ strategy: "none" }, ring);
-    const parts = blob.split(".");
-    parts[3] = parts[3].slice(0, -1) + (parts[3].endsWith("A") ? "B" : "A");
-    assert.throws(() => decryptCredentials(parts.join("."), ring), SecretCryptoError);
+    assert.throws(() => decryptCredentials(tamperCiphertext(blob), ring), SecretCryptoError);
   });
 });
 

@@ -2,6 +2,36 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (Milestone 2 — OAuth connections on the Integration Framework)
+
+### Added — connect, disconnect, refresh, reconnect, status; Google is the first integration to use it
+Entirely behind `INTEGRATIONS_ENABLED`, which is off. With the flag unset every new route returns 404 and the Settings tab does not exist — verified against a running dev server, not assumed.
+
+- **One generic route pair serves every integration**, not one per provider: `/api/integrations/[provider]/{connect,callback,disconnect,resources}`. The provider is a path segment resolved through the registry, so Microsoft, HubSpot or Meta need **no new endpoint** — only a registered integration.
+- **Settings → Integrations renders itself from the registry.** An integration appears because it was registered, not because the page mentions it. There is no vendor branching in the page or its client component; the resource picker's label comes from the manifest, so the same control serves a calendar today and a WhatsApp number later.
+- **Connection lifecycle written once** (`connections.ts`): store, refresh-on-use, status transitions, reconnect, disconnect. `getValidCredentials()` is the only way to obtain credentials, so refresh-on-use and the `needs_reauth` transition are guaranteed everywhere rather than being remembered at each call site.
+- **Google is a plug-in, not a special case.** Every Google-specific fact — endpoints, scopes, the `calendarList` shape, the base32hex event-id alphabet — is confined to `providers/google.ts`. The composition root registers it in two lines, and an integration whose credentials are absent from the environment is simply not registered, so a half-configured deployment does not show a Connect button that dead-ends.
+- **Tenant isolation.** The org always comes from the authenticated session, never from a query parameter, state value or request body. Every query carries an explicit `org_id` even where a row id would be unique, so a guessed connection id is not enough to reach another business's credentials. Encrypted credentials never leave the server module.
+- **Disconnect actually disconnects**: revokes with the provider, deletes selected resources, and **nulls the stored credentials** rather than only flipping a status. Local disconnect still succeeds if the provider refuses.
+
+### Failure modes closed at connect time rather than mid-booking
+- **A partial scope grant is refused.** Google's consent screen lets a user untick individual permissions; without the check that surfaces much later as a confusing 403 during a customer's booking.
+- **A grant with no refresh token is refused.** It would work for an hour and then die unrecoverably.
+- **CSRF on the callback.** State is an httpOnly, `sameSite=lax` cookie bound to the provider it was issued for, compared in constant time — so a nonce cannot be replayed at a different integration's callback, and a crafted callback cannot attach an attacker's Google account to an owner's business. `lax`, not `strict`, because the callback is a cross-site navigation and a strict cookie would never be sent.
+- **A 409 on create is success, not failure.** Google accepts a client-supplied event id derived from the lead, so a retry returns 409 rather than creating a second event. Treating it as failure would retry forever; treating it as a fresh create would double-book.
+- **An unreadable calendar raises instead of looking free** — treating a permissions error as "no busy periods" would double-book a customer.
+- **403 is disambiguated.** Google returns it for both rate limiting and insufficient permission, and only the body's reason code separates them: one must be retried, the other must not.
+
+### Two things this version of Next.js changed
+- `export const dynamic` is **not** in v16's route segment config. The Integrations page was prerendering as static, which would have baked in the flag-off redirect and kept serving it after the flag was switched on. Fixed with `await connection()`, this version's documented API. Build output confirms the page is now `ƒ` (dynamic).
+- The settings layout was a client component, so it could not read a server-side flag. Split into a server `layout.tsx` plus a client `SettingsNav.tsx` — mechanical, and it keeps one flag rather than a `NEXT_PUBLIC_` mirror that could drift.
+
+### A flaky test caught before it reached main
+`npm test` passed, then failed on a re-run. The bug was in the test, not the crypto: it tampered with the **last base64url character** of the ciphertext, and for some payload lengths those trailing bits are padding that decoding discards — so the bytes came back identical and the blob authenticated correctly. Tampering is now done at the byte level, with a sweep across payload lengths 1–48 so the flaw cannot return. Confirmed deterministic over five consecutive runs.
+
+- `npm test` **311 passing** (was 258; +53). `tsc --noEmit` and `next build` clean. Lint unchanged at the same 10 pre-existing problems.
+- ⏳ Migration still **not run**; no real OAuth credentials exist yet, so no live connection has been made.
+
 ## 2026-08-04 (Milestone 1b — generalised to an Integration Framework)
 
 ### Changed — pre-runtime refactor; nothing shipped, nothing running, no production risk
