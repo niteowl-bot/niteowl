@@ -392,7 +392,7 @@ describe("a requested time is not a booking", () => {
 describe("spoken email addresses", () => {
   test("the address is converted from speech, not repeated as spoken", () => {
     const prompt = promptFor();
-    assert.match(prompt, /Their email\. It will be SPOKEN in words/);
+    assert.match(prompt, /Their email — ask .* It will be SPOKEN in words/);
     assert.match(prompt, /michael ryan at hotmail dot com/);
     assert.match(prompt, /turn it into a normal address/i);
   });
@@ -505,16 +505,27 @@ describe("corrections win", () => {
 });
 
 describe("repetition", () => {
-  test("'anything else?' is asked once per confirmed recap, near the end", () => {
+  test("'anything else?' is asked at most once per call, right after the recap", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /only then ask: "Is there anything else I can help you with today\?"/
+      /immediately after they confirm, ask: "Is there anything else I can help you with today\?"/
     );
-    assert.match(prompt, /Ask it once each time a recap has just been confirmed/i);
-    assert.match(prompt, /never twice in a row/i);
+    assert.match(prompt, /Ask it ONCE per call/);
+    assert.match(prompt, /never twice/i);
     assert.match(prompt, /never again after they have said no/i);
     assert.match(prompt, /Once every step of rule 5 that applies is done/i);
+  });
+
+  test("the yes-path ends at the goodbye, not at a second 'anything else?'", () => {
+    // A "yes" still loops through rule 5 and a fresh recap, but the
+    // question itself is never re-asked — that is what made the live
+    // call ask it twice.
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /go straight to the goodbye once they confirm — do not ask "anything else\?" a second time/
+    );
   });
 
   test("a 'no' ends the call instead of prompting the question again", () => {
@@ -522,6 +533,48 @@ describe("repetition", () => {
     assert.match(prompt, /that would be all/i);
     assert.match(prompt, /take that as final/i);
     assert.match(prompt, /Are you sure there's nothing else\?/);
+  });
+});
+
+describe("spoken polish", () => {
+  // Small wording fixes from the 2026-08-04 live call. Each pins a
+  // phrase Remy got wrong out loud; none of them changes the flow.
+  test("the business name is said exactly as configured", () => {
+    // Heard as "Night Owl Test" for an org stored as "NiteOwl Test".
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Say that business name exactly as written, never re-spelled or split into different words/
+    );
+    // Whatever the org is called, the prompt carries that name verbatim.
+    assert.match(prompt, /the AI receptionist for Acme Plumbing/);
+  });
+
+  test("the email is asked for in plain English", () => {
+    // Heard as "I have your email address please?" — the opening words
+    // were missing, which rule 1 already forbids.
+    const prompt = promptFor();
+    assert.match(prompt, /ask "May I have your email address, please\?"/);
+  });
+
+  test("a corrected address is never read back half-corrected", () => {
+    // Heard as "15 O Drive" then "15 Ork Drive" on the way to "15 Oak Drive".
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /change only the wrong part and say the WHOLE corrected address back once — never a part-corrected one/
+    );
+    assert.match(
+      prompt,
+      /Thank you for correcting that\. I've updated the address to 15 Oak Drive\./
+    );
+  });
+
+  test("no word is repeated, and the follow-up line is scripted", () => {
+    // Heard as "And and someone will contact you...".
+    const prompt = promptFor();
+    assert.match(prompt, /never repeat a word \("And and\.\.\."\)/);
+    assert.match(prompt, /Someone will contact you as soon as possible\./);
   });
 });
 
@@ -558,7 +611,10 @@ describe("final confirmation", () => {
   test("the caller is asked to confirm the recap, and Remy waits for it", () => {
     const prompt = promptFor();
     assert.match(prompt, /as its own question, and WAIT for their answer: "Is everything I've summarised correct\?"/);
-    assert.match(prompt, /Only once they confirm: "Perfect\. I'll pass your details to our team straight away\."/);
+    assert.match(
+      prompt,
+      /Only once they confirm: "Perfect\. I'll pass your details to our team straight away\. Someone will contact you as soon as possible\."/
+    );
   });
 
   test("the recap names every field the call collected", () => {
