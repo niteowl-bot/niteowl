@@ -1,9 +1,9 @@
-// Tests for OAuth token encryption at rest.
+// Tests for integration credential encryption at rest.
 //
-// These hold the security properties the calendar integration depends
-// on: a stolen database row must not yield a usable refresh token, and
-// an edited row must fail loudly rather than producing a corrupted
-// bearer token that gets sent to Google.
+// These hold the security properties every integration depends on: a
+// stolen database row must not yield a usable credential, and an edited
+// row must fail loudly rather than producing a corrupted bearer token
+// that gets sent to a provider.
 
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
@@ -16,8 +16,10 @@ import {
   keyVersionOf,
   needsReEncryption,
   safeEquals,
-  CalendarCryptoError,
-} from "@/lib/calendar/crypto";
+  encryptCredentials,
+  decryptCredentials,
+  SecretCryptoError,
+} from "@/lib/integrations/crypto";
 
 const KEY_A = randomBytes(32).toString("base64");
 const KEY_B = randomBytes(32).toString("base64");
@@ -57,7 +59,7 @@ describe("encrypt / decrypt round trip", () => {
   });
 
   test("an empty secret is refused rather than stored", () => {
-    assert.throws(() => encryptSecret("", keyring()), CalendarCryptoError);
+    assert.throws(() => encryptSecret("", keyring()), SecretCryptoError);
   });
 });
 
@@ -69,7 +71,7 @@ describe("tampering and wrong keys", () => {
     // Flip the final character of the ciphertext.
     const data = parts[3];
     parts[3] = data.slice(0, -1) + (data.endsWith("A") ? "B" : "A");
-    assert.throws(() => decryptSecret(parts.join("."), ring), CalendarCryptoError);
+    assert.throws(() => decryptSecret(parts.join("."), ring), SecretCryptoError);
   });
 
   test("a swapped auth tag fails", () => {
@@ -77,19 +79,19 @@ describe("tampering and wrong keys", () => {
     const a = encryptSecret(TOKEN, ring).split(".");
     const b = encryptSecret("another-token", ring).split(".");
     a[2] = b[2];
-    assert.throws(() => decryptSecret(a.join("."), ring), CalendarCryptoError);
+    assert.throws(() => decryptSecret(a.join("."), ring), SecretCryptoError);
   });
 
   test("the wrong key cannot decrypt", () => {
     const written = encryptSecret(TOKEN, keyring(1, [[1, KEY_A]]));
     const attacker = keyring(1, [[1, KEY_B]]);
-    assert.throws(() => decryptSecret(written, attacker), CalendarCryptoError);
+    assert.throws(() => decryptSecret(written, attacker), SecretCryptoError);
   });
 
   test("malformed blobs are rejected, not guessed at", () => {
     const ring = keyring();
     for (const bad of ["", "not-a-blob", "v1.only.three", "1.a.b.c"]) {
-      assert.throws(() => decryptSecret(bad, ring), CalendarCryptoError, bad);
+      assert.throws(() => decryptSecret(bad, ring), SecretCryptoError, bad);
     }
   });
 
@@ -137,16 +139,16 @@ describe("key rotation", () => {
 
 describe("keyring from environment", () => {
   test("a valid key is loaded as version 1 by default", () => {
-    const ring = loadKeyringFromEnv({ CALENDAR_TOKEN_ENCRYPTION_KEY: KEY_A });
+    const ring = loadKeyringFromEnv({ INTEGRATION_TOKEN_ENCRYPTION_KEY: KEY_A });
     assert.equal(ring.currentVersion, 1);
     assert.equal(ring.keys.size, 1);
   });
 
   test("retired keys are loaded for decryption", () => {
     const ring = loadKeyringFromEnv({
-      CALENDAR_TOKEN_ENCRYPTION_KEY: KEY_B,
-      CALENDAR_TOKEN_ENCRYPTION_KEY_VERSION: "2",
-      CALENDAR_TOKEN_ENCRYPTION_KEY_V1: KEY_A,
+      INTEGRATION_TOKEN_ENCRYPTION_KEY: KEY_B,
+      INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION: "2",
+      INTEGRATION_TOKEN_ENCRYPTION_KEY_V1: KEY_A,
     });
     assert.equal(ring.currentVersion, 2);
     assert.deepEqual([...ring.keys.keys()].sort(), [1, 2]);
@@ -155,7 +157,7 @@ describe("keyring from environment", () => {
   test("a missing key throws rather than defaulting to something guessable", () => {
     assert.throws(() => loadKeyringFromEnv({}), /is not set/);
     assert.throws(
-      () => loadKeyringFromEnv({ CALENDAR_TOKEN_ENCRYPTION_KEY: "   " }),
+      () => loadKeyringFromEnv({ INTEGRATION_TOKEN_ENCRYPTION_KEY: "   " }),
       /is not set/
     );
   });
@@ -164,7 +166,7 @@ describe("keyring from environment", () => {
     assert.throws(
       () =>
         loadKeyringFromEnv({
-          CALENDAR_TOKEN_ENCRYPTION_KEY: Buffer.from("too short").toString("base64"),
+          INTEGRATION_TOKEN_ENCRYPTION_KEY: Buffer.from("too short").toString("base64"),
         }),
       /must decode to exactly 32 bytes/
     );
@@ -174,11 +176,70 @@ describe("keyring from environment", () => {
     assert.throws(
       () =>
         loadKeyringFromEnv({
-          CALENDAR_TOKEN_ENCRYPTION_KEY: KEY_A,
-          CALENDAR_TOKEN_ENCRYPTION_KEY_VERSION: "latest",
+          INTEGRATION_TOKEN_ENCRYPTION_KEY: KEY_A,
+          INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION: "latest",
         }),
       /positive integer/
     );
+  });
+});
+
+describe("credential documents", () => {
+  // The framework stores one encrypted blob per connection rather than
+  // OAuth-shaped columns, because not every integration is OAuth. Each
+  // strategy has to survive the trip.
+  test("every auth strategy round trips", () => {
+    const ring = keyring();
+    const documents = [
+      {
+        strategy: "oauth2",
+        accessToken: "ya29.access",
+        refreshToken: "1//refresh",
+        expiresAtIso: "2026-08-04T12:00:00.000Z",
+        scopes: "calendar.events calendar.readonly",
+      },
+      // Twilio: an API key pair, which access/refresh columns could never hold.
+      { strategy: "api_key", values: { accountSid: "AC123", authToken: "secret" } },
+      // CalDAV: username and app password.
+      { strategy: "basic", username: "owner@example.com", password: "app-pw" },
+      // A public ICS feed needs no credential at all.
+      { strategy: "none" },
+    ];
+
+    for (const document of documents) {
+      const restored = decryptCredentials(encryptCredentials(document, ring), ring);
+      assert.deepEqual(restored, document, document.strategy);
+    }
+  });
+
+  test("credentials are not readable in the stored blob", () => {
+    const blob = encryptCredentials(
+      { strategy: "api_key", values: { accountSid: "AC123", authToken: "hunter2" } },
+      keyring()
+    );
+    assert.ok(!blob.includes("hunter2"));
+    assert.ok(!blob.includes("AC123"));
+    assert.ok(!blob.includes("api_key"));
+  });
+
+  test("a blob naming an unknown strategy is refused, not half-typed", () => {
+    const ring = keyring();
+    const forged = encryptSecret(JSON.stringify({ strategy: "telepathy" }), ring);
+    assert.throws(() => decryptCredentials(forged, ring), /unknown auth strategy/);
+  });
+
+  test("a blob that is not JSON is refused", () => {
+    const ring = keyring();
+    const notJson = encryptSecret("just a bare token", ring);
+    assert.throws(() => decryptCredentials(notJson, ring), /not valid JSON/);
+  });
+
+  test("a tampered credential blob fails authentication rather than parsing", () => {
+    const ring = keyring();
+    const blob = encryptCredentials({ strategy: "none" }, ring);
+    const parts = blob.split(".");
+    parts[3] = parts[3].slice(0, -1) + (parts[3].endsWith("A") ? "B" : "A");
+    assert.throws(() => decryptCredentials(parts.join("."), ring), SecretCryptoError);
   });
 });
 

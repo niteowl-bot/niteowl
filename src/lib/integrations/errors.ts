@@ -6,7 +6,7 @@
 // shapes into these kinds; nothing downstream reads an HTTP status or a
 // Google/Microsoft error code.
 
-export type CalendarErrorKind =
+export type IntegrationErrorKind =
   /** Token rejected or revoked. Retrying cannot help — the owner must reconnect. */
   | "auth_expired"
   /** Token is valid but lacks the scope, or the calendar is read-only. */
@@ -22,8 +22,8 @@ export type CalendarErrorKind =
   /** Malformed request or a bug on our side. Retrying repeats the bug. */
   | "permanent";
 
-export interface CalendarProviderErrorOptions {
-  kind: CalendarErrorKind;
+export interface IntegrationErrorOptions {
+  kind: IntegrationErrorKind;
   /** Which provider raised it, for logs. */
   provider?: string;
   httpStatus?: number;
@@ -34,16 +34,16 @@ export interface CalendarProviderErrorOptions {
   cause?: unknown;
 }
 
-export class CalendarProviderError extends Error {
-  readonly kind: CalendarErrorKind;
+export class IntegrationError extends Error {
+  readonly kind: IntegrationErrorKind;
   readonly provider: string | null;
   readonly httpStatus: number | null;
   readonly providerCode: string | null;
   readonly retryAfterSeconds: number | null;
 
-  constructor(message: string, options: CalendarProviderErrorOptions) {
+  constructor(message: string, options: IntegrationErrorOptions) {
     super(message);
-    this.name = "CalendarProviderError";
+    this.name = "IntegrationError";
     this.kind = options.kind;
     this.provider = options.provider ?? null;
     this.httpStatus = options.httpStatus ?? null;
@@ -61,7 +61,7 @@ export class CalendarProviderError extends Error {
  * "conflict" is retryable=false because the create already landed —
  * the caller treats it as success rather than trying again.
  */
-export function isRetryable(kind: CalendarErrorKind): boolean {
+export function isRetryable(kind: IntegrationErrorKind): boolean {
   return kind === "rate_limited" || kind === "transient";
 }
 
@@ -69,7 +69,7 @@ export function isRetryable(kind: CalendarErrorKind): boolean {
  * Whether the connection should be flipped to needs_reauth, which stops
  * the queue and prompts the owner to reconnect.
  */
-export function requiresReauth(kind: CalendarErrorKind): boolean {
+export function requiresReauth(kind: IntegrationErrorKind): boolean {
   return kind === "auth_expired";
 }
 
@@ -78,7 +78,7 @@ export function requiresReauth(kind: CalendarErrorKind): boolean {
  * cases only they can tell apart — notably Google returning 403 for both
  * "rate limited" and "insufficient permission" depending on the body.
  */
-export function classifyHttpStatus(status: number): CalendarErrorKind {
+export function classifyHttpStatus(status: number): IntegrationErrorKind {
   if (status === 401) return "auth_expired";
   if (status === 403) return "forbidden";
   if (status === 404) return "not_found";
@@ -95,16 +95,16 @@ export function classifyHttpStatus(status: number): CalendarErrorKind {
  * show why an appointment is not mirrored.
  */
 export function syncStatusForError(
-  kind: CalendarErrorKind
+  kind: IntegrationErrorKind
 ): "failed" | "deleted" {
   return kind === "not_found" ? "deleted" : "failed";
 }
 
 /** Narrowing helper — avoids `instanceof` checks scattered across routes. */
-export function isCalendarProviderError(
+export function isIntegrationError(
   error: unknown
-): error is CalendarProviderError {
-  return error instanceof CalendarProviderError;
+): error is IntegrationError {
+  return error instanceof IntegrationError;
 }
 
 /**
@@ -115,10 +115,10 @@ export function isCalendarProviderError(
 export function asProviderError(
   error: unknown,
   provider: string
-): CalendarProviderError {
-  if (isCalendarProviderError(error)) return error;
+): IntegrationError {
+  if (isIntegrationError(error)) return error;
   const message = error instanceof Error ? error.message : String(error);
-  return new CalendarProviderError(`${provider} request failed: ${message}`, {
+  return new IntegrationError(`${provider} request failed: ${message}`, {
     kind: "transient",
     provider,
     cause: error,

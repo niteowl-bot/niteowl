@@ -2,6 +2,30 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (Milestone 1b — generalised to an Integration Framework)
+
+### Changed — pre-runtime refactor; nothing shipped, nothing running, no production risk
+Milestone 1 built a calendar-shaped abstraction. The directive is that every external integration — Google, Microsoft, CRMs, WhatsApp, Instagram, SMS — plugs into one framework rather than each bringing its own authentication, settings page and connection management. This re-lays milestone 1 on that basis **before** anything is wired up.
+
+**Why now:** the milestone 1 code was imported only by its own tests, the migration had not been run on either project, and `CALENDAR_TOKEN_ENCRYPTION_KEY` was not set anywhere. So this cost a set of file edits. The same change after the SQL runs is a rename migration on live tables; after milestone 2 it is a rewrite of working OAuth.
+
+- **The correction that drove the shape: not everything is OAuth.** Milestone 1 modelled credentials as `access_token`/`refresh_token` columns, which fits Google and Microsoft and then blocks the first non-OAuth integration — Twilio is an account SID + auth token, CalDAV is a username + app password, an ICS feed is a URL with no credential at all. Credentials are now one encrypted JSON document whose shape is chosen by a pluggable `AuthStrategy` (`oauth2` / `api_key` / `basic` / `none`).
+- **Four generic tables** replace the three calendar-specific ones: `integration_connections` (a connected account, with a `capabilities` array), `integration_resources` (a selected remote object — a calendar, a WhatsApp number, an Instagram page, a CRM pipeline, keyed by `resource_type`), `integration_jobs` (the retry queue, which was never calendar-specific), and `integration_links` (a local record ↔ its remote counterpart).
+- **`leads` is now untouched by this feature.** The seven `external_event_*` columns became `integration_links` rows, so one lead can be in a calendar *and* a CRM *and* a message thread, and the leads table gains nothing.
+- **One primary resource per *type* per org**, still enforced by partial unique index — so a primary calendar and a primary phone number coexist, and multi-staff still needs no redesign.
+- **Capability seam.** The booking engine's entire view of the framework is `getCalendarCapability(id)` returning a `CalendarCapability`. It cannot discover which vendor answered: the returned object has no manifest and no auth strategy, which a test asserts.
+- **Registration validates the manifest.** An integration claiming the `calendar` capability without implementing it is rejected at registration rather than failing later inside a job against a real customer's calendar.
+- **Only the `calendar` capability is defined.** `MessagingCapability` and `CrmCapability` are deliberately absent until there is a real requirement to shape them — inventing message-threading or deal-pipeline semantics with no spec would bake a guess into the framework, and a wrong guess is worse than no abstraction because everything then fights it.
+- Shared auth logic extracted and tested: refresh-timing with a safety margin, scope-grant verification, and credential merging.
+
+### Two production failure modes now covered by tests
+- **A refresh must not wipe the refresh token.** Google issues no new refresh token when refreshing; replacing the stored credentials wholesale would discard the only long-lived credential and force every owner to reconnect within the hour. `mergeRefreshedCredentials` keeps the existing token when the provider declines to reissue one, and rotates it when Microsoft does.
+- **A partial scope grant is caught at connect time.** Google's consent screen lets a user untick individual permissions; without the check that surfaces much later as a confusing 403 in the middle of a customer's booking.
+
+- `npm test` **258 passing** (was 231; +27). `tsc --noEmit` and `next build` clean. Lint unchanged at the same 10 pre-existing problems.
+- Env var renamed `CALENDAR_TOKEN_ENCRYPTION_KEY` → `INTEGRATION_TOKEN_ENCRYPTION_KEY`, and `CALENDAR_SYNC_ENABLED` now sits under a master `INTEGRATIONS_ENABLED`. Neither was set anywhere, so nothing to migrate.
+- ⏳ Migration still **not run**; no OAuth credentials exist yet.
+
 ## 2026-08-04 (External calendar integration — milestone 1: schema, encryption, provider abstraction)
 
 ### Added — new files only; not one existing file was modified

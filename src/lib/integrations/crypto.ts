@@ -1,21 +1,25 @@
 import { createCipheriv, createDecipheriv, randomBytes, timingSafeEqual } from "node:crypto";
 
-// ── OAuth token encryption ────────────────────────────────────────
+import type { IntegrationCredentials } from "@/lib/integrations/types";
+
+// ── Integration credential encryption ─────────────────────────────
 //
-// Refresh tokens are long-lived credentials to a customer's calendar.
-// A leak of the database alone must not be enough to read them, so they
-// are encrypted at rest with AES-256-GCM before they ever reach
-// Postgres. GCM (not CBC) because it authenticates as well as encrypts:
-// a tampered ciphertext fails to decrypt rather than silently yielding
-// rubbish that then gets sent to Google as a bearer token.
+// Every integration's credentials pass through here: OAuth refresh
+// tokens, Twilio auth tokens, CalDAV app passwords. They are long-lived
+// keys to a customer's account, so a leak of the database alone must
+// not be enough to use them — they are encrypted with AES-256-GCM
+// before they ever reach Postgres. GCM (not CBC) because it
+// authenticates as well as encrypts: a tampered ciphertext fails to
+// decrypt rather than silently yielding rubbish that then gets sent to
+// a provider as a bearer token.
 //
-// The key lives in CALENDAR_TOKEN_ENCRYPTION_KEY, which must never be
+// The key lives in INTEGRATION_TOKEN_ENCRYPTION_KEY, which must never be
 // prefixed NEXT_PUBLIC_ and is only ever read in server code paths that
 // already hold the service-role client.
 //
 // Every blob records the key version that produced it, so keys can be
 // rotated without a migration: set a new current key, keep the old one
-// as CALENDAR_TOKEN_ENCRYPTION_KEY_V<n>, and rows re-encrypt lazily as
+// as INTEGRATION_TOKEN_ENCRYPTION_KEY_V<n>, and rows re-encrypt lazily as
 // they are touched. Rotation is not implemented in this milestone, but
 // the format cannot be changed later without re-encrypting everything —
 // so the version is written from day one.
@@ -25,17 +29,17 @@ const KEY_BYTES = 32;
 const IV_BYTES = 12; // 96-bit nonce, the size GCM is specified for
 const BLOB_PREFIX = "v";
 
-export interface CalendarKeyring {
+export interface SecretKeyring {
   /** The key new ciphertext is written with. */
   currentVersion: number;
   /** Every key available for decryption, including the current one. */
   keys: Map<number, Buffer>;
 }
 
-export class CalendarCryptoError extends Error {
+export class SecretCryptoError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "CalendarCryptoError";
+    this.name = "SecretCryptoError";
   }
 }
 
@@ -44,10 +48,10 @@ function decodeKey(raw: string, label: string): Buffer {
   try {
     key = Buffer.from(raw.trim(), "base64");
   } catch {
-    throw new CalendarCryptoError(`${label} is not valid base64.`);
+    throw new SecretCryptoError(`${label} is not valid base64.`);
   }
   if (key.length !== KEY_BYTES) {
-    throw new CalendarCryptoError(
+    throw new SecretCryptoError(
       `${label} must decode to exactly ${KEY_BYTES} bytes (got ${key.length}). ` +
         `Generate one with: openssl rand -base64 32`
     );
@@ -58,36 +62,36 @@ function decodeKey(raw: string, label: string): Buffer {
 /**
  * Builds the keyring from environment variables.
  *
- * CALENDAR_TOKEN_ENCRYPTION_KEY          — current key, base64, 32 bytes
- * CALENDAR_TOKEN_ENCRYPTION_KEY_VERSION  — integer, defaults to 1
- * CALENDAR_TOKEN_ENCRYPTION_KEY_V<n>     — optional retired keys, decrypt only
+ * INTEGRATION_TOKEN_ENCRYPTION_KEY          — current key, base64, 32 bytes
+ * INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION  — integer, defaults to 1
+ * INTEGRATION_TOKEN_ENCRYPTION_KEY_V<n>     — optional retired keys, decrypt only
  *
  * Throws rather than falling back to a default key: silently encrypting
  * customer credentials with a guessable key is worse than not starting.
  */
 export function loadKeyringFromEnv(
   env: Record<string, string | undefined> = process.env
-): CalendarKeyring {
-  const raw = env.CALENDAR_TOKEN_ENCRYPTION_KEY;
+): SecretKeyring {
+  const raw = env.INTEGRATION_TOKEN_ENCRYPTION_KEY;
   if (!raw || !raw.trim()) {
-    throw new CalendarCryptoError(
-      "CALENDAR_TOKEN_ENCRYPTION_KEY is not set — calendar tokens cannot be stored."
+    throw new SecretCryptoError(
+      "INTEGRATION_TOKEN_ENCRYPTION_KEY is not set — calendar tokens cannot be stored."
     );
   }
 
-  const versionRaw = env.CALENDAR_TOKEN_ENCRYPTION_KEY_VERSION?.trim();
+  const versionRaw = env.INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION?.trim();
   const currentVersion = versionRaw ? Number(versionRaw) : 1;
   if (!Number.isInteger(currentVersion) || currentVersion < 1) {
-    throw new CalendarCryptoError(
-      "CALENDAR_TOKEN_ENCRYPTION_KEY_VERSION must be a positive integer."
+    throw new SecretCryptoError(
+      "INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION must be a positive integer."
     );
   }
 
   const keys = new Map<number, Buffer>();
-  keys.set(currentVersion, decodeKey(raw, "CALENDAR_TOKEN_ENCRYPTION_KEY"));
+  keys.set(currentVersion, decodeKey(raw, "INTEGRATION_TOKEN_ENCRYPTION_KEY"));
 
   for (const [name, value] of Object.entries(env)) {
-    const match = /^CALENDAR_TOKEN_ENCRYPTION_KEY_V(\d+)$/.exec(name);
+    const match = /^INTEGRATION_TOKEN_ENCRYPTION_KEY_V(\d+)$/.exec(name);
     if (!match || !value || !value.trim()) continue;
     const version = Number(match[1]);
     // The current key wins if both forms are set for the same version.
@@ -98,12 +102,12 @@ export function loadKeyringFromEnv(
   return { currentVersion, keys };
 }
 
-function keyFor(keyring: CalendarKeyring, version: number): Buffer {
+function keyFor(keyring: SecretKeyring, version: number): Buffer {
   const key = keyring.keys.get(version);
   if (!key) {
-    throw new CalendarCryptoError(
+    throw new SecretCryptoError(
       `No encryption key available for version ${version}. ` +
-        `Set CALENDAR_TOKEN_ENCRYPTION_KEY_V${version} to decrypt existing rows.`
+        `Set INTEGRATION_TOKEN_ENCRYPTION_KEY_V${version} to decrypt existing rows.`
     );
   }
   return key;
@@ -119,10 +123,10 @@ function keyFor(keyring: CalendarKeyring, version: number): Buffer {
  */
 export function encryptSecret(
   plaintext: string,
-  keyring: CalendarKeyring
+  keyring: SecretKeyring
 ): string {
   if (typeof plaintext !== "string" || plaintext.length === 0) {
-    throw new CalendarCryptoError("Refusing to encrypt an empty secret.");
+    throw new SecretCryptoError("Refusing to encrypt an empty secret.");
   }
 
   const key = keyFor(keyring, keyring.currentVersion);
@@ -147,24 +151,24 @@ export function encryptSecret(
  * for its version is missing, or if it has been tampered with — never
  * returns a partially-trusted value.
  */
-export function decryptSecret(blob: string, keyring: CalendarKeyring): string {
+export function decryptSecret(blob: string, keyring: SecretKeyring): string {
   if (typeof blob !== "string" || !blob) {
-    throw new CalendarCryptoError("Encrypted value is empty.");
+    throw new SecretCryptoError("Encrypted value is empty.");
   }
 
   const parts = blob.split(".");
   if (parts.length !== 4) {
-    throw new CalendarCryptoError("Encrypted value is malformed.");
+    throw new SecretCryptoError("Encrypted value is malformed.");
   }
 
   const [versionPart, ivPart, tagPart, dataPart] = parts;
   if (!versionPart.startsWith(BLOB_PREFIX)) {
-    throw new CalendarCryptoError("Encrypted value has no key version.");
+    throw new SecretCryptoError("Encrypted value has no key version.");
   }
 
   const version = Number(versionPart.slice(BLOB_PREFIX.length));
   if (!Number.isInteger(version) || version < 1) {
-    throw new CalendarCryptoError("Encrypted value has an invalid key version.");
+    throw new SecretCryptoError("Encrypted value has an invalid key version.");
   }
 
   const key = keyFor(keyring, version);
@@ -173,7 +177,7 @@ export function decryptSecret(blob: string, keyring: CalendarKeyring): string {
   const ciphertext = Buffer.from(dataPart, "base64url");
 
   if (iv.length !== IV_BYTES) {
-    throw new CalendarCryptoError("Encrypted value has an invalid nonce.");
+    throw new SecretCryptoError("Encrypted value has an invalid nonce.");
   }
 
   try {
@@ -186,7 +190,7 @@ export function decryptSecret(blob: string, keyring: CalendarKeyring): string {
   } catch {
     // Wrong key, edited ciphertext, or a swapped auth tag all land here.
     // The reason is deliberately not distinguished to the caller.
-    throw new CalendarCryptoError(
+    throw new SecretCryptoError(
       "Encrypted value failed authentication — wrong key or tampered data."
     );
   }
@@ -203,10 +207,56 @@ export function keyVersionOf(blob: string): number | null {
 /** True when a blob was not written with the keyring's current key. */
 export function needsReEncryption(
   blob: string,
-  keyring: CalendarKeyring
+  keyring: SecretKeyring
 ): boolean {
   const version = keyVersionOf(blob);
   return version === null || version !== keyring.currentVersion;
+}
+
+/**
+ * Encrypts a whole credential document. The shape varies by auth
+ * strategy — OAuth tokens, an API key pair, a username and password —
+ * so it is stored as one encrypted JSON blob rather than as columns
+ * that would only ever have fitted OAuth.
+ */
+export function encryptCredentials(
+  credentials: IntegrationCredentials,
+  keyring: SecretKeyring
+): string {
+  return encryptSecret(JSON.stringify(credentials), keyring);
+}
+
+/**
+ * Reverses encryptCredentials. Throws on a blob that does not contain a
+ * recognisable credential document, rather than returning something
+ * half-typed that a provider would then try to authenticate with.
+ */
+export function decryptCredentials(
+  blob: string,
+  keyring: SecretKeyring
+): IntegrationCredentials {
+  const raw = decryptSecret(blob, keyring);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new SecretCryptoError("Stored credentials are not valid JSON.");
+  }
+
+  const strategy = (parsed as { strategy?: unknown })?.strategy;
+  if (
+    strategy !== "oauth2" &&
+    strategy !== "api_key" &&
+    strategy !== "basic" &&
+    strategy !== "none"
+  ) {
+    throw new SecretCryptoError(
+      `Stored credentials name an unknown auth strategy: ${String(strategy)}`
+    );
+  }
+
+  return parsed as IntegrationCredentials;
 }
 
 /**
