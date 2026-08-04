@@ -2,6 +2,24 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (External calendar integration — milestone 1: schema, encryption, provider abstraction)
+
+### Added — new files only; not one existing file was modified
+First of seven milestones. Everything here is dormant: no route imports it, no query reads the new tables, and `CALENDAR_SYNC_ENABLED` defaults to off. `git status` for this commit is six additions and zero modifications, which is the intended shape — an org with no calendar connected behaves exactly as it does today, and that is every org.
+
+- **Schema (`docs/sql/2026-08-04_calendar_integration.sql`, NOT YET RUN).** Three new tables plus additive nullable columns on `leads` and `organisations`. **Deliberately multi-calendar from day one**: there is no unique constraint on `org_id` anywhere. `calendar_connections` is keyed by `(org_id, provider, provider_account_id)` so a business can hold several accounts; `calendar_selections` is a separate table because one account exposes many calendars, and it carries a reserved `staff_id` (no FK — no staff table exists yet). Version 1's "one calendar" rule is a **partial unique index** on the primary flag, which extends to one-primary-per-staff without a schema redesign.
+- **`provider` is intentionally unconstrained.** Adding Apple, CalDAV or ICS later must not need a migration, so the allowed set lives in the provider registry, not a CHECK.
+- **Token security.** `calendar_connections` and `calendar_sync_jobs` have **RLS enabled with no policies at all** — deny-all to anon *and* authenticated, service-role only, so a signed-in owner cannot read their own encrypted tokens through the public anon key. `calendar_selections` holds no secrets and gets an owner read policy.
+- **Encryption (`crypto.ts`).** AES-256-GCM, key from `CALENDAR_TOKEN_ENCRYPTION_KEY`. GCM rather than CBC so a tampered row fails loudly instead of yielding a corrupt bearer token. Every blob embeds its key version (`v1.iv.tag.ciphertext`), so keys can be rotated later without a migration or a re-encryption outage. A missing key throws rather than falling back to anything guessable.
+- **Provider abstraction (`types.ts`, `registry.ts`, `errors.ts`).** The booking engine will import `CalendarProvider` and the registry, never `google.ts` or `microsoft.ts`. Providers are stateless — every method takes the access token, so they never touch the database and are testable against a fake fetch. A provider-independent error taxonomy (`auth_expired`, `rate_limited`, `transient`, `conflict`, …) is what the retry queue will branch on, so no caller ever reads an HTTP status.
+- **Per-org timezones (`timezone.ts`).** No helper has a default zone — a caller cannot accidentally fall back to London. Providers will receive local wall time plus the IANA name, never a fixed offset, because a stored offset stops being true at a DST transition.
+
+### A trap found and closed while testing
+`Intl.DateTimeFormat` **accepts `"BST"` and silently resolves it to `Asia/Dhaka` (UTC+6)** — an owner picking it for British Summer Time would have had every appointment six hours out, with no error raised anywhere. `"EST"` likewise becomes `America/Panama`. Validation is therefore membership of `Intl.supportedValuesOf("timeZone")` (the ~418 canonical zones), not a `try/catch` around the constructor. Both the wrong behaviour and the hazard are pinned by tests so the check cannot be loosened back.
+
+- `npm test` **231 passing** (was 173; +58). `tsc --noEmit` and `next build` clean. Lint unchanged at the same 10 pre-existing problems.
+- ⏳ The migration has **not been run** on either project, and no OAuth credentials exist yet.
+
 ## 2026-08-04 (Calendar month view: the hidden appointments are reachable again)
 
 ### Fixed — `CalendarView.tsx` only; no change to any API, query, lead capture, booking logic, voice prompt, schema or deployment config
