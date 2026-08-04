@@ -2,6 +2,24 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (Recap before "anything else?" — end-of-call order)
+
+### Changed — voice system prompt rule 11 only; no change to date parsing, "tomorrow" resolution, date confirmation, email/address/callback-number collection, the completion gate, lead creation, calendar creation, dashboard, email summaries, Vapi/Twilio configuration, schema or UI
+Conversational refinement only. The end of the call ran number → "Is there anything else I can help you with?" → recap → goodbye, so the caller was asked whether they needed anything more *before* a single detail had been read back to them. A receptionist reads the details back, gets a yes, and only then asks whether there is anything else.
+
+- **The call now ends in a fixed order**: recap → the caller confirms it → "Is there anything else I can help you with today?" → goodbye. Rule 11 states the order explicitly and forbids asking "anything else?" before the recap has been confirmed.
+- **The recap is now complete, not a one-line summary.** It names the service, appointment date, appointment time, caller's name, callback number, address and any important note — still spoken as natural sentences rather than read out as a list of labels, still giving the weekday *and* the calendar date, still never speaking the network caller ID's digits, still carrying only corrected values (rule 10) and only details the caller actually gave.
+- **The confirmation is its own question and Remy waits for it**: "Is everything I've summarised correct?" A correction is taken (rule 10), the recap is given once more, and the question is asked again. Only on a yes does Remy say "Perfect. I'll pass your details to our team straight away." The urgent/needs-a-human line and rule 9's not-listed closing line are unchanged alternatives to that sentence, still never two of them.
+- **"Anything else?" can now loop, but only through a confirmed recap.** A yes sends Remy back through rule 5 for whatever is new, then a fresh complete recap and the confirmation question again. The old "at most ONCE per call" guard is replaced by a tighter one — once per confirmed recap, never twice in a row, never between questions, never again after a no — so the repetition this rule exists to prevent ("Are you sure there's nothing else?") is still banned.
+- **The goodbye is now the last thing said**: "Thank you for calling {business}. Have a great day. Goodbye."
+
+### Unchanged, deliberately
+The rule 5 completion gate is untouched and not weakened. It still blocks all three exits — "anything else?", the rule 11 recap, and anything that sounds like goodbye — and since the recap is now the *earliest* of those three, the gate binds at least as early as it did before. Booking logic, `parseDatetimeToIso`, caller-ID handling and spoken-email normalisation were not opened.
+
+- `npm test` **168 passing** (was 163). Five new assertions pin the new order; three existing assertions were updated for the new wording (`voiceConversation.test.mjs` — "anything else?" repetition, "the only recap in the call"; `callerId.test.mjs` — "Only after they confirm" → "Only once they confirm"). No test was relaxed. `tsc --noEmit` clean.
+- ⚠️ **Prompt length is now 12,138 characters, 739 over the 11,399-character budget recorded in the entry below** (11,327 as previously shipped; 11,609 on the withheld-caller-ID variant). The growth is the new required behaviour — the full field list, the confirmation question, the yes-loop and the goodbye — after trimming. Nothing was cut from other rules to make room, because trimming a working rule to pay for this one is how tested behaviour gets lost. Flagged for a decision rather than silently absorbed.
+- ⏳ **Not yet verified on a live call.** As recorded below, these tests assert the instruction is present in the built prompt; only a real call proves the model follows the new order.
+
 ## 2026-08-03 (Appointment requests: confirmed calendar dates and a completion gate) — ✅ LIVE PRODUCTION TEST PASSED
 
 ### Fixed — voice system prompt only; no change to date parsing, caller-ID infrastructure, spoken-email normalisation, service extraction, lead isolation, status handling, booking, calendar, Knowledge Base, dashboard, chat, widget, pricing, schema or Vapi/Twilio configuration

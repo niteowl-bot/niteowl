@@ -505,13 +505,15 @@ describe("corrections win", () => {
 });
 
 describe("repetition", () => {
-  test("'anything else?' is asked at most once, near the end", () => {
+  test("'anything else?' is asked once per confirmed recap, near the end", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /"Is there anything else I can help you with\?" — at most ONCE per call/
+      /only then ask: "Is there anything else I can help you with today\?"/
     );
-    assert.match(prompt, /never twice/i);
+    assert.match(prompt, /Ask it once each time a recap has just been confirmed/i);
+    assert.match(prompt, /never twice in a row/i);
+    assert.match(prompt, /never again after they have said no/i);
     assert.match(prompt, /Once every step of rule 5 that applies is done/i);
   });
 
@@ -524,10 +526,62 @@ describe("repetition", () => {
 });
 
 describe("final confirmation", () => {
-  test("it is one natural sentence, not a list of labels", () => {
+  test("it is spoken naturally, not read out as a list of labels", () => {
     const prompt = promptFor();
-    assert.match(prompt, /one natural spoken sentence, not a list of labels/i);
-    assert.match(prompt, /this is the only recap in the call/i);
+    assert.match(prompt, /as natural spoken sentences, not a list of labels/i);
+    assert.match(prompt, /give ONE complete recap of everything you have collected/i);
+  });
+
+  // The recap used to come AFTER "anything else?", so the caller heard
+  // "is there anything else?" before they had heard back a single detail
+  // they had given. A receptionist reads the details back, gets a yes,
+  // and only then asks whether there is anything more.
+  test("the recap and its confirmation come before 'anything else?'", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /recap, then their confirmation of it, then "anything else\?", then goodbye/
+    );
+    assert.match(
+      prompt,
+      /Never ask "anything else\?" before the caller has confirmed the recap/
+    );
+
+    const recap = prompt.indexOf("RECAP —");
+    const confirmation = prompt.indexOf("CONFIRMATION —");
+    const anythingElse = prompt.indexOf("ANYTHING ELSE —");
+    assert.ok(recap !== -1 && confirmation !== -1 && anythingElse !== -1);
+    assert.ok(recap < confirmation, "the recap comes before its confirmation");
+    assert.ok(confirmation < anythingElse, "the confirmation comes before 'anything else?'");
+  });
+
+  test("the caller is asked to confirm the recap, and Remy waits for it", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /as its own question, and WAIT for their answer: "Is everything I've summarised correct\?"/);
+    assert.match(prompt, /Only once they confirm: "Perfect\. I'll pass your details to our team straight away\."/);
+  });
+
+  test("the recap names every field the call collected", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Include the service, the appointment date, the appointment time, the caller's name, the callback number, the address, and any important note they gave/
+    );
+  });
+
+  test("a 'yes' to 'anything else?' loops back through a fresh recap", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /working through rule 5 again for anything new/i);
+    assert.match(prompt, /give a FRESH complete recap if anything changed or was added/i);
+    assert.match(prompt, /ask "Is everything I've summarised correct\?" again/);
+  });
+
+  test("a 'no' closes the call on the goodbye, not on the recap", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Thank you for calling Acme Plumbing\. Have a great day\. Goodbye\./
+    );
   });
 
   test("it names the service and when, and how the team will make contact", () => {
