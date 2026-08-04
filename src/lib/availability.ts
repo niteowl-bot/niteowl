@@ -1,4 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+// Pure helpers only — no integration module is imported here, so the
+// live booking path gains no new dependency and no new failure mode.
+// The external-calendar layer composes ON TOP of this file, in
+// bookingAvailability.ts, rather than reaching into it.
+import { isValidTimezone } from "@/lib/calendar/timezone";
 
 // Every function here is called from both authenticated contexts (the
 // dashboard preview chat) and fully unauthenticated ones (the public
@@ -12,6 +17,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 // an explicit orgId parameter (never derived from a session), so the
 // admin client is safe and correctly scoped either way.
 
+// Historical default. Every org row now carries its own IANA zone
+// (organisations.timezone, defaulted to this value), so existing
+// businesses are unaffected; this constant survives only as the
+// fallback for a row that predates the column or fails to load.
 const TIMEZONE = "Europe/London";
 const SEARCH_WINDOW_DAYS = 14;
 
@@ -42,12 +51,18 @@ export interface AvailabilityResult {
   minutesUntilClose?: number;
 }
 
-// Extract local Europe/London weekday (0=Sun) and minutes-since-midnight from an ISO datetime
-function getLondonParts(isoDatetime: string): { dayOfWeek: number; minutesOfDay: number } {
+// Extract the local weekday (0=Sun) and minutes-since-midnight from an
+// ISO datetime, in the business's own timezone. The parameter defaults
+// to the historical constant so every existing caller behaves exactly
+// as it did before per-org timezones existed.
+function getLondonParts(
+  isoDatetime: string,
+  timezone: string = TIMEZONE
+): { dayOfWeek: number; minutesOfDay: number } {
   const date = new Date(isoDatetime);
 
   const formatter = new Intl.DateTimeFormat("en-GB", {
-    timeZone: TIMEZONE,
+    timeZone: timezone,
     weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -104,6 +119,64 @@ async function getOrgSettings(
     appointmentDurationMinutes: data?.appointment_duration_minutes ?? 60,
     emergencyModeEnabled: data?.emergency_mode_enabled ?? false,
   };
+}
+
+/**
+ * The organisation's IANA timezone.
+ *
+ * Queried separately from getOrgSettings, and failing soft, on purpose:
+ * the column arrives with the integration-framework migration, and this
+ * code must keep working on a database where that has not been run yet.
+ * Folding it into the main settings select would make one missing column
+ * take `appointment_duration_minutes` down with it, silently resetting
+ * every org's appointment length to the 60-minute default.
+ *
+ * Never returns an abbreviation — those are ambiguous and Intl resolves
+ * several of them to the wrong place ("BST" is Asia/Dhaka).
+ */
+export async function getOrgTimezone(orgId: string): Promise<string> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .from("organisations")
+    .select("timezone")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (error || !data?.timezone) return TIMEZONE;
+
+  const timezone = String(data.timezone);
+  if (!isValidTimezone(timezone)) {
+    console.error(
+      `[availability] org ${orgId} has an unusable timezone (${timezone}); falling back to ${TIMEZONE}`
+    );
+    return TIMEZONE;
+  }
+  return timezone;
+}
+
+/**
+ * Whether an appointment overlaps any busy window.
+ *
+ * Half-open intervals: an appointment starting exactly when a busy
+ * window ends does NOT overlap, so back-to-back bookings are allowed
+ * rather than being rejected as conflicts.
+ */
+export function overlapsBusy(
+  startIso: string,
+  durationMinutes: number,
+  busy: { startIso: string; endIso: string }[]
+): boolean {
+  const start = new Date(startIso).getTime();
+  const end = start + durationMinutes * 60_000;
+  if (Number.isNaN(start)) return false;
+
+  return busy.some((window) => {
+    const busyStart = new Date(window.startIso).getTime();
+    const busyEnd = new Date(window.endIso).getTime();
+    if (Number.isNaN(busyStart) || Number.isNaN(busyEnd)) return false;
+    return start < busyEnd && end > busyStart;
+  });
 }
 
 // ── Business hours as knowledge for the chat assistant ───────────────
@@ -263,9 +336,23 @@ export async function isWithinBusinessHours(
  * to find the next slot that falls within business hours.
  * Returns null if nothing is found within a 14-day search window.
  */
+export interface SlotSearchOptions {
+  /**
+   * Extra condition a candidate must satisfy, checked after business
+   * hours and capacity. Used to skip slots that are busy on an external
+   * calendar, with the busy list fetched once by the caller so scanning
+   * costs no additional provider requests.
+   *
+   * Omitted by default, which leaves this function's behaviour exactly
+   * as it was before external calendars existed.
+   */
+  isAcceptable?: (candidateIso: string) => boolean;
+}
+
 export async function findNextAvailableSlot(
   orgId: string,
-  isoDatetime: string
+  isoDatetime: string,
+  options: SlotSearchOptions = {}
 ): Promise<string | null> {
   const supabase = createAdminClient();
 
@@ -311,7 +398,9 @@ export async function findNextAvailableSlot(
         if (minutesOfDay >= openMinutes && fitsBeforeClose && !inLunch) {
           const candidateIso = cursor.toISOString();
         const hasCapacity = await isSlotAvailable(orgId, candidateIso);
-        if (hasCapacity) {
+        // The extra condition is checked last and only when the slot is
+        // otherwise bookable, so omitting it leaves this loop identical.
+        if (hasCapacity && (options.isAcceptable?.(candidateIso) ?? true)) {
           return candidateIso;
         }
         }

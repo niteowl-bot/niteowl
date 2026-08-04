@@ -1,5 +1,31 @@
 # 🚀 Alpha Launch Readiness
 
+## 🟡 External calendar integration — milestones 1–3 of 7 (2026-08-04, code deployed but INERT)
+**Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED`, which is unset, so none of it can affect a customer today.
+- [x] Milestone 1 — schema, credential encryption (AES-256-GCM), provider abstraction (`65b71e4`)
+- [x] Milestone 1b — generalised into an Integration Framework every future integration reuses: CRM, WhatsApp, Instagram, SMS, Stripe, Xero, Apple/CalDAV (`b75cc98`)
+- [x] Milestone 2 — OAuth connection lifecycle + Settings → Integrations, one generic route pair for all providers (`3473b35`)
+- [x] Milestone 3 — availability engine written and tested, **deliberately not wired into any booking path**
+- [ ] ⚠️ **Complete the dev migration** — the four `integration_*` tables exist on dev but `organisations.timezone` does **not**. One `alter table` needed; exact SQL in `SESSION_SUMMARY.md` §7
+- [ ] ⚠️ **Run the migration on prod** (`sklcqvvnuigpewzarbiv`) — state unverified; this environment cannot reach prod. Then run the verify script and check **query 3** first: `integration_connections` and `integration_jobs` must appear NOWHERE in the policy list, or encrypted credentials would be readable via the anon key
+- [ ] Set the six environment variables (`SESSION_SUMMARY.md` §8) in `.env.local` and Vercel — all six are currently missing
+- [ ] 🔴 **Start Google OAuth verification** — `calendar.events`/`calendar.readonly` are *sensitive* scopes needing app review that takes days-to-weeks. This gates real customers, not code, and is the longest lead time in the project
+- [ ] 🔴 **Publish the Google consent screen before any real business connects** — an app left in *Testing* mode issues refresh tokens that expire after **7 days**, which will look exactly like a random disconnection bug
+- [ ] Enable `INTEGRATIONS_ENABLED=true` on **dev only** and test connect → pick calendar → disconnect → reconnect against a real Google account
+- [ ] Then wire `checkBookingSlot()` into lead capture — this is the step that makes the engine live
+- [ ] Milestones 4–7: enable blocking after validating log-only data, event creation, update/cancel sync, Microsoft
+- [ ] Milestone 8 (live in-call voice availability) is **out of scope and not started**. Note the voice prompt currently has only ~48 characters of headroom under its 11,399 budget
+
+## 🟢 Voice conversation flow — recap before "anything else?" (2026-08-04, deployed, NOT yet live-tested)
+- [x] End-of-call reordered to recap → caller confirms → "anything else?" → goodbye (`990c766`)
+- [x] Prompt trimmed back under the 11,399-character budget by removing duplicated wording only — 11,351 as shipped (`e26126a`)
+- [x] Five spoken-wording fixes from the live call: business name, email question, half-corrected addresses, duplicated words, "anything else?" asked twice (`860b8d5`)
+- [ ] **Live call to verify.** Listen specifically for: (1) whether the business name is still spoken as "Night Owl Test" — if so it is the **TTS voice, not the prompt**, and needs a Vapi pronunciation setting, which was out of scope; (2) whether "anything else?" now comes only once, after the recap
+
+## 🟢 Calendar month view — hidden appointments reachable (2026-08-04, deployed)
+- [x] `+N more` was a plain `<p>` with no handler, so appointments beyond the third were unreachable from month view. Now a button opening a popover with the day's full list (`35f736d`)
+- [ ] **Click-test in a browser** — verified structurally only (the served HTML contains a real `<button aria-label="Show all 5 appointments">`); `/calendar` is auth-gated and no browser automation was available in-session
+
 ## 🟡 Knowledge Base — AI Import (2026-07-16, dev fully verified via real browser use; prod migrated 2026-07-20; real multi-page PDF test 2026-07-20)
 - [x] Run the three new SQL files against **dev** (`kioljdihgbcboxlnwghv`) — confirmed applied
 - [x] Run the same three SQL files against **prod** (`sklcqvvnuigpewzarbiv`) — done by the owner 2026-07-20 (this environment still can't reach prod directly). **The extend-table file was corrected after a serious trigger bug was found on dev (see CHANGELOG) — the version run on prod was already the corrected one, no separate hotfix needed.** Verified via a consolidated one-shot summary query covering all three scripts: all 4 tables present, RLS enabled on all 4, storage bucket private with its policy present, all 11 new `business_knowledge` columns present, 0 rows with a bad backfill (`status`/`source` defaults applied cleanly to every existing row), both triggers (`business_knowledge_set_audit`, `business_knowledge_revision_trigger`) enabled — owner confirmed all 7 checks `true` via screenshot of the query result.

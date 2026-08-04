@@ -2,6 +2,27 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (Milestone 3 — availability engine, prepared but NOT wired in)
+
+### Added — new files plus two additive changes; nothing calls the new engine
+Session stopped here for usage limits. This is deliberately **code-complete and inactive**: the engine exists, is tested, and has **no call site**. Wiring it into lead capture is the first step of the next session, and is what would make it live.
+
+- **`bookingAvailability.ts` — the intended single source of truth** for "can this slot be booked?", composed so that every channel (website chat, embedded widget, the phone AI's post-call capture, and any future API) can call one function. Order of checks: business hours → internal capacity → external calendar, with the external lookup running last and only when the first two pass, so a request that was never bookable costs no provider call.
+- **`calendarService.ts` — the org-level calendar door.** Resolves which connection and calendar an org uses, obtains valid credentials, and calls the capability, so nothing upstream learns which vendor answered.
+- **"Cannot check" is never "free".** A provider outage, an expired token or an unreadable calendar returns a failure, never an empty busy list — the caller must then refuse to confirm and send the lead for review. Treating an unknown as free is how a customer gets double-booked.
+- **Log-only mode is the default.** An external conflict is recorded but the booking still proceeds until `CALENDAR_AVAILABILITY_BLOCKING` is explicitly enabled, so the log can be compared against reality before the system is ever allowed to turn a customer away.
+- **`availability.ts` changed additively only.** The diff removes exactly five lines, each re-added with a behaviour-preserving default: `getLondonParts` gained an optional `timezone` (defaulting to `Europe/London`) and `findNextAvailableSlot` gained an optional predicate which, when omitted, leaves the loop identical. **The 173 existing voice and booking tests pass unchanged.** No integration module is imported into this file — the external layer composes on top of it, so the live booking path gains no new dependency and no new failure mode.
+
+### ⚠️ The dev migration turned out to be only partially applied
+Probed directly (read-only) before stopping: the four `integration_*` tables **exist on dev**, but **`organisations.timezone` does not**. Since the Supabase SQL editor runs a multi-statement script as one transaction, an error would have rolled everything back — so the script was most likely run in parts, or truncated before the final statement. The outstanding one-liner is in `SESSION_SUMMARY.md`. Code fails soft (`getOrgTimezone()` falls back to `Europe/London`), so nothing breaks, but per-org timezones cannot work until it exists.
+
+**Production migration state could not be verified** from this environment — `.env.local` points at dev and prod is unreachable locally, as previously recorded.
+
+**Security property verified on dev:** the anon key cannot even *see* the four tables — PostgREST does not expose them at all, which is the strongest possible denial and exactly the intent for the credential tables.
+
+- `npm test` **325 passing** (was 311; +14). `tsc --noEmit` clean. Lint unchanged.
+- ⏳ Not wired, not enabled, no live connection ever made. See `SESSION_SUMMARY.md` for the full handover.
+
 ## 2026-08-04 (Milestone 2 — OAuth connections on the Integration Framework)
 
 ### Added — connect, disconnect, refresh, reconnect, status; Google is the first integration to use it

@@ -167,6 +167,60 @@ export async function listResources(
   }));
 }
 
+/**
+ * The org's primary resource of a type, together with the connection
+ * that owns it — the pair every capability call needs.
+ *
+ * Returns null when nothing is connected, which is the normal state for
+ * every org today and must stay cheap: one indexed query, and the
+ * caller skips the whole external path.
+ */
+export async function getPrimaryResourceWithConnection(
+  orgId: string,
+  resourceType: string
+): Promise<{ connection: StoredConnection; resource: StoredResource } | null> {
+  const supabase = createAdminClient();
+
+  const { data: resourceRow, error: resourceError } = await supabase
+    .from("integration_resources")
+    .select(RESOURCE_COLUMNS)
+    .eq("org_id", orgId)
+    .eq("resource_type", resourceType)
+    .eq("is_primary", true)
+    .is("staff_id", null)
+    .maybeSingle();
+
+  if (resourceError || !resourceRow) return null;
+
+  const { data: connectionRow, error: connectionError } = await supabase
+    .from("integration_connections")
+    .select(CONNECTION_COLUMNS)
+    .eq("id", resourceRow.connection_id as string)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (connectionError || !connectionRow) return null;
+
+  const connection = toStoredConnection(connectionRow as unknown as ConnectionRow);
+
+  // A connection awaiting re-authorisation cannot answer, and must not
+  // be treated as "no calendar" — the caller has to know the difference
+  // between nothing connected and something broken.
+  return {
+    connection,
+    resource: {
+      id: resourceRow.id as string,
+      connectionId: resourceRow.connection_id as string,
+      resourceType: resourceRow.resource_type as string,
+      externalId: resourceRow.external_id as string,
+      name: resourceRow.name as string | null,
+      isPrimary: resourceRow.is_primary as boolean,
+      syncEnabled: resourceRow.sync_enabled as boolean,
+      availabilityEnabled: resourceRow.availability_enabled as boolean,
+    },
+  };
+}
+
 // ── Writes ────────────────────────────────────────────────────────
 
 export interface SaveConnectionInput {
