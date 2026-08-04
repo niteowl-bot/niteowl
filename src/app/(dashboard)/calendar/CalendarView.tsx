@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
@@ -81,6 +81,19 @@ function formatDate(value: string | null) {
     minute: "2-digit",
     timeZone: "Europe/London",
   }).format(new Date(value));
+}
+
+// Clock time only, in the same business timezone the rest of the view
+// uses — the popover lists a single day, so the date would be noise.
+function formatTime(value: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London",
+  }).format(d);
 }
 
 // "Today" must resolve identically on the server render and the client
@@ -326,7 +339,9 @@ function AppointmentChip({
   onClick,
 }: {
   lead: CalendarLead;
-  onClick: () => void;
+  // Takes the event so the month view can locate the day cell the chip
+  // was clicked in; the week view ignores it.
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   const color = STATUS_COLORS[lead.status ?? ""] ?? STATUS_COLORS.new;
   return (
@@ -336,6 +351,162 @@ function AppointmentChip({
     >
       {lead.name ?? "Unknown"} — {lead.service_needed ?? "Appointment"}
     </button>
+  );
+}
+
+// ── Day popover ───────────────────────────────────────────────────
+//
+// A month cell shows at most three chips, so a busy day kept the rest
+// behind a "+N more" line that was plain text — nothing to click. This
+// gives that line (and a chip on a shared day) the behaviour a dayGrid
+// calendar normally has: the day's FULL list in a popover anchored to
+// the cell, each row opening that appointment's existing detail panel.
+//
+// Anchored beside the cell on desktop. On a narrow screen it becomes a
+// centred sheet instead — a 288px popover pinned to a ~45px-wide cell
+// would hang off the edge — which is also why the position is computed
+// here rather than with CSS: the cell's own box is too small to hang a
+// usable panel off.
+
+type PopoverAnchor = { top: number; left: number; width: number; height: number };
+
+const POPOVER_WIDTH = 288;
+const POPOVER_MARGIN = 8;
+
+function popoverPosition(anchor: PopoverAnchor, mobile: boolean) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  if (mobile) {
+    const width = Math.min(POPOVER_WIDTH + 32, vw - POPOVER_MARGIN * 2);
+    const maxHeight = Math.min(420, vh - POPOVER_MARGIN * 2);
+    return {
+      left: (vw - width) / 2,
+      top: Math.max(POPOVER_MARGIN, (vh - maxHeight) / 2),
+      width,
+      maxHeight,
+    };
+  }
+
+  const width = POPOVER_WIDTH;
+  const maxHeight = Math.min(360, vh - POPOVER_MARGIN * 2);
+  return {
+    // Align to the cell, then pull back inside the viewport if the cell
+    // sits in the last column or against the top/bottom edge.
+    left: Math.max(
+      POPOVER_MARGIN,
+      Math.min(anchor.left, vw - width - POPOVER_MARGIN)
+    ),
+    top: Math.max(
+      POPOVER_MARGIN,
+      Math.min(anchor.top, vh - maxHeight - POPOVER_MARGIN)
+    ),
+    width,
+    maxHeight,
+  };
+}
+
+function DayPopover({
+  date,
+  leads,
+  anchor,
+  onSelect,
+  onClose,
+}: {
+  date: Date;
+  leads: CalendarLead[];
+  anchor: PopoverAnchor;
+  onSelect: (lead: CalendarLead) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const mobile = typeof window !== "undefined" && window.innerWidth < 640;
+  const pos = popoverPosition(anchor, mobile);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    // The anchor is a viewport rect, so once anything scrolls it no
+    // longer points at the cell. Closing is what a dayGrid popover does
+    // and avoids it drifting away from the day it belongs to. Capture
+    // phase, so the calendar's own scroll container counts too.
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onClose);
+    window.addEventListener("scroll", onClose, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onClose);
+      window.removeEventListener("scroll", onClose, true);
+    };
+  }, [onClose]);
+
+  // Escape has to work before the user has clicked anything inside.
+  useEffect(() => {
+    panelRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-30 ${mobile ? "bg-black/50" : ""}`}
+        onClick={onClose}
+        aria-hidden
+      />
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Appointments on ${DAYS[date.getDay()]} ${date.getDate()} ${MONTHS[date.getMonth()]}`}
+        tabIndex={-1}
+        style={{
+          top: pos.top,
+          left: pos.left,
+          width: pos.width,
+          maxHeight: pos.maxHeight,
+        }}
+        className="fixed z-40 flex flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl outline-none"
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-3 py-2">
+          <div>
+            <p className="text-sm font-semibold text-white">
+              {DAYS[date.getDay()]} {date.getDate()} {MONTHS[date.getMonth()]}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              {leads.length} appointment{leads.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition"
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-1 overflow-y-auto p-2">
+          {leads.map((l) => {
+            const color = STATUS_COLORS[l.status ?? ""] ?? STATUS_COLORS.new;
+            const time = formatTime(l.appointment_datetime);
+            return (
+              <button
+                key={l.id}
+                onClick={() => onSelect(l)}
+                className={`flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left text-xs font-medium transition hover:opacity-90 ${color}`}
+              >
+                {time && <span className="shrink-0 tabular-nums opacity-90">{time}</span>}
+                <span className="truncate">
+                  {l.name ?? "Unknown"} — {l.service_needed ?? "Appointment"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -364,6 +535,14 @@ function MonthView({
 
   const today = getLondonToday();
 
+  // Which day's full list is open, and the cell it hangs off. The month
+  // is stored with it so that paging to another month drops a popover
+  // left open rather than re-pointing it at the same date number there.
+  const [openDay, setOpenDay] = useState<
+    { day: number; year: number; month: number; anchor: PopoverAnchor } | null
+  >(null);
+  const closePopover = useCallback(() => setOpenDay(null), []);
+
   function leadsForDay(day: number) {
     const d = new Date(year, month, day);
     return leads.filter((l) => {
@@ -372,7 +551,27 @@ function MonthView({
     });
   }
 
+  // The chip and the "+N more" line both sit inside the day cell, so the
+  // anchor comes from whichever cell the click happened in.
+  function openPopoverFrom(e: React.MouseEvent<HTMLElement>, day: number) {
+    const cell = e.currentTarget.closest("[data-day-cell]");
+    const rect = cell?.getBoundingClientRect();
+    setOpenDay({
+      day,
+      year,
+      month,
+      anchor: rect
+        ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height }
+        : { top: 0, left: 0, width: 0, height: 0 },
+    });
+  }
+
+  const openHere =
+    openDay && openDay.year === year && openDay.month === month ? openDay : null;
+  const openDayLeads = openHere ? leadsForDay(openHere.day) : [];
+
   return (
+    <>
     <div className="flex-1 overflow-auto">
       <div className="min-w-[640px]">
       <div className="grid grid-cols-7 border-b border-slate-800">
@@ -389,6 +588,7 @@ function MonthView({
           return (
             <div
               key={i}
+              data-day-cell
               className={`min-h-[90px] border-b border-r border-slate-800/60 p-1.5 ${
                 day === null ? "bg-slate-900/30" : "bg-slate-900/50"
               }`}
@@ -406,10 +606,29 @@ function MonthView({
                   </span>
                   <div className="space-y-0.5">
                     {dayLeads.slice(0, 3).map((l) => (
-                      <AppointmentChip key={l.id} lead={l} onClick={() => onSelect(l)} />
+                      <AppointmentChip
+                        key={l.id}
+                        lead={l}
+                        // A day with one appointment opens it directly, as
+                        // it always has. Once a day is shared, a chip opens
+                        // the day's full list instead — otherwise the only
+                        // way to reach the 4th appointment is a line that
+                        // used to do nothing.
+                        onClick={(e) =>
+                          dayLeads.length > 1
+                            ? openPopoverFrom(e, day)
+                            : onSelect(l)
+                        }
+                      />
                     ))}
                     {dayLeads.length > 3 && (
-                      <p className="text-[10px] text-slate-500">+{dayLeads.length - 3} more</p>
+                      <button
+                        onClick={(e) => openPopoverFrom(e, day)}
+                        aria-label={`Show all ${dayLeads.length} appointments`}
+                        className="w-full rounded px-1 py-0.5 text-left text-[10px] text-slate-500 transition hover:bg-slate-800 hover:text-slate-300"
+                      >
+                        +{dayLeads.length - 3} more
+                      </button>
                     )}
                   </div>
                 </>
@@ -420,6 +639,22 @@ function MonthView({
       </div>
       </div>
     </div>
+
+    {openHere && openDayLeads.length > 0 && (
+      <DayPopover
+        date={new Date(year, month, openHere.day)}
+        leads={openDayLeads}
+        anchor={openHere.anchor}
+        onClose={closePopover}
+        onSelect={(lead) => {
+          // Hand off to the existing detail panel, and never leave the
+          // two stacked on top of each other.
+          closePopover();
+          onSelect(lead);
+        }}
+      />
+    )}
+    </>
   );
 }
 

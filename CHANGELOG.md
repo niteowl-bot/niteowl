@@ -2,6 +2,23 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-04 (Calendar month view: the hidden appointments are reachable again)
+
+### Fixed — `CalendarView.tsx` only; no change to any API, query, lead capture, booking logic, voice prompt, schema or deployment config
+A month cell renders at most three appointment chips. On a day with more (6 August had five), the remainder sat behind a `+2 more` line that was a plain `<p>` — **no handler, no element to click**. Those appointments were unreachable from month view; the only way to see them was to switch to week or day view.
+
+- **`+N more` is now a `<button>`** that opens a popover listing the day's full set, with an `aria-label` ("Show all 5 appointments") since "+2 more" alone says nothing out of context.
+- **A chip on a shared day opens the same popover**, so any click in a crowded cell reaches every appointment on it. A day with a **single** appointment still opens that appointment's detail panel directly, exactly as before.
+- **Each row in the popover opens the existing `EditPanel`**, unchanged — the popover closes first so the two are never stacked.
+- **Closes on outside click, on Escape, and on the close button.** Also on scroll and resize: the popover is positioned from the cell's viewport rect, so it would otherwise drift away from the day it belongs to.
+- **Desktop and mobile.** Anchored beside the cell on desktop, clamped back inside the viewport for cells in the last column or against an edge. Under 640px it becomes a centred sheet with a dimmed backdrop — a 288px popover hung off a ~45px-wide cell would fall off-screen.
+- **Paging months drops a popover left open**, rather than re-pointing it at the same date number in the new month. Guarded during render, not in an effect.
+
+**There is no FullCalendar in this project** — the calendar is a hand-written component (`CalendarView.tsx`), so there was no library behaviour to configure or restore. The popover deliberately mirrors what FullCalendar's dayGrid `+N more` does, because that is the behaviour people expect from a month grid.
+
+- `tsc --noEmit` clean, `next build` clean, `npm test` **173 passing** (unchanged — this is UI-only and the suite covers lib code). Lint unchanged at the same 10 pre-existing problems; the one warning in this file (`businessName` unused) predates the change.
+- ⏳ **Click-level behaviour is not machine-verified.** `/calendar` is behind auth and this repo has no jsdom, no component test runner, and no browser automation available in-session, so the popover opening, Escape/outside-click closing, and row → detail panel were confirmed by reading the wiring, not by clicking. Structure *was* verified against a running dev server with fixture data on a temporary unauthenticated route (since deleted): the crowded day rendered three chips plus a real `<button aria-label="Show all 5 appointments">`, with the other two appointments correctly absent from the cell.
+
 ## 2026-08-04 (Spoken polish: five wording fixes from the live call)
 
 ### Changed — voice system prompt wording only; no change to the conversation flow, recap or confirmation logic, booking, date parsing, lead capture, calendar, database, email generation, deployment configuration or UI
