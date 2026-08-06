@@ -1,5 +1,30 @@
 # 🚀 Alpha Launch Readiness
 
+## 🟢 Voice — a broad window is not an appointment time (2026-08-06, implemented, NOT yet live-tested)
+
+**Observed on a live call.** Caller: *"I'd like to make an appointment for a burst pipe."* → Remy asked for a day and time → Caller: *"Next Wednesday afternoon."* → Remy resolved **Wednesday, 12 August** correctly, then accepted "afternoon" as the complete appointment time and moved straight on to the caller's name. A usable *callback* preference, but not a schedulable *appointment*.
+
+**Root cause.** Rule 6's window branch said a day plus a window "is enough" unconditionally. That sentence was written for CALLBACKS (rule 13, same day) and was being applied to every intent — Remy did exactly what it said.
+
+- [x] CALLBACK — a broad window ("morning", "afternoon", "evening", "between 2 and 5") still acceptable, kept in the caller's words, never narrowed. Unchanged.
+- [x] APPOINTMENT — a window is NOT enough. The date is confirmed, then ONE question: *"Wednesday, 12 August. What time that afternoon would suit you?"* Conversational answers accepted as spoken ("3pm", "around 3", "half three", "quarter past two"); never asked twice.
+- [x] Never claims a time is available, free or reserved (rule 9) — no calendar is consulted, and the pre-existing bans on "confirmed"/"booked"/guaranteed slots are untouched.
+- [x] Never downgrades an appointment to a callback because it cannot book (rule 13), and rule 13 still bans the reverse.
+- [x] Done as a conditional split of the existing rule 6 branch — 3 prompt lines (rules 6, 9, 13), still 13 rules, no new section. `callbackTiming.ts` untouched: a window is still a real timing answer and still reaches `preferred_datetime` verbatim.
+- [ ] ⚠️ **Live call to verify** — the only thing that can prove it. Say *"I'd like an appointment for a burst pipe, next Wednesday afternoon"* → expect the date confirmed plus ONE time question. Then say *"next Wednesday at 3 PM"* → expect NO time question at all. Also confirm Remy never says a slot is available or booked.
+
+**Still future work, deliberately not built here:** when live calendar availability is wired up, the appointment branch should offer genuine free slots inside the caller's window and let them choose, instead of asking an open question. The availability engine exists but is unwired — see the calendar section below.
+
+## 🟢 Voice — Remy can now end the call (2026-08-06, deployed `c6046cd`, LIVE-TESTED AND PASSED)
+- [x] Vapi's built-in `{ type: "endCall" }` tool added to `model.tools` on both the main and the decline assistant — Remy could previously SAY goodbye but had no way to hang up, so the line stayed open and every further "bye" got answered
+- [x] Rule 11: the closing line is said once, nothing after it, and the call ends in the same turn; a caller raising something NEW before the close still keeps the call open
+- [x] `endCallPhrases` deliberately NOT used — it matches literal caller speech and would cut off "bye for now, but I have another question"
+- [x] **Verified on a real production call** — the line now drops after one farewell
+- [x] **Deployment lesson, second occurrence:** the first "failed" live test of this fix was not a code failure — the fix was never committed, so production was still running `cf031ec`. `git show origin/main:<file> | grep <marker>` after pushing is the check that catches it; a green local suite never will
+
+## 🟡 Voice prompt length
+- [ ] ⚠️ **15,646 characters, 4,247 over the 11,399 budget.** A lossless compression pass (2026-08-06) recovered only 295 characters before every further cut hit a behaviour pinned by a test — five bolder cuts had to be reverted. Closing the remaining gap means deleting working safeguards. **The 11,399 figure itself has no documented origin**: nothing in code enforces it, no test asserts it, no provider limit corresponds to it, and its earliest appearance already treats it as pre-existing. Decide whether to re-derive the ceiling from measurement or to trade specific behaviours away
+
 ## 🟢 Voice — callback handling + aborted-call email (2026-08-06, deployed, NOT yet live-tested)
 - [x] Callback vs appointment distinction — prompt rule 13, with one scripted clarifying question and a shorter callback checklist
 - [x] "As soon as possible" and other urgency phrases can no longer become a callback date or time — enforced in code (`callbackTiming.ts`), not only in the prompt; the phrase is kept on `leads.metadata.callback_urgency`

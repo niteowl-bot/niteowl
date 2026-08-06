@@ -2,6 +2,46 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-06 (Voice — a broad window is not an appointment time)
+
+### Fixed — "next Wednesday afternoon" was accepted as a bookable appointment time
+Live call: *"I'd like to make an appointment for a burst pipe."* → *"Which day and time would be best for the repair?"* → *"Next Wednesday afternoon."* Remy resolved **Wednesday, 12 August** correctly, then took "afternoon" as the complete time and moved on to the caller's name. A plumber cannot be sent to a burst pipe at "the afternoon".
+
+- **Root cause: a callback rule applied to appointments.** Rule 6's window branch said a day plus a window *"is enough"*, unconditionally. That sentence was written the same day for CALLBACKS (rule 13), where a window genuinely is a usable preference. Remy followed it exactly — the instruction was wrong, not the model.
+- **The fix is a conditional split of that one branch, not a new rule.** A window is still enough for a **callback** — confirmed, kept in the caller's own words, never narrowed. For an **appointment** it is not: the date is still confirmed, then ONE question — *"Wednesday, 12 August. What time that afternoon would suit you?"* — and conversational answers are taken as spoken ("3pm", "around 3", "half three", "quarter past two"), never asked twice. Still 13 rules; a test asserts only one window branch exists so two competing versions cannot drift apart.
+- **No availability is invented.** Rule 9 gains one clause: *"You cannot see a calendar, so never say a time is available, free or reserved either."* Nothing queries a calendar — the availability engine remains unwired — and the pre-existing bans on "confirmed", "booked", "booked in" and guaranteed slots are untouched, as is the `REQUESTED or PREFERRED time, not an appointment` wording.
+- **Intent is never silently converted.** Rule 13 gains *"Never downgrade an appointment to a callback because you cannot book it yourself"*, alongside the existing ban on the reverse.
+- **Deliberately out of scope:** when live calendar availability is wired up, this branch should offer genuine free slots inside the caller's window rather than asking an open question. Not built here.
+- **Untouched and re-asserted by tests:** `callbackTiming.ts` and its guard (a window is a real timing answer and still reaches `preferred_datetime` verbatim; only urgency is stripped), relative-date resolution, corrections, caller-ID and alternate-number handling, and the endCall tool — `vapi.ts` has a zero-line diff.
+- Three prompt lines changed (rules 6, 9, 13). Prompt **15,181 → 15,646 (+465)**.
+- `npm test` **426 passing** (was 406; +20). `tsc --noEmit` clean. Lint on changed files clean. One existing assertion was re-scoped from "a window is always enough" to "enough for a callback" — the behaviour it pinned moved, so the test moved with it.
+- ⏳ **Not yet verified on a live call.**
+
+## 2026-08-06 (Voice — Remy can now actually hang up)
+
+### Fixed — the call stayed open after the goodbye, and every further farewell got answered
+```
+AI:   "Thank you for calling Nite Owl Test. Have a great day. Goodbye."
+User: "Right."     AI: "Goodbye."
+User: "Right."     AI: "Goodbye."
+```
+
+- **Root cause: no capability, not a prompt problem.** The transient assistant sent to Vapi carried **no `tools` array at all**. Remy could say goodbye but had no way to end the call, so the line stayed open until the caller rang off or `maxDurationSeconds` expired. The prompt alone could never have fixed this.
+- **Vapi's built-in `{ type: "endCall" }`**, inline in `model.tools`, on both the main assistant and the decline assistant — the latter had already been instructed to "end the call" and could not either. Wire format verified against Vapi's docs before shipping: a default tool is recognised by `type` alone, no function name or parameters.
+- **`endCallPhrases` deliberately not used.** It hangs up on literal phrase matches in the caller's speech, which would cut off *"bye for now, but I have another question"* mid-sentence. The tool leaves the decision with the model, which reads the whole turn; rule 11 states the single condition and the exception.
+- **Rule 11:** the closing line is said once, nothing after it — no trailing second "bye" — and the call ends in the same turn. The only thing that stops it ending is the caller raising something new before the close.
+- ✅ **Verified on a real production call**: the line now drops after one farewell.
+- Also carried a lossless prompt-compression pass, **15,476 → 15,181 (−295)**, across rules 1, 2, 3, 5, 6, 8, 10, 11 and 13 — duplicated phrasing and illustrative examples only. **Five bolder cuts were reverted** because the suite caught them taking real behaviour (`Ask this once only`, `Assuming the number is fine is not confirming it`, `the version you first heard is gone`, `It will be SPOKEN in words`, `make sure you actually heard it correctly first`). No rule, safeguard or gate removed; no assertion changed.
+- `npm test` **406 passing**. `tsc --noEmit` clean. Lint on changed files clean.
+
+### ⚠️ The deployment lesson, for the second time
+The first live test of this fix "failed" — and it was not a code failure. The fix had never been committed, so production was still running `cf031ec` with no `endCall` anywhere in it. Remy behaved exactly as the *deployed* prompt instructed. The same class of failure is already recorded against 2026-08-03 (`0b81e6f`).
+
+**A green local suite can never detect "this was never pushed."** The check that does is `git show origin/main:<file> | grep <marker>` **after** pushing, which is now run explicitly as part of shipping rather than trusting a green Vercel status.
+
+### ⚠️ Prompt length remains over budget
+**15,646 characters, 4,247 over the 11,399 figure.** A dedicated lossless compression pass recovered only 295 characters before every remaining cut hit a test-pinned behaviour. Closing the gap means deleting working safeguards. Worth recording plainly: **the 11,399 number has no documented origin** — nothing in code enforces it, no test asserts it, no provider limit corresponds to it, and its earliest appearance already treats it as pre-existing. For scale, 15,646 characters is ≈3,900 tokens against gpt-4o's 128k context. The real costs are per-turn tokens, latency and instruction dilution — all gradual. Left for an explicit decision: re-derive the ceiling from measurement, or trade named behaviours away deliberately.
+
 ## 2026-08-06 (Voice — two fixes from live test calls)
 
 ### Fixed — callback vs appointment, and "as soon as possible" as a date

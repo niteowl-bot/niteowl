@@ -734,14 +734,19 @@ describe("the real call: 'as soon as possible' became the callback date AND time
     assert.match(prompt, /What time tomorrow would suit you\?/);
   });
 
-  test("D — a day with a broad window is enough, and is not narrowed", () => {
+  test("D — a day with a broad window is enough FOR A CALLBACK, and is not narrowed", () => {
+    // Re-scoped 2026-08-06 after a live appointment call: this rule was
+    // written for callbacks and was being applied to appointments too,
+    // so "next Wednesday afternoon" was accepted as a bookable time.
+    // A window is still enough for a callback — see the appointment
+    // half of the same branch in the describe block at the end of file.
     const prompt = promptFor();
     assert.match(
       prompt,
-      /They gave a DAY with a WINDOW \("Thursday afternoon", "Friday morning", "any time between 2 and 5 on Thursday"\): that is enough/
+      /They gave a DAY with a WINDOW \("Thursday afternoon", "Friday morning", "any time between 2 and 5 on Thursday"\): enough for a CALLBACK/
     );
-    assert.match(prompt, /never press for an exact clock time/);
-    assert.match(prompt, /never narrow their window to a single time yourself/);
+    assert.match(prompt, /keep their window in their own words/);
+    assert.match(prompt, /never narrow it to a single time yourself/);
   });
 
   test("E — a corrected day or time replaces the earlier one entirely", () => {
