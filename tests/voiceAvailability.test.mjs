@@ -100,7 +100,12 @@ const requestLead = (iso, status = "needs_review") => ({
   metadata: { appointment_request: true },
 });
 
-function installStubs({ bookedAt = [], leads = [], hoursFail = false } = {}) {
+function installStubs({
+  bookedAt = [],
+  leads = [],
+  hoursFail = false,
+  durationMinutes = 60,
+} = {}) {
   const leadRows = [...bookedAt.map(bookedLead), ...leads];
   process.env.VOICE_ENABLED = "true";
   process.env.VAPI_WEBHOOK_SECRET = SECRET;
@@ -157,7 +162,7 @@ function installStubs({ bookedAt = [], leads = [], hoursFail = false } = {}) {
 
     if (url.includes("/rest/v1/organisations")) {
       const row = {
-        appointment_duration_minutes: 60,
+        appointment_duration_minutes: durationMinutes,
         emergency_mode_enabled: false,
         max_concurrent_bookings: 1,
         timezone: "Europe/London",
@@ -189,14 +194,28 @@ function installStubs({ bookedAt = [], leads = [], hoursFail = false } = {}) {
               .replace(/^\(|\)$/g, "")
               .split(",");
             if (excluded.includes(String(value ?? ""))) return false;
+          } else if (raw.startsWith("gte.")) {
+            if (!(String(value ?? "") >= raw.slice(4))) return false;
+          } else if (raw.startsWith("lte.")) {
+            if (!(String(value ?? "") <= raw.slice(4))) return false;
           }
         }
         return true;
       });
-      return new Response(null, {
-        status: 200,
-        headers: { "content-range": `*/${matching.length}` },
-      });
+
+      // HEAD is a count (both capacity checks); GET is the held-slot
+      // range read the alternatives search uses.
+      if (method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-range": `*/${matching.length}` },
+        });
+      }
+      return json(
+        matching.map((row) => ({
+          appointment_datetime: row.appointment_datetime,
+        }))
+      );
     }
 
     if (url.includes("/rest/v1/integration_connections")) {
@@ -514,6 +533,155 @@ describe("a pending appointment request holds the slot", () => {
       /already held by a pending/,
       "a past slot is not held"
     );
+  });
+});
+
+describe("alternatives are real slots, not minute increments", () => {
+  // Live call, 2026-08-06: 3:00 PM was correctly refused, and Remy then
+  // offered "3:01 PM or 3:02 PM". The cursor advanced by 60 SECONDS and
+  // the resulting instant was offered whenever checkBookingSlot — which
+  // evaluates any instant and knows nothing of a slot grid — accepted
+  // it. Alternatives now come from findNextAvailableSlot, which steps by
+  // the org's configured appointment_duration_minutes.
+  const WED_3PM = "2026-08-12T14:00:00.000Z"; // 15:00 Europe/London
+  const WED_4PM = "2026-08-12T15:00:00.000Z";
+  let stubs;
+  afterEach(() => stubs.restore());
+
+  /** The clock times Remy would actually read out. */
+  function offeredTimes(result) {
+    const listed = /These ARE free: ([^.]+)\./.exec(result);
+    return listed ? listed[1].split(", ").map((t) => t.trim()) : [];
+  }
+
+  test("3:01 PM and 3:02 PM are never offered", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    const result = json.results[0].result;
+    assert.match(result, /^NOT AVAILABLE:/);
+    assert.doesNotMatch(result, /3:01/);
+    assert.doesNotMatch(result, /3:02/);
+  });
+
+  test("they land on the configured 60-minute boundaries", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    assert.ok(times.length > 0, "some alternative should be offered");
+    for (const time of times) {
+      assert.match(time, /:00 (am|pm)$/i, `${time} is not on a slot boundary`);
+    }
+    assert.equal(times[0], "4:00 pm", "the nearest whole slot after 3 PM");
+  });
+
+  test("a 30-minute org gets 30-minute boundaries — no rule is hardcoded", async () => {
+    stubs = installStubs({
+      leads: [requestLead(WED_3PM)],
+      durationMinutes: 30,
+    });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    assert.equal(times[0], "3:30 pm", "the configured interval, not 60");
+    for (const time of times) {
+      assert.match(time, /:(00|30) (am|pm)$/i, `${time} is off the 30-min grid`);
+    }
+  });
+
+  test("an occupied alternative is skipped, not offered", async () => {
+    // 3 PM held by a request, 4 PM already booked — so neither may be
+    // offered and the search has to walk past both.
+    stubs = installStubs({
+      leads: [requestLead(WED_3PM)],
+      bookedAt: [WED_4PM],
+    });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    assert.ok(!times.includes("4:00 pm"), "a booked slot must not be offered");
+    assert.ok(!times.includes("3:00 pm"), "the held slot must not be offered");
+  });
+
+  test("a pending request on an alternative is skipped too", async () => {
+    stubs = installStubs({
+      leads: [requestLead(WED_3PM), requestLead(WED_4PM)],
+    });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    assert.ok(
+      !times.includes("4:00 pm"),
+      "a slot another caller has requested must not be offered"
+    );
+  });
+
+  test("alternatives stay inside business hours", async () => {
+    // 4 PM held. 5 PM cannot fit a 60-minute appointment before the
+    // 17:00 close, so the next real slot is the following morning.
+    stubs = installStubs({ leads: [requestLead(WED_4PM)] });
+    const { json } = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "16:00" })
+    );
+    const times = offeredTimes(json.results[0].result);
+    assert.ok(!times.includes("5:00 pm"), "5 PM would run past closing");
+    for (const time of times) {
+      // Alternatives read either "4:00 pm" or "Thursday 13 August at
+      // 9:00 am"; take the clock part of whichever form it is.
+      const [, h, , ap] = /(\d{1,2}):(\d{2})\s*(am|pm)/i.exec(time);
+      const hour24 = (Number(h) % 12) + (/pm/i.test(ap) ? 12 : 0);
+      assert.ok(hour24 >= 9 && hour24 < 17, `${time} is outside 09:00–17:00`);
+    }
+  });
+
+  test("they are unique and in chronological order", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    assert.equal(new Set(times).size, times.length, "no duplicates");
+    // Ordering is asserted on the instants the engine returned, not on
+    // the spoken clock times: the walk can cross midnight, where 4 pm
+    // Wednesday legitimately precedes 9 am Thursday.
+    const isos = json.results[0].alternativeIsos ?? [];
+    if (isos.length > 1) {
+      const stamps = isos.map((iso) => new Date(iso).getTime());
+      assert.deepEqual(stamps, [...stamps].sort((a, b) => a - b));
+    }
+  });
+
+  test("an alternative on another day says which day", async () => {
+    // With 60-minute slots and a 17:00 close, the second alternative
+    // after 3 PM falls on the following morning. "9:00 am" alone would
+    // tell the caller nothing about which day.
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    const times = offeredTimes(json.results[0].result);
+    const nextDay = times.filter((t) => !/^\d+:\d+ (am|pm)$/i.test(t));
+    if (nextDay.length > 0) {
+      assert.match(
+        nextDay[0],
+        /Thursday 13 August/,
+        "a cross-day alternative must name its day"
+      );
+    }
+    // Same-day alternatives stay as a bare clock time.
+    assert.ok(times.some((t) => /^\d+:\d+ (am|pm)$/i.test(t)));
+  });
+
+  test("when nothing is free the safe fallback is used, never an invented slot", async () => {
+    // Every slot in the search window is held.
+    const everySlotHeld = [];
+    for (let day = 12; day <= 26; day++) {
+      for (let hour = 8; hour <= 16; hour++) {
+        everySlotHeld.push(
+          requestLead(
+            `2026-08-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:00:00.000Z`
+          )
+        );
+      }
+    }
+    stubs = installStubs({ leads: everySlotHeld });
+    const { json } = await callTool(toolCallBody());
+    const result = json.results[0].result;
+    assert.match(result, /nothing else is free nearby/);
+    assert.match(result, /Do NOT invent a time/);
+    assert.deepEqual(stubs.writes, [], "still read-only");
   });
 });
 

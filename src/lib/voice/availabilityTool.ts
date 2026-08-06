@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  findNextAvailableSlot,
   getOrgSettings,
   getOrgTimezone,
   isWithinBusinessHours,
@@ -37,6 +38,12 @@ const LOOKUP_TIMEOUT_MS = 8_000;
 
 /** How many alternatives to offer when the requested time is taken. */
 const MAX_ALTERNATIVES = 2;
+
+/**
+ * Ceiling on slot-grid probes per lookup. Each probe advances a whole
+ * slot, so this only bounds the work when the diary is densely booked.
+ */
+const MAX_ALTERNATIVE_PROBES = 6;
 
 /**
  * A request that is over — the slot is free again. Everything else
@@ -97,6 +104,60 @@ async function isHeldByPendingRequest(
   }
 
   return (count ?? 0) >= maxConcurrent;
+}
+
+/**
+ * How far ahead to load held slots. Matches the engine's own 14-day
+ * slot-search window, so the predicate below covers every candidate
+ * findNextAvailableSlot can return.
+ */
+const ALTERNATIVE_WINDOW_DAYS = 14;
+
+/**
+ * Every instant already held by a pending request in the search window,
+ * as instant → number of requests holding it.
+ *
+ * Loaded in ONE query because findNextAvailableSlot's `isAcceptable`
+ * hook is synchronous — the same reason findNextExternallyFreeSlot
+ * pre-fetches the calendar's busy intervals and passes a sync
+ * predicate. This is a range read for the alternatives search;
+ * isHeldByPendingRequest above remains the point lookup for the slot
+ * the caller actually asked for, and is deliberately left untouched
+ * since that path has been verified in production.
+ *
+ * Fails OPEN, exactly as the point lookup does: an unreadable list must
+ * not invent conflicts and start hiding real slots.
+ */
+async function fetchHeldSlots(
+  orgId: string,
+  fromIso: string
+): Promise<Map<string, number>> {
+  const held = new Map<string, number>();
+  const toIso = new Date(
+    new Date(fromIso).getTime() + ALTERNATIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("leads")
+    .select("appointment_datetime")
+    .eq("org_id", orgId)
+    .eq("metadata->>appointment_request", "true")
+    .not("status", "in", `(${RELEASED_STATUSES.join(",")})`)
+    .gte("appointment_datetime", fromIso)
+    .lte("appointment_datetime", toIso);
+
+  if (error) {
+    console.error("[voice] held-slot lookup failed:", error.message);
+    return held;
+  }
+
+  for (const row of data ?? []) {
+    const iso = row.appointment_datetime;
+    if (typeof iso !== "string") continue;
+    held.set(iso, (held.get(iso) ?? 0) + 1);
+  }
+  return held;
 }
 
 /** The org's concurrent-appointment limit, as the engine reads it. */
@@ -173,7 +234,34 @@ function speakInstant(iso: string, timezone: string): string {
     .replace(/ /g, " ");
 }
 
-/** Just the clock time — how an alternative is offered. */
+/** The calendar day an instant falls on, in the business's zone. */
+function localDay(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * How an alternative is offered. The clock time alone is enough while
+ * it falls on the day the caller asked about; once the search crosses
+ * into another day — which it can now that alternatives are whole slots
+ * rather than the next minute — the day has to be said, or "9:00 am"
+ * means nothing to the caller.
+ */
+function speakAlternative(
+  iso: string,
+  requestedIso: string,
+  timezone: string
+): string {
+  return localDay(iso, timezone) === localDay(requestedIso, timezone)
+    ? speakTime(iso, timezone)
+    : speakInstant(iso, timezone);
+}
+
+/** Just the clock time — how a same-day alternative is offered. */
 function speakTime(iso: string, timezone: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: timezone,
@@ -201,38 +289,60 @@ function unknownOutcome(requestedIso: string | null): VoiceAvailabilityOutcome {
 }
 
 /**
- * Collects alternatives the engine actually returned. The first comes
- * from the decision itself; any further one is a fresh search starting
- * a minute later, so the same slot is never offered twice. Stops at the
- * first gap — an empty list is a valid, honest answer.
+ * Real appointment slots the caller can actually be offered.
+ *
+ * Every candidate comes from findNextAvailableSlot — the existing
+ * slot-grid walker, which steps by the org's configured
+ * appointment_duration_minutes and already enforces opening hours,
+ * closed days, lunch breaks, "must finish before closing" and capacity.
+ * No spacing rule is defined here.
+ *
+ * This replaces a cursor that advanced by 60 SECONDS and then offered
+ * the resulting instant if checkBookingSlot happened to accept it.
+ * checkBookingSlot evaluates whatever instant it is handed and has no
+ * notion of a slot grid, so a refused 3:00 PM produced "3:01 PM or
+ * 3:02 PM" on the 2026-08-06 production call — times that were never
+ * appointment slots, and that would have been recorded as the requested
+ * time had the caller accepted one.
+ *
+ * Pending requests are excluded through the walker's own isAcceptable
+ * hook, so a slot another caller has already asked for is skipped
+ * rather than offered and withdrawn.
  */
 async function gatherAlternatives(
   orgId: string,
-  firstSuggestion: string | null,
+  searchFromIso: string,
   durationMinutes: number,
   maxConcurrent: number
 ): Promise<string[]> {
-  if (!firstSuggestion) return [];
-  const found: string[] = [];
-  const seen = new Set<string>();
-  let cursor: string | null = firstSuggestion;
+  const held = await fetchHeldSlots(orgId, searchFromIso);
+  const isAcceptable = (candidateIso: string): boolean =>
+    (held.get(candidateIso) ?? 0) < maxConcurrent;
 
-  while (cursor && found.length < MAX_ALTERNATIVES) {
-    seen.add(cursor);
-    // An alternative must clear the pending-request check too, or Remy
-    // would offer a time another caller has already asked for.
-    if (!(await isHeldByPendingRequest(orgId, cursor, maxConcurrent))) {
-      found.push(cursor);
+  const stepMs = Math.max(durationMinutes, 1) * 60_000;
+  const found: string[] = [];
+  let cursor: string | null = searchFromIso;
+
+  // Bounded: each probe advances by a whole slot, so this cannot spin.
+  for (let probe = 0; probe < MAX_ALTERNATIVE_PROBES; probe++) {
+    if (!cursor || found.length >= MAX_ALTERNATIVES) break;
+
+    const candidate: string | null = await findNextAvailableSlot(
+      orgId,
+      cursor,
+      { isAcceptable }
+    );
+    if (!candidate) break;
+
+    // The walker knows hours and internal capacity; checkBookingSlot
+    // adds the external calendar, so an offered slot has cleared every
+    // check the request itself would face.
+    const decision = await checkBookingSlot(orgId, candidate, durationMinutes);
+    if (decision.available && !found.includes(candidate)) {
+      found.push(candidate);
     }
 
-    const searchFrom: string = new Date(
-      new Date(cursor).getTime() + 60_000
-    ).toISOString();
-    const next = await checkBookingSlot(orgId, searchFrom, durationMinutes);
-    const candidate: string | null = next.available
-      ? searchFrom
-      : next.suggestedIso;
-    cursor = candidate && !seen.has(candidate) ? candidate : null;
+    cursor = new Date(new Date(candidate).getTime() + stepMs).toISOString();
   }
 
   return found;
@@ -310,26 +420,23 @@ async function lookup(
     };
   }
 
-  // When the engine refused the slot it already supplies the nearest
-  // alternative. When only a pending REQUEST held it, the engine
-  // thought the slot was fine and suggested nothing — so the search
-  // starts just after the requested time.
-  let firstSuggestion = decision.suggestedIso;
-  if (!firstSuggestion && heldByRequest) {
-    const searchFrom = new Date(
-      new Date(requestedIso).getTime() + 60_000
+  // Where to start walking the slot grid. When the engine refused the
+  // slot it has already found the nearest bookable alternative, and
+  // that instant is itself on the grid, so the walk starts there and
+  // will return it first if it is still acceptable. When only a pending
+  // REQUEST held the slot the engine suggested nothing, so the walk
+  // starts one whole slot after the requested time — never one minute
+  // after it.
+  const searchFromIso =
+    decision.suggestedIso ??
+    new Date(
+      new Date(requestedIso).getTime() +
+        Math.max(appointmentDurationMinutes, 1) * 60_000
     ).toISOString();
-    const next = await checkBookingSlot(
-      orgId,
-      searchFrom,
-      appointmentDurationMinutes
-    );
-    firstSuggestion = next.available ? searchFrom : next.suggestedIso;
-  }
 
   const alternativeIsos = await gatherAlternatives(
     orgId,
-    firstSuggestion,
+    searchFromIso,
     appointmentDurationMinutes,
     maxConcurrent
   );
@@ -343,7 +450,9 @@ async function lookup(
     };
   }
 
-  const spoken = alternativeIsos.map((iso) => speakTime(iso, timezone));
+  const spoken = alternativeIsos.map((iso) =>
+    speakAlternative(iso, requestedIso, timezone)
+  );
   return {
     status: "unavailable",
     requestedIso,
