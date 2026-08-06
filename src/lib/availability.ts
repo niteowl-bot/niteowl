@@ -277,7 +277,14 @@ export async function getBusinessHoursSummary(
  */
 export async function isWithinBusinessHours(
   orgId: string,
-  isoDatetime: string
+  isoDatetime: string,
+  /**
+   * The zone the org's opening hours are stated in. Resolved from the
+   * organisation when omitted, so every existing caller becomes
+   * timezone-correct without changing. Passed explicitly only by a
+   * caller that already holds it and wants to avoid the extra lookup.
+   */
+  timezone?: string
 ): Promise<AvailabilityResult> {
   const supabase = createAdminClient();
 
@@ -292,7 +299,8 @@ export async function isWithinBusinessHours(
     return { isAvailable: true, reason: "no_hours_configured" };
   }
 
-  const { dayOfWeek, minutesOfDay } = getLondonParts(isoDatetime);
+  const zone = timezone ?? (await getOrgTimezone(orgId));
+  const { dayOfWeek, minutesOfDay } = getLondonParts(isoDatetime, zone);
   const dayConfig = hours.find((h) => h.day_of_week === dayOfWeek);
 
   if (!dayConfig || dayConfig.is_closed) {
@@ -351,6 +359,13 @@ export interface SlotSearchOptions {
    * as it was before external calendars existed.
    */
   isAcceptable?: (candidateIso: string) => boolean;
+  /**
+   * The zone the org's opening hours are stated in. Resolved from the
+   * organisation when omitted, so every existing caller becomes
+   * timezone-correct without changing. Passed explicitly only by a
+   * caller that already holds it and wants to avoid the extra lookup.
+   */
+  timezone?: string;
 }
 
 export async function findNextAvailableSlot(
@@ -370,6 +385,7 @@ export async function findNextAvailableSlot(
     return isoDatetime;
   }
 
+  const zone = options.timezone ?? (await getOrgTimezone(orgId));
   const hoursByDay = new Map(hours.map((h) => [h.day_of_week, h]));
   const stepMinutes = appointmentDurationMinutes > 0 ? appointmentDurationMinutes : 30;
   const maxIterations = Math.ceil((SEARCH_WINDOW_DAYS * 24 * 60) / stepMinutes);
@@ -377,7 +393,10 @@ export async function findNextAvailableSlot(
   let cursor = new Date(isoDatetime);
 
   for (let i = 0; i < maxIterations; i++) {
-    const { dayOfWeek, minutesOfDay } = getLondonParts(cursor.toISOString());
+    const { dayOfWeek, minutesOfDay } = getLondonParts(
+      cursor.toISOString(),
+      zone
+    );
     const dayConfig = hoursByDay.get(dayOfWeek);
 
     if (dayConfig && !dayConfig.is_closed) {

@@ -102,6 +102,10 @@ export function installStubs({
   bookedCount = 0,
   modelIso = null,
   modelStatus = 200,
+  // The org's IANA zone, as organisations.timezone now supplies it.
+  // Omitted by default so every existing test keeps exercising the
+  // Europe/London fallback exactly as before.
+  timezone = null,
 } = {}) {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://stub.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "stub-service-role-key";
@@ -136,13 +140,18 @@ export function installStubs({
 
     if (url.includes("/rest/v1/organisations")) {
       calls.organisations += 1;
-      return json([
-        {
-          appointment_duration_minutes: appointmentDurationMinutes,
-          emergency_mode_enabled: emergencyModeEnabled,
-          max_concurrent_bookings: maxConcurrentBookings,
-        },
-      ]);
+      const row = {
+        appointment_duration_minutes: appointmentDurationMinutes,
+        emergency_mode_enabled: emergencyModeEnabled,
+        max_concurrent_bookings: maxConcurrentBookings,
+        ...(timezone ? { timezone } : {}),
+      };
+      // getOrgTimezone/getOrgSettings use maybeSingle(), which asks for
+      // a single object; the other reads take the array.
+      const wantsObject = new Headers(init.headers ?? {})
+        .get("accept")
+        ?.includes("pgrst.object");
+      return wantsObject ? json(row) : json([row]);
     }
 
     if (url.includes("/rest/v1/leads")) {
