@@ -38,6 +38,78 @@ const LOOKUP_TIMEOUT_MS = 8_000;
 /** How many alternatives to offer when the requested time is taken. */
 const MAX_ALTERNATIVES = 2;
 
+/**
+ * A request that is over — the slot is free again. Everything else
+ * (new, awaiting_confirmation, contacted, qualified, needs_review,
+ * booked) is a live claim on the time.
+ */
+const RELEASED_STATUSES = ["cancelled", "lost"];
+
+/**
+ * Whether a slot is already spoken for by an appointment REQUEST that
+ * has not yet been confirmed or rejected.
+ *
+ * The shared engine's capacity check counts only status='booked'
+ * (availability.ts), which is right for it: a booking is the only thing
+ * chat and the widget ever create. A phone call deliberately creates a
+ * REQUEST instead — Remy is not allowed to confirm anything — so
+ * without this a second caller is told the same slot is free while the
+ * first request sits waiting for the business. That is exactly what
+ * happened on the 2026-08-06 pair of production calls.
+ *
+ * Deliberately narrow, and voice-only:
+ *   - `metadata.appointment_request` must be explicitly true. Callbacks,
+ *     questions, general enquiries, needs_review records without an
+ *     appointment, chat leads and widget leads never carry it and can
+ *     never consume appointment capacity.
+ *   - the row must sit at exactly this instant.
+ *   - cancelled and lost are excluded, so rejecting a request releases
+ *     the slot.
+ *   - a request in the past holds nothing.
+ *
+ * Fails OPEN on a query error: an unreadable count must not invent a
+ * conflict. The shared engine's own checks have already run by this
+ * point, so the worst case is today's behaviour.
+ */
+async function isHeldByPendingRequest(
+  orgId: string,
+  isoDatetime: string,
+  maxConcurrent: number
+): Promise<boolean> {
+  // A slot that has already passed cannot be held by anything.
+  if (new Date(isoDatetime).getTime() < Date.now()) return false;
+
+  const admin = createAdminClient();
+  const { count, error } = await admin
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("appointment_datetime", isoDatetime)
+    .eq("metadata->>appointment_request", "true")
+    .not("status", "in", `(${RELEASED_STATUSES.join(",")})`);
+
+  if (error) {
+    console.error(
+      "[voice] pending-request capacity check failed:",
+      error.message
+    );
+    return false;
+  }
+
+  return (count ?? 0) >= maxConcurrent;
+}
+
+/** The org's concurrent-appointment limit, as the engine reads it. */
+async function getMaxConcurrent(orgId: string): Promise<number> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("organisations")
+    .select("max_concurrent_bookings")
+    .eq("id", orgId)
+    .maybeSingle();
+  return data?.max_concurrent_bookings ?? 1;
+}
+
 export type VoiceAvailabilityStatus = "available" | "unavailable" | "unknown";
 
 export interface VoiceAvailabilityOutcome {
@@ -137,19 +209,30 @@ function unknownOutcome(requestedIso: string | null): VoiceAvailabilityOutcome {
 async function gatherAlternatives(
   orgId: string,
   firstSuggestion: string | null,
-  durationMinutes: number
+  durationMinutes: number,
+  maxConcurrent: number
 ): Promise<string[]> {
   if (!firstSuggestion) return [];
-  const found = [firstSuggestion];
+  const found: string[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = firstSuggestion;
 
-  while (found.length < MAX_ALTERNATIVES) {
-    const searchFrom = new Date(
-      new Date(found[found.length - 1]).getTime() + 60_000
+  while (cursor && found.length < MAX_ALTERNATIVES) {
+    seen.add(cursor);
+    // An alternative must clear the pending-request check too, or Remy
+    // would offer a time another caller has already asked for.
+    if (!(await isHeldByPendingRequest(orgId, cursor, maxConcurrent))) {
+      found.push(cursor);
+    }
+
+    const searchFrom: string = new Date(
+      new Date(cursor).getTime() + 60_000
     ).toISOString();
     const next = await checkBookingSlot(orgId, searchFrom, durationMinutes);
-    const candidate = next.available ? searchFrom : next.suggestedIso;
-    if (!candidate || found.includes(candidate)) break;
-    found.push(candidate);
+    const candidate: string | null = next.available
+      ? searchFrom
+      : next.suggestedIso;
+    cursor = candidate && !seen.has(candidate) ? candidate : null;
   }
 
   return found;
@@ -204,7 +287,21 @@ async function lookup(
   // call this free, and so does the call.
   if (decision.externalCheckFailed) return unknownOutcome(requestedIso);
 
-  if (decision.available) {
+  // The engine says free, but it only counts CONFIRMED bookings. A slot
+  // another caller has already requested is not free to request again.
+  const maxConcurrent = await getMaxConcurrent(orgId);
+  const heldByRequest =
+    decision.available &&
+    (await isHeldByPendingRequest(orgId, requestedIso, maxConcurrent));
+
+  if (heldByRequest) {
+    console.log(
+      "[voice] slot already held by a pending appointment request:",
+      requestedIso
+    );
+  }
+
+  if (decision.available && !heldByRequest) {
     return {
       status: "available",
       requestedIso,
@@ -213,10 +310,28 @@ async function lookup(
     };
   }
 
+  // When the engine refused the slot it already supplies the nearest
+  // alternative. When only a pending REQUEST held it, the engine
+  // thought the slot was fine and suggested nothing — so the search
+  // starts just after the requested time.
+  let firstSuggestion = decision.suggestedIso;
+  if (!firstSuggestion && heldByRequest) {
+    const searchFrom = new Date(
+      new Date(requestedIso).getTime() + 60_000
+    ).toISOString();
+    const next = await checkBookingSlot(
+      orgId,
+      searchFrom,
+      appointmentDurationMinutes
+    );
+    firstSuggestion = next.available ? searchFrom : next.suggestedIso;
+  }
+
   const alternativeIsos = await gatherAlternatives(
     orgId,
-    decision.suggestedIso,
-    appointmentDurationMinutes
+    firstSuggestion,
+    appointmentDurationMinutes,
+    maxConcurrent
   );
 
   if (alternativeIsos.length === 0) {

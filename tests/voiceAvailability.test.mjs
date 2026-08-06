@@ -81,7 +81,27 @@ function request(body) {
  * lists the appointment_datetime values already taken, so capacity can
  * genuinely refuse a slot.
  */
-function installStubs({ bookedAt = [], hoursFail = false } = {}) {
+/**
+ * A lead row as the capacity checks see it. `bookedAt` stays as a
+ * shorthand for the common "someone is already booked here" case.
+ */
+const bookedLead = (iso) => ({
+  org_id: ORG_ID,
+  appointment_datetime: iso,
+  status: "booked",
+  metadata: {},
+});
+
+/** What a completed phone appointment request leaves behind. */
+const requestLead = (iso, status = "needs_review") => ({
+  org_id: ORG_ID,
+  appointment_datetime: iso,
+  status,
+  metadata: { appointment_request: true },
+});
+
+function installStubs({ bookedAt = [], leads = [], hoursFail = false } = {}) {
+  const leadRows = [...bookedAt.map(bookedLead), ...leads];
   process.env.VOICE_ENABLED = "true";
   process.env.VAPI_WEBHOOK_SECRET = SECRET;
 
@@ -146,13 +166,36 @@ function installStubs({ bookedAt = [], hoursFail = false } = {}) {
     }
 
     if (url.includes("/rest/v1/leads")) {
-      // Capacity check is a HEAD count keyed on appointment_datetime.
+      // Two different counts hit this table: the shared engine's
+      // capacity check (status=booked) and the voice pending-request
+      // check (metadata->>appointment_request=true, status not in
+      // cancelled/lost). Both are HEAD counts, so the filters are
+      // applied properly rather than guessed at.
       const params = new URL(url).searchParams;
-      const wanted = (params.get("appointment_datetime") ?? "").replace("eq.", "");
-      const taken = bookedAt.includes(wanted) ? 1 : 0;
+      const matching = leadRows.filter((row) => {
+        for (const [key, raw] of params.entries()) {
+          if (["select", "order", "limit", "offset"].includes(key)) continue;
+          const value = key === "metadata->>appointment_request"
+            ? row.metadata?.appointment_request === true
+              ? "true"
+              : undefined
+            : row[key];
+
+          if (raw.startsWith("eq.")) {
+            if (String(value ?? "") !== raw.slice(3)) return false;
+          } else if (raw.startsWith("not.in.")) {
+            const excluded = raw
+              .slice(7)
+              .replace(/^\(|\)$/g, "")
+              .split(",");
+            if (excluded.includes(String(value ?? ""))) return false;
+          }
+        }
+        return true;
+      });
       return new Response(null, {
         status: 200,
-        headers: { "content-range": `*/${taken}` },
+        headers: { "content-range": `*/${matching.length}` },
       });
     }
 
@@ -340,6 +383,137 @@ describe("F/G — failure never invents availability", () => {
     const { json } = await callTool(toolCallBody());
     assert.match(json.results[0].result, /^AVAILABLE:/);
     assert.deepEqual(stubs.writes, []);
+  });
+});
+
+describe("a pending appointment request holds the slot", () => {
+  // The 2026-08-06 production pair: two callers, same slot, both told
+  // it was available. The first call created a REQUEST awaiting the
+  // business, and the shared capacity check counts confirmed bookings
+  // only — so the slot still looked free.
+  const WED_3PM = "2026-08-12T14:00:00.000Z"; // 15:00 Europe/London (BST)
+  let stubs;
+  afterEach(() => stubs.restore());
+
+  test("the second lookup for the same slot is refused", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^NOT AVAILABLE:/);
+    assert.deepEqual(stubs.writes, [], "still read-only");
+  });
+
+  test("a different time on the same day stays available", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "11:00" })
+    );
+    assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("cancelled and lost requests release the slot", async () => {
+    for (const status of ["cancelled", "lost"]) {
+      stubs = installStubs({ leads: [requestLead(WED_3PM, status)] });
+      const { json } = await callTool(toolCallBody());
+      assert.match(
+        json.results[0].result,
+        /^AVAILABLE:/,
+        `${status} must not hold capacity`
+      );
+      stubs.restore();
+    }
+    stubs = installStubs();
+  });
+
+  test("every live status still holds it", async () => {
+    for (const status of [
+      "new",
+      "awaiting_confirmation",
+      "contacted",
+      "qualified",
+      "needs_review",
+      "booked",
+    ]) {
+      stubs = installStubs({ leads: [requestLead(WED_3PM, status)] });
+      const { json } = await callTool(toolCallBody());
+      assert.match(
+        json.results[0].result,
+        /^NOT AVAILABLE:/,
+        `${status} must hold capacity`
+      );
+      stubs.restore();
+    }
+    stubs = installStubs();
+  });
+
+  test("a confirmed booking still blocks, exactly as before", async () => {
+    stubs = installStubs({ bookedAt: [WED_3PM] });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^NOT AVAILABLE:/);
+  });
+
+  test("an UNMARKED lead at the same instant does not block", async () => {
+    // A chat or widget lead, or any ordinary enquiry: it may carry an
+    // appointment_datetime, but without the marker it is not a phone
+    // appointment request and must not consume capacity.
+    stubs = installStubs({
+      leads: [
+        {
+          org_id: ORG_ID,
+          appointment_datetime: WED_3PM,
+          status: "new",
+          metadata: {},
+        },
+      ],
+    });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("a callback lead does not block", async () => {
+    // Callbacks carry callback_urgency, never appointment_request, and
+    // typically no appointment_datetime at all.
+    stubs = installStubs({
+      leads: [
+        {
+          org_id: ORG_ID,
+          appointment_datetime: WED_3PM,
+          status: "needs_review",
+          metadata: { callback_urgency: "as soon as possible" },
+        },
+      ],
+    });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("a general question lead does not block", async () => {
+    stubs = installStubs({
+      leads: [
+        {
+          org_id: ORG_ID,
+          appointment_datetime: WED_3PM,
+          status: "needs_review",
+          metadata: { caller_id: "+353861234567" },
+        },
+      ],
+    });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("a request in the past holds nothing", async () => {
+    // Same wall-clock slot, but in 2020 — long gone, so it cannot hold
+    // capacity even though a marked row sits at that instant.
+    const PAST = "2020-08-12T14:00:00.000Z";
+    stubs = installStubs({ leads: [requestLead(PAST)] });
+    const { json } = await callTool(
+      toolCallBody({ date: "2020-08-12", time: "15:00" })
+    );
+    assert.doesNotMatch(
+      json.results[0].result,
+      /already held by a pending/,
+      "a past slot is not held"
+    );
   });
 });
 

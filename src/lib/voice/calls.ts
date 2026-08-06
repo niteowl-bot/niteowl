@@ -276,18 +276,38 @@ async function recordLeadCallDetails(
   callerPhone: string | null,
   alternatePhone: string | null,
   serviceAddress: string | null,
-  callbackUrgency: string | null = null
+  callbackUrgency: string | null = null,
+  /**
+   * True when this call was an APPOINTMENT request, as opposed to a
+   * callback, a question or a general enquiry. Only such a lead may
+   * hold appointment capacity, and only once the shared engine actually
+   * resolved a time — the marker is written below solely when the row
+   * came back with an appointment_datetime, so a request whose time
+   * never parsed can never block a slot.
+   */
+  isAppointmentRequest = false
 ): Promise<void> {
-  if (!callerPhone && !alternatePhone && !serviceAddress && !callbackUrgency) {
+  if (
+    !callerPhone &&
+    !alternatePhone &&
+    !serviceAddress &&
+    !callbackUrgency &&
+    !isAppointmentRequest
+  ) {
     return;
   }
 
   try {
     const { data } = await admin
       .from("leads")
-      .select("metadata")
+      .select("metadata, appointment_datetime")
       .eq("id", leadId)
       .maybeSingle();
+
+    // The marker means "this row occupies an appointment slot", so it
+    // is only ever true alongside a real resolved instant.
+    const holdsAppointment =
+      isAppointmentRequest && Boolean(data?.appointment_datetime);
 
     const metadata = {
       ...((data?.metadata as Record<string, unknown>) ?? {}),
@@ -295,6 +315,7 @@ async function recordLeadCallDetails(
       ...(alternatePhone ? { alternate_phone: alternatePhone } : {}),
       ...(serviceAddress ? { service_address: serviceAddress } : {}),
       ...(callbackUrgency ? { callback_urgency: callbackUrgency } : {}),
+      ...(holdsAppointment ? { appointment_request: true } : {}),
     };
 
     const { error } = await admin
@@ -447,22 +468,49 @@ export async function processCallEnded(
     );
   }
 
+  // Was this call an APPOINTMENT request? Decided from the extracted
+  // intent BEFORE the downgrade below rewrites it, because that answer
+  // is what the capacity marker depends on.
+  const isAppointmentRequest =
+    extracted?.intent === "new_booking" || extracted?.intent === "reschedule";
+
   if (extracted) {
-    // Unconfirmed-service guard — new_booking only, and only when a
-    // specific service was actually named. Downgrading the intent BEFORE
-    // it reaches the shared lead-capture engine is what stops
-    // isBookingConfirmed() there from ever marking this "booked" or
-    // sending the booking-confirmation email; a confirmed-service
-    // booking never hits this branch, so that path is unchanged.
+    // The Knowledge Base check still decides the CLOSING WORDING (rule
+    // 9): a service the business does not list is never implied to be
+    // on offer. It no longer decides the lead's status.
     if (extracted.intent === "new_booking" && extracted.service) {
       serviceConfirmed = await isServiceConfirmedByKnowledge(
         admin,
         orgId,
         extracted.service
       );
-      if (!serviceConfirmed) {
-        extracted.intent = "question";
-      }
+    }
+
+    // A phone appointment is a REQUEST, never a confirmed booking.
+    //
+    // Remy tells every caller the team will confirm (rule 9 forbids
+    // "booked", "confirmed" and "reserved"), so the lead must not
+    // silently disagree with what the caller was told. Downgrading the
+    // intent BEFORE it reaches the shared engine is the only lever that
+    // does this from here: isBookingConfirmed() there returns false for
+    // anything that is not new_booking/reschedule, which is what stops
+    // BOTH the "booked" status and the booking-confirmation email that
+    // status fires (leadCapture sends it inside capturePartialLead via
+    // after(), so demoting the status afterwards would not stop it).
+    //
+    // This used to happen only when the service failed the Knowledge
+    // Base check — which is exactly why a KB-matched request DID become
+    // a confirmed booking, and why a second caller was told the same
+    // slot was free (the capacity check counts status='booked' only).
+    // The lead is still created: hasSubstance holds for any real
+    // appointment request, so needsReview below carries it through on
+    // the same path unconfirmed-service calls already take.
+    if (isAppointmentRequest) {
+      extracted.intent = "question";
+      console.log(
+        "[voice] appointment recorded as a request awaiting confirmation:",
+        event.providerCallId
+      );
     }
 
     const actionable = ACTIONABLE_INTENTS.includes(extracted.intent);
@@ -527,7 +575,8 @@ export async function processCallEnded(
           event.callerPhone,
           alternatePhone,
           details?.service_address ?? null,
-          callbackUrgency
+          callbackUrgency,
+          isAppointmentRequest
         );
 
         const { error: linkError } = await admin
