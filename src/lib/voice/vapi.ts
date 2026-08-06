@@ -219,6 +219,29 @@ export function parseVapiWebhook(body: unknown): VoiceEvent | null {
 // ── Outbound assistant rendering ───────────────────────────────────
 
 /**
+ * Vapi's built-in hang-up tool. Its whole definition is the type — a
+ * default tool needs no function name, description or parameters, and
+ * the model calls it like any other tool.
+ *
+ * Until this existed Remy could SAY goodbye but had no way to hang up,
+ * so the line stayed open until the caller rang off or the 600s cap
+ * expired. On the 2026-08-06 production call that produced:
+ *   AI:   "...Have a great day. Goodbye. Bye."
+ *   User: "Thanks. Bye."   AI: "Goodbye."
+ *   User: "Bye."           AI: "Goodbye."
+ * — the assistant knew the conversation was finished and kept
+ * answering farewells because ending the call was not something it
+ * could do.
+ *
+ * Model-driven on purpose. Vapi also offers `endCallPhrases`, which
+ * hangs up on literal phrase matches in the CALLER's speech — that
+ * would cut off "bye for now, but I have another question" mid
+ * sentence. The tool leaves the decision with the model, which reads
+ * the whole turn, and rule 11 states the one condition for using it.
+ */
+const END_CALL_TOOL = { type: "endCall" } as const;
+
+/**
  * Renders the internal assistant config into Vapi's transient
  * assistant response for an assistant-request. Recording is
  * explicitly disabled (GDPR decision: transcripts only at launch).
@@ -234,6 +257,7 @@ export function buildVapiAssistantResponse(
         provider: "openai",
         model: "gpt-4o",
         messages: [{ role: "system", content: config.systemPrompt }],
+        tools: [END_CALL_TOOL],
       },
       transcriber: {
         provider: "deepgram",
@@ -305,9 +329,12 @@ export function buildVapiDeclineResponse(
           {
             role: "system",
             content:
-              "The business cannot take calls right now. Apologise briefly, suggest the caller tries again later, and end the call. Do not answer questions or take messages.",
+              "The business cannot take calls right now. Apologise briefly, suggest the caller tries again later, and end the call with the end-call tool. Do not answer questions or take messages.",
           },
         ],
+        // This assistant was already told to "end the call" and had no
+        // way to do it either.
+        tools: [END_CALL_TOOL],
       },
       maxDurationSeconds: 60,
       artifactPlan: { recordingEnabled: false },
