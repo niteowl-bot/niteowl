@@ -44,7 +44,10 @@ return ONLY a valid JSON object describing what the caller wanted.
   service, demo, or appointment, or asked the business to arrange something
   for them. This includes requests the receptionist said it would "pass to
   the team": if the caller asked for an appointment or booking, the intent
-  is new_booking even if nothing was confirmed on the call.
+  is new_booking even if nothing was confirmed on the call. Asking for
+  someone to CALL THEM BACK about an appointment is not by itself a
+  new_booking — use new_booking only if the caller asked to arrange the
+  appointment on this call.
 "reschedule" — the caller wanted to change or move an existing booking.
 "contact_update" — the caller only provided or corrected contact details.
 "question" — the caller only asked general questions; no booking action.
@@ -67,12 +70,16 @@ phone — ONLY an additional number the caller spoke aloud to be reached on
 service — short summary of what the caller wants, e.g. "Boiler repair",
   "Product demo". Only when intent is new_booking; otherwise null.
 preferred_datetime — the caller's requested day and time EXACTLY as they
-  said it (e.g. "tomorrow at 2pm", "the twelfth of July at 10 AM"). Do NOT
-  convert to a calendar date. If the caller only gave a vague answer
-  ("tomorrow", "the afternoon", "later") and never narrowed it down, record
-  that vague phrase verbatim — NEVER turn it into a specific clock time and
-  never borrow a time the receptionist suggested but the caller did not
-  accept. Null only if no time or date was mentioned.
+  said it (e.g. "tomorrow at 2pm", "the twelfth of July at 10 AM",
+  "Thursday between 2 and 5"). Do NOT convert to a calendar date. If the
+  caller only gave a vague answer ("tomorrow", "the afternoon", "later") and
+  never narrowed it down, record that vague phrase verbatim — NEVER turn it
+  into a specific clock time and never borrow a time the receptionist
+  suggested but the caller did not accept. URGENCY IS NOT A TIME: "as soon
+  as possible", "ASAP", "whenever you can", "the earliest you can", "soon"
+  and "any time" say how urgent the caller is, not when they are free —
+  NEVER record one of them here; set urgent true instead. Null if no day or
+  time was mentioned, including when urgency was all the caller gave.
 service_address — the address or location where the work is needed, exactly
   as the caller gave it. Null if they gave none.
 urgent — true only if the caller was urgent, upset, or needs a same-day

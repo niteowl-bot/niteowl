@@ -11,6 +11,7 @@ import { sendCallSummaryEmail } from "@/lib/email";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
+import { sanitisePreferredDatetime } from "@/lib/voice/callbackTiming";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -212,7 +213,14 @@ function toExtractedLead(
     // become the lead's primary phone and its merge key.
     phone: callerPhone ?? normaliseSpokenNumber(details.phone),
     service: details.service,
-    preferred_datetime: details.preferred_datetime,
+    // "As soon as possible" is urgency, not a time (see callbackTiming.ts).
+    // It must never become the lead's preferred_datetime: it is not a
+    // slot anyone can be booked into and it is not a time anyone can be
+    // rung at. The phrase itself is kept on the lead's metadata by
+    // recordLeadCallDetails, so the caller's urgency still reaches the
+    // owner — just not in a field that means WHEN.
+    preferred_datetime: sanitisePreferredDatetime(details.preferred_datetime)
+      .preferredDatetime,
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
   };
 }
@@ -253,22 +261,26 @@ function resolveAlternatePhone(
 /**
  * Records call-derived detail on the lead that has no column of its
  * own: which number the call actually came from, any different number
- * the caller asked to be reached on, and the on-site service address
+ * the caller asked to be reached on, the on-site service address
  * (ExtractedLead carries no address field, and the shared lead schema
- * is deliberately left alone). Written to the existing leads.metadata
- * JSONB (the same column the needs-review notification flag uses) —
- * read-merged so it can never clobber a flag another writer set.
- * Voice-only and non-fatal: a failure here must not fail the call's
- * processing.
+ * is deliberately left alone), and the caller's urgency when that was
+ * all they gave in place of a time. Written to the existing
+ * leads.metadata JSONB (the same column the needs-review notification
+ * flag uses) — read-merged so it can never clobber a flag another
+ * writer set. Voice-only and non-fatal: a failure here must not fail
+ * the call's processing.
  */
 async function recordLeadCallDetails(
   admin: AdminClient,
   leadId: string,
   callerPhone: string | null,
   alternatePhone: string | null,
-  serviceAddress: string | null
+  serviceAddress: string | null,
+  callbackUrgency: string | null = null
 ): Promise<void> {
-  if (!callerPhone && !alternatePhone && !serviceAddress) return;
+  if (!callerPhone && !alternatePhone && !serviceAddress && !callbackUrgency) {
+    return;
+  }
 
   try {
     const { data } = await admin
@@ -282,6 +294,7 @@ async function recordLeadCallDetails(
       ...(callerPhone ? { caller_id: callerPhone } : {}),
       ...(alternatePhone ? { alternate_phone: alternatePhone } : {}),
       ...(serviceAddress ? { service_address: serviceAddress } : {}),
+      ...(callbackUrgency ? { callback_urgency: callbackUrgency } : {}),
     };
 
     const { error } = await admin
@@ -295,6 +308,41 @@ async function recordLeadCallDetails(
   } catch (err) {
     console.error("[voice] failed to record caller ID on lead:", err);
   }
+}
+
+// ── Calls that never connected ─────────────────────────────────────
+
+/**
+ * Vapi prefixes an endedReason with the call state the call ended in,
+ * so `call.ringing.*` means it never left ringing — nobody answered,
+ * no audio path was established, no assistant was ever attached.
+ *
+ * From the 2026-08-06 incident: an inbound call ended as
+ * `call.ringing.sip-inbound-caller-hungup-before-call-connect` (NULL
+ * duration, NULL transcript), and the owner still received the normal
+ * "Remy answered a phone call" email reporting no summary and no lead.
+ * Remy did not answer that call. Nothing was missed and nothing was
+ * lost — there was simply nothing there, and the email said otherwise.
+ *
+ * Deliberately narrow on both sides. Only the `call.ringing.` state
+ * prefix counts, so every reason from a call that DID connect
+ * (customer-ended-call, assistant-ended-call, silence-timed-out, the
+ * pipeline errors) still emails exactly as before. And a call is only
+ * treated as never-connected when it produced nothing whatsoever: any
+ * transcript, any summary, or any lead means there was something to
+ * tell the owner about, whatever the reason string says.
+ */
+const RINGING_STATE_PREFIX = "call.ringing.";
+
+export function callNeverConnected(
+  event: Pick<VoiceCallEndedEvent, "endedReason" | "transcript" | "summary">,
+  leadCreated: boolean
+): boolean {
+  if (leadCreated) return false;
+  if (event.transcript?.trim() || event.summary?.trim()) return false;
+  return (event.endedReason ?? "")
+    .toLowerCase()
+    .startsWith(RINGING_STATE_PREFIX);
 }
 
 // ── End-of-call processing ─────────────────────────────────────────
@@ -376,8 +424,21 @@ export async function processCallEnded(
 
   const extracted = toExtractedLead(details, event.callerPhone);
   const alternatePhone = resolveAlternatePhone(details, event.callerPhone);
+  // Kept separately from preferred_datetime, which toExtractedLead has
+  // already cleared of it: the caller told us how urgent they are, not
+  // when to ring them.
+  const callbackUrgency = sanitisePreferredDatetime(
+    details?.preferred_datetime
+  ).urgency;
   let leadId: string | null = null;
   let serviceConfirmed = true;
+
+  if (callbackUrgency) {
+    console.log(
+      "[voice] urgency recorded instead of a callback time (no day or time was given):",
+      event.providerCallId
+    );
+  }
 
   if (alternatePhone) {
     console.log(
@@ -408,7 +469,13 @@ export async function processCallEnded(
     const hasSubstance = Boolean(
       extracted.name || extracted.service || extracted.preferred_datetime
     );
-    const needsReview = !actionable && (details?.urgent === true || hasSubstance);
+    // A caller whose only answer about timing was "as soon as possible"
+    // still rang with something real — the urgency counts as substance
+    // in place of the preferred_datetime it was cleared out of, so the
+    // enquiry cannot fall through to "no lead".
+    const needsReview =
+      !actionable &&
+      (details?.urgent === true || Boolean(callbackUrgency) || hasSubstance);
 
     if (actionable || needsReview) {
       const conversationId = await ensureVoiceConversation(
@@ -459,7 +526,8 @@ export async function processCallEnded(
           leadId,
           event.callerPhone,
           alternatePhone,
-          details?.service_address ?? null
+          details?.service_address ?? null,
+          callbackUrgency
         );
 
         const { error: linkError } = await admin
@@ -477,6 +545,22 @@ export async function processCallEnded(
   // ("never miss an enquiry"). No separate needs-review email for
   // voice: this summary already notifies the owner of every call, so
   // a second email per call would be noise.
+  //
+  // The one exception: a call that never connected (see
+  // callNeverConnected). The voice_calls row above is written either
+  // way, so the call, its endedReason and its cost stay in the
+  // dashboard and in the event log — only the email claiming Remy
+  // answered it is withheld.
+  if (callNeverConnected(event, Boolean(leadId))) {
+    console.log(
+      "[voice] call ended while ringing and produced nothing — owner email skipped:",
+      event.providerCallId,
+      "| endedReason:",
+      event.endedReason
+    );
+    return;
+  }
+
   const ownerInfo = await getOrgOwnerEmail(orgId);
   await sendCallSummaryEmail({
     businessOwnerEmail: ownerInfo?.email ?? null,

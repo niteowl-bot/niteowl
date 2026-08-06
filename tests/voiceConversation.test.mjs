@@ -58,19 +58,21 @@ function ruleCount(prompt) {
 describe("prompt shape", () => {
   // The rule list was consolidated from 24 to 12 without dropping any
   // behaviour. These guard the shape so it cannot quietly grow back.
-  test("there are 12 numbered rules, in sequence", () => {
+  // Rule 13 (callback vs appointment) was added afterwards, for the
+  // 2026-08-06 call — see the describe block at the bottom of the file.
+  test("there are 13 numbered rules, in sequence", () => {
     const prompt = promptFor();
-    assert.equal(ruleCount(prompt), 12);
+    assert.equal(ruleCount(prompt), 13);
     const numbers = prompt
       .split("\n")
       .map((line) => /^(\d+)\.\s/.exec(line))
       .filter(Boolean)
       .map((match) => Number(match[1]));
-    assert.deepEqual(numbers, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    assert.deepEqual(numbers, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   });
 
-  test("the withheld-caller-ID prompt has the same 12 rules", () => {
-    assert.equal(ruleCount(promptFor(null)), 12);
+  test("the withheld-caller-ID prompt has the same 13 rules", () => {
+    assert.equal(ruleCount(promptFor(null)), 13);
   });
 
   test("no rule points at a rule number that no longer exists", () => {
@@ -80,7 +82,7 @@ describe("prompt shape", () => {
     );
     assert.ok(referenced.length > 0, "rules should cross-reference each other");
     for (const number of referenced) {
-      assert.ok(number >= 1 && number <= 12, `dangling reference to rule ${number}`);
+      assert.ok(number >= 1 && number <= 13, `dangling reference to rule ${number}`);
     }
   });
 });
@@ -663,5 +665,188 @@ describe("final confirmation", () => {
   test("it still promises nothing — no guaranteed slot or response time", () => {
     const prompt = promptFor();
     assert.match(prompt, /Never promise an appointment or a guaranteed response time/i);
+  });
+});
+
+describe("the real call: 'as soon as possible' became the callback date AND time", () => {
+  // 2026-08-06 test call:
+  //   Caller: "I rang earlier but nobody got back to me. I need someone
+  //            to call me about an appointment. I'm fairly busy though."
+  //   Remy:   "What is the appointment for?"      -> treated as a booking
+  //   Caller: "Burst pipe."
+  //   Remy:   "Which day and time would suit you best?"
+  //   Caller: "As soon as possible."
+  //   Remy:   accepted it, and the call was written up as
+  //             Callback date: as soon as possible
+  //             Callback time: as soon as possible
+  //           with the flow collapsed into "the team will contact you".
+  //
+  // Two faults: a CALLBACK request was taken as an APPOINTMENT, and an
+  // urgency phrase was accepted as a day and a time. The deterministic
+  // half of the fix is in callbackTiming.test.mjs; these pin the
+  // instructions. As elsewhere in this file, a passing test proves the
+  // wording is in the built prompt — not that the model obeys it.
+
+  test("A — a request to be rung back is a callback, not a booking", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /13\. A callback is not an appointment/);
+    assert.match(prompt, /I need someone to call me about an appointment/);
+    assert.match(prompt, /I rang earlier but nobody got back to me/);
+    assert.match(
+      prompt,
+      /Never quietly turn it into an appointment booking/
+    );
+  });
+
+  test("A — the clarifying question is scripted, and asked only when needed", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Would you like me to arrange a callback to discuss the appointment, or are you trying to book the appointment now\?/
+    );
+    assert.match(prompt, /Do not ask it when their intent is already clear/);
+  });
+
+  test("B — urgency is never a date or a time", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /URGENCY IS NOT A DATE OR A TIME/);
+    assert.match(prompt, /NEVER accept one as the day, as the time, or as both/);
+    assert.match(prompt, /never record it as either/i);
+  });
+
+  test("B — urgency is acknowledged, then the timing is asked for separately", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /I'll mark that as urgent\. Is there a particular day or time window that would suit you\?/
+    );
+  });
+
+  test("C — a bare 'tomorrow' still gets a time question", () => {
+    // The day-only branch already existed for weekdays; it now says out
+    // loud that a relative day is no different, since "tomorrow" is the
+    // answer callers actually give.
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /A relative day is no different: "tomorrow" on its own still needs a time/
+    );
+    assert.match(prompt, /What time tomorrow would suit you\?/);
+  });
+
+  test("D — a day with a broad window is enough, and is not narrowed", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /They gave a DAY with a WINDOW \("Thursday afternoon", "Friday morning", "any time between 2 and 5 on Thursday"\): that is enough/
+    );
+    assert.match(prompt, /never press for an exact clock time/);
+    assert.match(prompt, /never narrow their window to a single time yourself/);
+  });
+
+  test("E — a corrected day or time replaces the earlier one entirely", () => {
+    // Rule 10 already owned this; it must still name the day and time.
+    const prompt = promptFor();
+    assert.match(prompt, /the corrected version REPLACES what you had/);
+    assert.match(prompt, /the caller's name, the day, the time/);
+  });
+
+  test("F — wanting the appointment itself still runs rules 5 and 9", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /APPOINTMENT — if they want the appointment itself, work through rule 5 and close with rule 9/
+    );
+    assert.match(prompt, /Nothing in that flow changes/);
+    // And rule 9's no-invented-booking wording is untouched.
+    assert.match(
+      prompt,
+      /NEVER tell a caller their appointment is confirmed or booked/
+    );
+  });
+
+  test("the callback checklist is shorter, and rule 5's gate says so", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /a callback request has its own shorter list — rule 13/
+    );
+    assert.match(
+      prompt,
+      /what the callback is about, in their own words; the day and time window that suits them FOR THE CALL/
+    );
+    assert.match(prompt, /their name; and the callback number \(rule 7\)/);
+  });
+
+  test("'the team will contact you' cannot end the timing question early", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /NEVER end the timing question early by falling back on "the team will contact you"/
+    );
+    assert.match(
+      prompt,
+      /only AFTER you hold a usable callback day and time window, or after the caller has declined to give one/
+    );
+  });
+
+  test("no preference is recorded as no preference, not as a day or a time", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /any time, earliest available callback/);
+    assert.match(prompt, /never a day and never a time/);
+    assert.match(
+      prompt,
+      /I'll note that any time suits and ask the team to ring you as early as they can/
+    );
+  });
+
+  test("nothing is promised that the system cannot keep", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /I'll record that as your preferred time/);
+    assert.match(prompt, /I'll pass that request to the team/);
+    assert.match(
+      prompt,
+      /NEVER guarantee a callback time \("someone will definitely call before 3"\)/
+    );
+  });
+
+  test("the extraction schema refuses urgency as a preferred_datetime", () => {
+    const schema = configFor().structuredDataSchema;
+    const datetime = schema.properties.preferred_datetime.description;
+    assert.match(datetime, /URGENCY IS NOT A TIME/);
+    assert.match(datetime, /NEVER record one of them here \(set urgent instead\)/);
+    assert.match(datetime, /including when urgency was all they gave/);
+    // A real window is still recorded.
+    assert.match(datetime, /Thursday between 2 and 5/);
+  });
+
+  test("the extraction schema does not read a callback as a new booking", () => {
+    const intent = configFor().structuredDataSchema.properties.intent.description;
+    assert.match(
+      intent,
+      /Asking for someone to CALL THEM BACK about an appointment is not by itself a new_booking/
+    );
+    assert.match(intent, /only if the caller actually asked to arrange the appointment on this call/);
+  });
+
+  test("the owner's summary writes 'Not provided', never the urgency phrase", () => {
+    const summary = configFor().summaryInstructions;
+    assert.match(summary, /URGENCY IS NOT A DATE AND NOT A TIME/);
+    assert.match(
+      summary,
+      /NEVER write one of them as the Callback date or the Callback time/
+    );
+    assert.match(summary, /both are "Not provided"/);
+    // The urgency itself is still reported — in the sentences, not the fields.
+    assert.match(summary, /you say in the sentences above that they asked to be called back as soon as possible/);
+  });
+
+  test("the owner's summary keeps a real time window, and names the request", () => {
+    const summary = configFor().summaryInstructions;
+    assert.match(summary, /a time window the caller gave \("the afternoon", "between 2 and 5"\) IS a time/);
+    assert.match(
+      summary,
+      /report it as a callback request — never as a booked or requested appointment/
+    );
   });
 });

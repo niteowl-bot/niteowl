@@ -1,5 +1,14 @@
 # 🚀 Alpha Launch Readiness
 
+## 🟢 Voice — callback handling + aborted-call email (2026-08-06, deployed, NOT yet live-tested)
+- [x] Callback vs appointment distinction — prompt rule 13, with one scripted clarifying question and a shorter callback checklist
+- [x] "As soon as possible" and other urgency phrases can no longer become a callback date or time — enforced in code (`callbackTiming.ts`), not only in the prompt; the phrase is kept on `leads.metadata.callback_urgency`
+- [x] A bare "tomorrow" still requires a time; a day with a broad window ("Thursday afternoon", "between 2 and 5") is explicitly accepted and must not be narrowed; corrections still replace previous values
+- [x] A call that ends while still ringing no longer sends the "Remy answered a phone call" owner email; connected calls email exactly as before (`callNeverConnected` in `calls.ts`)
+- [ ] ⚠️ **Prompt is 15,047 characters, 3,648 over the 11,399 budget** — HEAD was already 425 over. A trimming pass is needed; nothing was cut in this task because the brief forbade removing working safeguards. Decide before the next live test
+- [ ] **Live call to verify the callback flow**: say "I need someone to call me about an appointment", then "as soon as possible" — Remy should mark it urgent and ask for a day or window, and the owner email must not show a date/time of "as soon as possible"
+- [ ] **Live call to verify the aborted-ring case**: ring the number and hang up during the silence before Remy speaks — no owner email should arrive, and the call should still appear in the dashboard with its `endedReason`
+
 ## 🟡 External calendar integration — milestones 1–3 of 7 (2026-08-04, code deployed but INERT)
 **Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED`, which is unset, so none of it can affect a customer today.
 - [x] Milestone 1 — schema, credential encryption (AES-256-GCM), provider abstraction (`65b71e4`)

@@ -2,6 +2,28 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-06 (Voice — two fixes from live test calls)
+
+### Fixed — callback vs appointment, and "as soon as possible" as a date
+From the 6 August test call: the caller asked for someone to ring them back about an appointment, Remy took it as a booking, asked "which day and time would suit you best?", accepted "As soon as possible", and wrote the call up as `Callback date: as soon as possible` / `Callback time: as soon as possible`, then fell back to "the team will contact you".
+
+- **New `callbackTiming.ts` — a deterministic guard, not just an instruction.** Urgency-only phrases ("as soon as possible", "ASAP", "whenever you can", "any time", "no preference") can no longer reach `preferred_datetime`. Anything carrying a real day, month, window or digit passes through untouched, so "Thursday, as soon as possible" and "any time between 2 and 5" are still stored verbatim. The caller's own words are kept on `leads.metadata.callback_urgency` — the urgency is not lost, it just stops being a date. No schema change; the dashboard reads named keys only.
+- **Prompt rule 13 — a callback is not an appointment.** One scripted clarifying question when the intent is genuinely unclear, a shorter callback checklist (reason, day + window, name, number — no email or site address), and an explicit ban on ending the timing question early with "the team will contact you". Promises are limited to "I'll record that as your preferred time".
+- **Rule 6 widened, not loosened.** A day with a broad window ("Thursday afternoon", "between 2 and 5") is now explicitly enough and must not be narrowed; a bare "tomorrow" still requires a time; urgency is stated to be neither a day nor a time.
+- **Both extraction paths and the owner summary agree.** The Vapi schema and the transcript fallback both refuse urgency as a `preferred_datetime`, and the summary instructions write "Not provided" for date and time rather than the urgency phrase, reporting the urgency in the sentences instead. Corrections behaviour (rule 10) is unchanged.
+- ⚠️ **Prompt length is 15,047 characters, 3,648 over the 11,399 budget** (10,822 → 14,518 on the withheld-caller-ID variant). HEAD already shipped 425 over and flagged it. Rule 13 is ~2,300 of the increase and rule 6's additions ~900; none of it duplicates existing wording, so getting back under the ceiling means cutting a working safeguard, which this task forbade. **Left over budget and flagged for your decision** — a trimming pass is the obvious follow-up, and it should happen before the next live test if call latency or instruction-following degrades.
+
+### Fixed — "Remy answered a phone call" for a call Remy never answered
+Also 6 August: an inbound call ended as `call.ringing.sip-inbound-caller-hungup-before-call-connect` with NULL duration and NULL transcript — the caller heard silence because the call never left the ringing state. The owner still received the standard email claiming Remy answered it, reporting no summary and no lead.
+
+- **Nothing had failed.** `voice_events.processing_error` was NULL and the pipeline ran to completion; `processCallEnded` simply emailed unconditionally on every end-of-call report. Traced by elimination first — the owner email is the last statement in that function, so its arrival proved no exception had been swallowed.
+- **`callNeverConnected()` in `calls.ts`** withholds that email only when Vapi's `call.ringing.` state prefix is present **and** there is no transcript, no summary and no lead. Every reason from a call that connected (`customer-ended-call`, `assistant-ended-call`, `silence-timed-out`, the pipeline errors) still emails exactly as before, and a null `endedReason` deliberately does not qualify — missing information must never silence a notification.
+- **The call itself is still recorded.** The `voice_calls` row, its `endedReason` and its cost are written before this check, so nothing disappears from the dashboard or the event log. Dashboard-visible call status is unchanged.
+- Regression tests drive the **real** `processCallEnded` with the HTTP layer stubbed and assert on whether a request reaches Resend: ring-aborted → none, connected `customer-ended-call` (the healthy 196s/2,671-char call from the same afternoon) → email still sent, including when it produced no lead.
+
+- `npm test` **393 passing** (was 385 at the start of the session, 340 before the callback work; +53). `tsc --noEmit` clean. Lint on changed files clean; the two pre-existing repo-wide problems are untouched.
+- ⏳ Neither fix has been verified on a live call yet.
+
 ## 2026-08-04 (Milestone 3 — availability engine, prepared but NOT wired in)
 
 ### Added — new files plus two additive changes; nothing calls the new engine
