@@ -105,7 +105,11 @@ async function getBusinessHoursForOrg(
   return data ?? [];
 }
 
-async function getOrgSettings(
+// Exported (2026-08-06) only so the voice availability tool can obtain
+// the SAME appointment length this engine uses, rather than querying
+// the column itself and risking a second, drifting default. Body and
+// behaviour unchanged.
+export async function getOrgSettings(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string
 ): Promise<{ appointmentDurationMinutes: number; emergencyModeEnabled: boolean }> {

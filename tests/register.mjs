@@ -6,7 +6,7 @@
 // TypeScript itself needs no loader — Node 24 strips types natively.
 
 import { registerHooks } from "node:module";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 
@@ -27,7 +27,10 @@ registerHooks({
       const base = path.join(SRC, specifier.slice(2));
       const candidates = [base, `${base}.ts`, `${base}.tsx`, path.join(base, "index.ts")];
       for (const candidate of candidates) {
-        if (existsSync(candidate)) {
+        // isFile(), not existsSync(): a bare "@/lib/integrations/providers"
+        // matches the DIRECTORY, and handing Node a directory to load
+        // fails with EISDIR instead of falling through to its index.ts.
+        if (existsSync(candidate) && statSync(candidate).isFile()) {
           return { url: pathToFileURL(candidate).href, shortCircuit: true };
         }
       }

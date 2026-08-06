@@ -100,12 +100,17 @@ describe("a window is a callback preference, not an appointment time", () => {
 });
 
 describe("no availability is invented, no intent is converted", () => {
-  test("Remy never claims a time is available, free or reserved", () => {
+  test("Remy never claims availability it has not actually checked", () => {
+    // Re-scoped 2026-08-06: Remy can now check a real calendar via the
+    // check_availability tool, so the blanket "never say a time is
+    // available" became "never say it without the tool". The claim is
+    // still never invented — see voiceAvailability.test.mjs.
     const prompt = promptFor();
     assert.match(
       prompt,
-      /You cannot see a calendar, so never say a time is available, free or reserved either/
+      /NEVER state, guess or deny availability without it, and never offer a time it did not give you/
     );
+    assert.match(prompt, /A time it reports as available is still only a REQUEST/);
     // The pre-existing booking prohibitions are still there.
     assert.match(
       prompt,

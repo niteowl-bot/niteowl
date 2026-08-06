@@ -79,6 +79,25 @@ export interface VoiceAssistantRequestEvent {
   callerPhone: string | null;
 }
 
+/**
+ * The model is asking a question mid-call that only our server can
+ * answer (today: live appointment availability). Unlike every other
+ * event this one is answered SYNCHRONOUSLY — the caller is waiting on
+ * the line — so it is never stored or queued.
+ */
+export interface VoiceToolCallEvent {
+  kind: "tool-call";
+  provider: VoiceProvider;
+  providerCallId: string | null;
+  businessPhone: string | null;
+  callerPhone: string | null;
+  calls: Array<{
+    id: string;
+    name: string;
+    args: Record<string, unknown>;
+  }>;
+}
+
 /** A provider message type we recognise but deliberately don't act on. */
 export interface VoiceIgnoredEvent {
   kind: "ignored";
@@ -90,6 +109,7 @@ export type VoiceEvent =
   | VoiceCallEndedEvent
   | VoiceStatusEvent
   | VoiceAssistantRequestEvent
+  | VoiceToolCallEvent
   | VoiceIgnoredEvent;
 
 /**

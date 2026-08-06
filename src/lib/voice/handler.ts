@@ -3,11 +3,13 @@ import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rateLimit";
 import {
+  VOICE_AVAILABILITY_TOOL_NAME,
   isVoiceEnabled,
   parseVapiWebhook,
   verifyVoiceWebhookSecret,
 } from "@/lib/voice/vapi";
 import { buildAssistantRequestResponse } from "@/lib/voice/incoming";
+import { checkVoiceAvailability } from "@/lib/voice/availabilityTool";
 import {
   markVoiceEventProcessed,
   processCallEnded,
@@ -82,6 +84,36 @@ export async function handleVoiceWebhookPost(
       event
     );
     return NextResponse.json(responseBody, { status });
+  }
+
+  // ── tool-call: answered inline, never stored ─────────────────────
+  // The caller is waiting on the line, so this is the one event that
+  // must be resolved in the response body rather than in after().
+  // checkVoiceAvailability never throws — every failure resolves to an
+  // "unknown" result — so a lookup problem becomes Remy saying it
+  // cannot check right now, never a dropped call.
+  if (event.kind === "tool-call") {
+    const orgId = await resolveVoiceOrgId(admin, event.businessPhone);
+    const results = await Promise.all(
+      event.calls.map(async (call) => {
+        if (!orgId || call.name !== VOICE_AVAILABILITY_TOOL_NAME) {
+          if (!orgId) {
+            console.error(
+              "[voice] tool call for an unmatched number:",
+              event.businessPhone
+            );
+          }
+          return {
+            toolCallId: call.id,
+            result:
+              "AVAILABILITY UNKNOWN. The live calendar could not be checked. Do NOT say the time is available and do NOT offer any time. Say you cannot confirm availability right now, take their preferred time, and tell them the team will confirm it.",
+          };
+        }
+        const outcome = await checkVoiceAvailability(orgId, call.args);
+        return { toolCallId: call.id, result: outcome.result };
+      })
+    );
+    return NextResponse.json({ results });
   }
 
   // ── call-ended / status-update: store raw first, process async ───

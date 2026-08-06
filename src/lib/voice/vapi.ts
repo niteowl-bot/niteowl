@@ -195,6 +195,51 @@ export function parseVapiWebhook(body: unknown): VoiceEvent | null {
     return event;
   }
 
+  if (eventType === "tool-calls") {
+    // Vapi's documented shape: message.toolCallList[], each with an id,
+    // a name and already-parsed arguments. `toolCalls` with a nested
+    // OpenAI-style function object is accepted as a fallback because
+    // both appear in the wild; arguments arrive as an object there or
+    // occasionally as a JSON string.
+    const rawList =
+      (Array.isArray(message.toolCallList) ? message.toolCallList : null) ??
+      (Array.isArray(message.toolCalls) ? message.toolCalls : null) ??
+      [];
+
+    const calls = rawList
+      .map((entry) => {
+        const call = asRecord(entry);
+        if (!call) return null;
+        const fn = asRecord(call.function);
+        const id = asString(call.id);
+        const name = asString(call.name) ?? asString(fn?.name);
+        if (!id || !name) return null;
+
+        const rawArgs = call.arguments ?? fn?.arguments;
+        let args: Record<string, unknown> = asRecord(rawArgs) ?? {};
+        if (typeof rawArgs === "string") {
+          try {
+            args = asRecord(JSON.parse(rawArgs)) ?? {};
+          } catch {
+            args = {};
+          }
+        }
+        return { id, name, args };
+      })
+      .filter((call): call is { id: string; name: string; args: Record<string, unknown> } => call !== null);
+
+    if (calls.length === 0) return null;
+
+    return {
+      kind: "tool-call",
+      provider: "vapi",
+      providerCallId: callId,
+      businessPhone,
+      callerPhone,
+      calls,
+    };
+  }
+
   if (eventType === "status-update") {
     const status = asString(message.status);
     if (!callId || !status) return null;
@@ -242,6 +287,61 @@ export function parseVapiWebhook(body: unknown): VoiceEvent | null {
 const END_CALL_TOOL = { type: "endCall" } as const;
 
 /**
+ * The tool name the model calls, and the name the webhook dispatches
+ * on. Declared here rather than imported from availabilityTool.ts on
+ * purpose: this module is loaded to answer every assistant-request,
+ * and importing the lookup would drag the whole integrations chain
+ * (credentials, crypto, provider registry) onto that path to obtain a
+ * string.
+ */
+export const VOICE_AVAILABILITY_TOOL_NAME = "check_availability";
+
+/**
+ * The live-availability tool. Unlike endCall this is a CUSTOM function
+ * tool: Vapi posts to our server URL mid-call, waits for the result,
+ * and hands it to the model.
+ *
+ * It takes a date and a clock time separately, both in the business's
+ * own timezone, rather than one ISO string. The model already resolves
+ * "next Wednesday" correctly against the date in its prompt (verified
+ * on a live call), but an ISO instant would also make it responsible
+ * for a UTC offset — and a silent one-hour error there is a customer
+ * sent to the wrong slot. The zone conversion is done in our code.
+ *
+ * Registered only when a server URL is known; without one Vapi would
+ * have nowhere to ask, and a tool that always fails is worse than a
+ * tool that is absent (rule 6 then simply asks for a preferred time,
+ * exactly as it does today).
+ */
+function buildAvailabilityTool(serverUrl: string): Record<string, unknown> {
+  return {
+    type: "function",
+    function: {
+      name: VOICE_AVAILABILITY_TOOL_NAME,
+      description:
+        "Check whether a specific appointment date and time is actually available, and get real alternatives if it is not. Use ONLY for appointments, service visits and bookings — never for callback requests. Call it once you have both a calendar date and a clock time, before telling the caller anything about availability. Never state or guess availability without calling this first.",
+      parameters: {
+        type: "object",
+        properties: {
+          date: {
+            type: "string",
+            description:
+              "The appointment date as YYYY-MM-DD, resolved from today's date given in your instructions (e.g. 2026-08-12).",
+          },
+          time: {
+            type: "string",
+            description:
+              "The requested start time on that date, 24-hour HH:MM in the business's local time (e.g. 15:00 for 3 PM).",
+          },
+        },
+        required: ["date", "time"],
+      },
+    },
+    server: { url: serverUrl, timeoutSeconds: 20 },
+  };
+}
+
+/**
  * Renders the internal assistant config into Vapi's transient
  * assistant response for an assistant-request. Recording is
  * explicitly disabled (GDPR decision: transcripts only at launch).
@@ -257,7 +357,9 @@ export function buildVapiAssistantResponse(
         provider: "openai",
         model: "gpt-4o",
         messages: [{ role: "system", content: config.systemPrompt }],
-        tools: [END_CALL_TOOL],
+        tools: config.serverUrl
+          ? [END_CALL_TOOL, buildAvailabilityTool(config.serverUrl)]
+          : [END_CALL_TOOL],
       },
       transcriber: {
         provider: "deepgram",
