@@ -390,34 +390,89 @@ export async function setPrimaryResource(
   resource: IntegrationResource
 ): Promise<void> {
   const supabase = createAdminClient();
+  const now = new Date().toISOString();
 
   await supabase
     .from("integration_resources")
-    .update({ is_primary: false, updated_at: new Date().toISOString() })
+    .update({ is_primary: false, updated_at: now })
     .eq("org_id", orgId)
     .eq("resource_type", resource.resourceType)
     .is("staff_id", null);
 
-  const { error } = await supabase.from("integration_resources").upsert(
-    {
-      org_id: orgId,
-      connection_id: connectionId,
-      resource_type: resource.resourceType,
-      external_id: resource.externalId,
-      name: resource.name,
-      is_primary: true,
-      sync_enabled: true,
-      availability_enabled: true,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "connection_id,resource_type,external_id" }
-  );
+  // Matched by hand rather than with upsert(), because an upsert CANNOT
+  // reach this row. Uniqueness for org-level resources is a PARTIAL
+  // index — (connection_id, resource_type, external_id) WHERE staff_id
+  // IS NULL — and Postgres only matches ON CONFLICT to a partial index
+  // when the statement repeats the predicate, which PostgREST's
+  // `onConflict` has no syntax to express. It was rejected at planning
+  // time with 42P10, so choosing a calendar failed every time.
+  //
+  // The predicate is part of the design, not an accident: it is what
+  // lets an org-level row and a future staff-level row describe the
+  // same remote calendar. So the fix matches the index's own key here
+  // instead of flattening the index.
+  const key = supabase
+    .from("integration_resources")
+    .select("id")
+    .eq("connection_id", connectionId)
+    .eq("resource_type", resource.resourceType)
+    .eq("external_id", resource.externalId)
+    .is("staff_id", null);
 
-  if (error) {
-    throw new IntegrationError(`Failed to select resource: ${error.message}`, {
-      kind: "permanent",
-    });
+  const { data: existing, error: findError } = await key.maybeSingle();
+
+  if (findError) {
+    throw new IntegrationError(
+      `Failed to select resource: ${findError.message}`,
+      { kind: "permanent" }
+    );
   }
+
+  const fields = {
+    org_id: orgId,
+    connection_id: connectionId,
+    resource_type: resource.resourceType,
+    external_id: resource.externalId,
+    name: resource.name,
+    is_primary: true,
+    sync_enabled: true,
+    availability_enabled: true,
+    updated_at: now,
+  };
+
+  const { error } = existing
+    ? await supabase
+        .from("integration_resources")
+        .update(fields)
+        .eq("id", existing.id)
+    : await supabase.from("integration_resources").insert(fields);
+
+  if (!error) return;
+
+  // An upsert was atomic; select-then-insert is not. If a concurrent
+  // selection inserted the same row in between, the partial index
+  // rejects this insert (23505) — adopt the row that won rather than
+  // failing the owner's click.
+  if (!existing && error.code === "23505") {
+    const { error: retryError } = await supabase
+      .from("integration_resources")
+      .update(fields)
+      .eq("connection_id", connectionId)
+      .eq("resource_type", resource.resourceType)
+      .eq("external_id", resource.externalId)
+      .is("staff_id", null);
+
+    if (!retryError) return;
+
+    throw new IntegrationError(
+      `Failed to select resource: ${retryError.message}`,
+      { kind: "permanent" }
+    );
+  }
+
+  throw new IntegrationError(`Failed to select resource: ${error.message}`, {
+    kind: "permanent",
+  });
 }
 
 /**

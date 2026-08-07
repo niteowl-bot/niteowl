@@ -2,6 +2,24 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-07 (Integrations — choosing a Google Calendar could never save)
+
+### Fixed — "Could not save your selection." on every calendar choice
+Google Calendar connected successfully in production (`admin@niteowlhq.com`, status `connected`), but picking a calendar from the dropdown in Settings → Integrations failed every time and reset to "Choose…". Nothing was ever written: `integration_resources` stayed empty.
+
+- **Root cause: `ON CONFLICT` cannot target a partial index.** `setPrimaryResource` upserted with `onConflict: "connection_id,resource_type,external_id"`, but uniqueness for org-level resources is a **partial** index — `… WHERE staff_id IS NULL`. Postgres only matches `ON CONFLICT` to a partial index when the statement repeats the predicate, and PostgREST's `onConflict` parameter has no syntax for one. Every attempt was rejected at planning time with **`42P10: there is no unique or exclusion constraint matching the ON CONFLICT specification`**, surfacing as a 502 from `resources/route.ts` and that message in the UI.
+- **Reproduced against the real database before fixing**, in a rolled-back transaction: the generated statement failed with `42P10`; the identical statement plus `WHERE staff_id IS NULL` got past planning and failed only on a deliberately invalid foreign key. Both ends verified.
+- **The fix matches the index's own key instead of flattening the index.** `setPrimaryResource` now clears the previous primary (unchanged), selects on `connection_id + resource_type + external_id + staff_id IS NULL`, then updates by id or inserts. **No schema change, no new constraint.** Adding a non-partial `UNIQUE` was rejected: it would forbid an org-level row and a future staff-level row describing the same calendar, which is exactly the multi-staff flexibility the partial split exists to preserve — and which verify check (4) of the integration migration explicitly guards.
+- **The race the upsert used to cover is handled.** Select-then-insert is not atomic; a concurrent selection losing to `23505` now adopts the winning row rather than failing the owner's click.
+- **Why the OAuth connection saved but the calendar selection did not:** the sibling upsert for `integration_connections` targets `org_id, provider, account_id`, which the migration created as a genuine table-level `UNIQUE` constraint. Same code pattern, different index type — that asymmetry was the whole bug.
+- **Behaviour deliberately preserved:** the write still forces `sync_enabled` and `availability_enabled` to true on an existing row, exactly as the upsert's `DO UPDATE` did. Unobservable today (no UI exposes either), but it is a preserved quirk rather than an endorsement — revisit when those toggles get a UI.
+- Scope: one function in `src/lib/integrations/connections.ts`. No schema, RLS, OAuth, route, UI, Vercel or feature-flag change. The same latent bug would have hit any future integration selecting a resource.
+- `npm test` **473 passing** (was 466; +7). `tsc --noEmit` clean. Lint unchanged — the same 10 pre-existing problems before and after.
+- ⏳ **Committed, not pushed and not deployed.** The selection will keep failing in production until this ships.
+
+### ⚠️ Three of the seven new tests pass against the old code too
+Verified by reverting the fix and re-running: **4 of 7 fail**, including the central assertion that no request may carry `on_conflict=` or `Prefer: resolution=merge-duplicates`. The three that still pass do so honestly — an upsert also POSTs on a first insert, clearing the old primary was never broken, and error propagation was already correct. Recorded because a test that passes either way is worse than no test if it is mistaken for proof. The tests stub PostgREST at the HTTP layer, so they prove the right requests are issued, not that Postgres accepts them; that half is covered by the live reproduction above.
+
 ## 2026-08-06 (Voice — a broad window is not an appointment time)
 
 ### Fixed — "next Wednesday afternoon" was accepted as a bookable appointment time
