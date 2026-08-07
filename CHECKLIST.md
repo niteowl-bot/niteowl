@@ -1,5 +1,15 @@
 # 🚀 Alpha Launch Readiness
 
+## 🟢 Integrations — choosing a Google Calendar now saves (2026-08-07, deployed `01acbba`, PRODUCTION-VERIFIED)
+**The first integration resource ever written in production.** Picking a calendar in Settings → Integrations previously failed every time with *"Could not save your selection."* and reset the dropdown to "Choose…"; `integration_resources` stayed empty while the OAuth connection itself saved fine.
+- [x] Root cause — `ON CONFLICT` cannot target a **partial** unique index (`… WHERE staff_id IS NULL`). PostgREST's `onConflict` has no syntax for the predicate, so every attempt was rejected at planning time with `42P10` and surfaced as a 502
+- [x] Fixed by matching the index's own key rather than flattening it — clear the previous primary, select on `connection_id + resource_type + external_id + staff_id IS NULL`, then update by id or insert. **No schema, RLS, OAuth, route, UI, environment-variable or feature-flag change**; one function in `src/lib/integrations/connections.ts`
+- [x] Deployed — pushed as a single fast-forward commit; the READY production deployment reports `githubCommitSha` `01acbbaa4440…` on `main` and holds the `niteowlhq.com` alias
+- [x] **Verified in production (2026-08-07, 16:45 UTC)** — one calendar selection created **exactly one** `integration_resources` row: **`is_primary=true`**, `staff_id=null`, `resource_type=calendar`, `admin@niteowlhq.com`, org `e3a9ae40…`, connection `5cad7b94…`. No duplicate and no orphan row; the table was confirmed empty immediately beforehand, and the row survived an independent re-read
+- [x] **Connection unaffected** — remained `status=connected` with `last_error=null`
+- [x] **No production error observed** — a live log tail spanning the click, filtered for `42P10` / `Failed to select resource` / `ON CONFLICT` / 5xx, emitted nothing
+- [ ] ⚠️ **The selection is stored, but nothing reads it yet.** The availability engine remains deliberately unwired into every booking path (milestones 4–7 below) — a saved calendar does **not** mean Remy consults it on a call
+
 ## 🟢 Voice — a broad window is not an appointment time (2026-08-06, implemented, NOT yet live-tested)
 
 **Observed on a live call.** Caller: *"I'd like to make an appointment for a burst pipe."* → Remy asked for a day and time → Caller: *"Next Wednesday afternoon."* → Remy resolved **Wednesday, 12 August** correctly, then accepted "afternoon" as the complete appointment time and moved straight on to the caller's name. A usable *callback* preference, but not a schedulable *appointment*.
@@ -34,15 +44,17 @@
 - [ ] **Live call to verify the callback flow**: say "I need someone to call me about an appointment", then "as soon as possible" — Remy should mark it urgent and ask for a day or window, and the owner email must not show a date/time of "as soon as possible"
 - [ ] **Live call to verify the aborted-ring case**: ring the number and hang up during the silence before Remy speaks — no owner email should arrive, and the call should still appear in the dashboard with its `endedReason`
 
-## 🟡 External calendar integration — milestones 1–3 of 7 (2026-08-04, code deployed but INERT)
-**Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED`, which is unset, so none of it can affect a customer today.
+## 🟡 External calendar integration — milestones 1–3 of 7 (2026-08-04; **no longer inert as of 2026-08-07**)
+**Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED` — which **is now set in Vercel production** (verified 2026-08-07), so this section is live rather than dormant. Connecting and selecting a calendar both work in production; see the verified section at the top of this file. What remains inert is the **consumption** side: no booking path reads the selected calendar yet.
 - [x] Milestone 1 — schema, credential encryption (AES-256-GCM), provider abstraction (`65b71e4`)
 - [x] Milestone 1b — generalised into an Integration Framework every future integration reuses: CRM, WhatsApp, Instagram, SMS, Stripe, Xero, Apple/CalDAV (`b75cc98`)
 - [x] Milestone 2 — OAuth connection lifecycle + Settings → Integrations, one generic route pair for all providers (`3473b35`)
 - [x] Milestone 3 — availability engine written and tested, **deliberately not wired into any booking path**
 - [ ] ⚠️ **Complete the dev migration** — the four `integration_*` tables exist on dev but `organisations.timezone` does **not**. One `alter table` needed; exact SQL in `SESSION_SUMMARY.md` §7
-- [ ] ⚠️ **Run the migration on prod** (`sklcqvvnuigpewzarbiv`) — state unverified; this environment cannot reach prod. Then run the verify script and check **query 3** first: `integration_connections` and `integration_jobs` must appear NOWHERE in the policy list, or encrypted credentials would be readable via the anon key
-- [ ] Set the six environment variables (`SESSION_SUMMARY.md` §8) in `.env.local` and Vercel — all six are currently missing
+- [x] **Migration has run on prod** (`sklcqvvnuigpewzarbiv`) — corrected 2026-08-07: prod **is** reachable from this environment, and `integration_connections` / `integration_resources` were both queried successfully with live rows. The earlier "state unverified / cannot reach prod" note was wrong
+- [ ] ⚠️ **Still run the verify script's query 3 against prod** — `integration_connections` and `integration_jobs` must appear NOWHERE in the policy list, or encrypted credentials would be readable via the anon key. **This was NOT re-checked during the 2026-08-07 verification**, which only exercised the resource-selection write; `integration_jobs` was never queried at all
+- [x] Integration environment variables are set in **Vercel production** — `INTEGRATIONS_ENABLED`, `INTEGRATION_TOKEN_ENCRYPTION_KEY`, `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` all present (names verified 2026-08-07; values are Sensitive/hidden)
+- [ ] Cross-check the exact six-variable list in `SESSION_SUMMARY.md` §8, and confirm `.env.local` — **neither was inspected** on 2026-08-07, so only the Vercel production side is evidenced above
 - [ ] 🔴 **Start Google OAuth verification** — `calendar.events`/`calendar.readonly` are *sensitive* scopes needing app review that takes days-to-weeks. This gates real customers, not code, and is the longest lead time in the project
 - [ ] 🔴 **Publish the Google consent screen before any real business connects** — an app left in *Testing* mode issues refresh tokens that expire after **7 days**, which will look exactly like a random disconnection bug
 - [ ] Enable `INTEGRATIONS_ENABLED=true` on **dev only** and test connect → pick calendar → disconnect → reconnect against a real Google account
