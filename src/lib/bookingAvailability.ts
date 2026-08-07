@@ -18,9 +18,16 @@ import type { BusyInterval } from "@/lib/integrations/types";
 // API — is intended to call this one function, so a rule can never be
 // enforced on one channel and missed on another.
 //
-// NOT YET WIRED. Nothing calls this. It is switched on by changing the
-// call site in lead capture once the migration and credentials are
-// verified, which keeps today's production behaviour untouched.
+// WIRED, and so far only from the phone call. voice/availabilityTool.ts
+// calls this for every mid-call "is that time free?" question, so a
+// change here is felt on live calls immediately. Website chat, the
+// embedded widget and post-call lead capture do NOT call it yet —
+// wiring those remains a separate step.
+//
+// The external branch is gated by CALENDAR_SYNC_ENABLED, checked inside
+// resolveOrgCalendar. With that flag off the lookup short-circuits to
+// not_connected before any query runs, and this function returns
+// exactly what the internal engine alone would.
 //
 // ── Order of checks ──
 // Business hours → internal capacity → external calendar. The external
