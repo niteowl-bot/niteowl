@@ -2,6 +2,27 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-07 (Booking — the customer's spoken time is read in the org's timezone)
+
+### Fixed — "Tuesday at 10am" was interpreted on a London clock for every business
+Stage 1 of making the appointment lifecycle organisation-timezone aware. Follows `db94086` on the same branch (`timezone-aware-availability`), which fixed the *validation* side; this fixes the *interpretation* side.
+
+- **Root cause: the two halves disagreed.** `db94086` made `isWithinBusinessHours` measure opening hours in the org's real zone, but `resolveAppointmentDatetime` still passed a hardcoded `"Europe/London"` into `parseDatetimeToIso`. For a New York business "10am" became 10:00 London — 05:00 local, before the shop opened — and was then checked against 09:00–17:00 New York and refused. Leaving Stage 1 undone would have made a non-London org *worse* than before, not better, because the mismatch is what rejects the booking.
+- **`resolveAppointmentDatetime` now resolves the zone via `getOrgTimezone(orgId)`** — the same lookup `availability.ts` and the voice availability tool already use, with the same fallback chain: missing column, null, blank or unusable all resolve to Europe/London. A database without the timezone column behaves exactly as before.
+- **The zone is what reaches the model.** `parseDatetimeToIso` has accepted a `timezone` argument since the weekday-correction work and names it three times in the prompt; nothing was changed inside it. The only edit is which value the caller passes.
+- **No lookup for messages with no time.** Most chat turns carry no `preferred_datetime`, so the function returns early rather than spending a query to reach the same null.
+- **Untouched on purpose:** `salesLeadCapture.ts` stays Europe/London — the sales chat books demos for NiteOwl itself, not for a tenant org, and is a separate system.
+- **Still London-hardcoded, and the remaining stages:** the voice prompt's "Today is" line (`assistant.ts:84`), the chat/widget alternative-slot wording, the reschedule pair (`/api/bookings/manage` + client), emails, and every dashboard display surface.
+- Every organisation is currently Europe/London, so **observable behaviour is unchanged everywhere today**.
+- `npm test` **488 passing** (was 483; +5). `tsc --noEmit` clean. Lint unchanged — the same 10 pre-existing problems before and after, none in the changed files.
+- 🔒 **Not merged to main and not deployed.**
+
+### ⚠️ One of the new tests does not carry the regression, and says so
+The end-to-end "Tuesday at 10:00 New York" assertion was run against the old hardcoded-London code and **still passed**. Weekday snapping moves the instant by whole days, so preserving London's wall clock preserves New York's too wherever both zones' offsets hold steady across that week. The zone only changes the outcome where the model does the conversion — the prompt — so that is what the discriminating test pins, and the sanity check is labelled in the file as a sanity check. Recorded because a test that passes either way is worse than no test if it is mistaken for proof.
+
+### ⚠️ Still not verifiable end-to-end
+There is no Settings UI to set `organisations.timezone`, so no real business can be put in a non-London zone yet and none of this can be confirmed against live data. `organisations.timezone` exists in **dev** (added 2026-08-06, text NOT NULL default `'Europe/London'`, 7/7 orgs backfilled); **prod remains unverified** — no prod credentials in this environment. No organisation should be set to a non-London timezone until the remaining stages land.
+
 ## 2026-08-06 (Voice — a broad window is not an appointment time)
 
 ### Fixed — "next Wednesday afternoon" was accepted as a bookable appointment time

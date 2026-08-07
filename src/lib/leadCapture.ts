@@ -1,7 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
-import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
+import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable, getOrgTimezone } from "@/lib/availability";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
 import { enforceBookedInvariant } from "@/lib/bookingInvariant";
 import { after } from "next/server";
@@ -564,11 +564,26 @@ function isBookingCompletedByContactUpdate(
 }
 
 // ── Parse free-text datetime into ISO timestamp ──────────────────
+// "Tuesday at 3pm" means 3pm where the business is, so the expression
+// has to be interpreted in the organisation's timezone — the same zone
+// isWithinBusinessHours then measures the result against. Passing
+// Europe/London here while the org opened at 09:00 New York time made
+// the two disagree by the offset.
+//
+// getOrgTimezone falls back to Europe/London on a missing column, a
+// null, or an unusable value, so a database without the timezone column
+// behaves exactly as before.
 
 async function resolveAppointmentDatetime(
-  preferredDatetime: string | null
+  preferredDatetime: string | null,
+  orgId: string
 ): Promise<{ iso: string | null; failed: boolean }> {
-  return parseDatetimeToIso(preferredDatetime, "Europe/London");
+  // Most messages carry no datetime at all; skip the lookup for those
+  // rather than spend a query to reach the same null.
+  if (!preferredDatetime) return { iso: null, failed: false };
+
+  const timezone = await getOrgTimezone(orgId);
+  return parseDatetimeToIso(preferredDatetime, timezone);
 }
 
 export async function getOrgOwnerEmail(
@@ -704,7 +719,7 @@ export async function capturePartialLead(
 
   console.log("[lead capture] intent:", extracted.intent, "| conversationId:", safeConversationId);
   const { iso: resolvedIso, failed: datetimeParseFailed } =
-    await resolveAppointmentDatetime(extracted.preferred_datetime);
+    await resolveAppointmentDatetime(extracted.preferred_datetime, orgId);
 
   if (datetimeParseFailed) {
     console.error("[lead capture] datetime parsing failed for:", extracted.preferred_datetime);
