@@ -8,7 +8,7 @@
 - [x] **Verified in production (2026-08-07, 16:45 UTC)** — one calendar selection created **exactly one** `integration_resources` row: **`is_primary=true`**, `staff_id=null`, `resource_type=calendar`, `admin@niteowlhq.com`, org `e3a9ae40…`, connection `5cad7b94…`. No duplicate and no orphan row; the table was confirmed empty immediately beforehand, and the row survived an independent re-read
 - [x] **Connection unaffected** — remained `status=connected` with `last_error=null`
 - [x] **No production error observed** — a live log tail spanning the click, filtered for `42P10` / `Failed to select resource` / `ON CONFLICT` / 5xx, emitted nothing
-- [ ] ⚠️ **The selection is stored, but nothing reads it yet.** The availability engine remains deliberately unwired into every booking path (milestones 4–7 below) — a saved calendar does **not** mean Remy consults it on a call
+- [ ] ⚠️ **The selection is stored, but nothing reads it yet** — because `CALENDAR_SYNC_ENABLED` is unset, **not** because the engine is unwired. `checkBookingSlot()` **is** wired into the phone call (`voice/availabilityTool.ts`), so enabling that flag makes Remy consult the calendar on live calls immediately. Chat, the widget and post-call capture remain unwired
 
 ## 🟢 Voice — a broad window is not an appointment time (2026-08-06, implemented, NOT yet live-tested)
 
@@ -23,7 +23,7 @@
 - [x] Done as a conditional split of the existing rule 6 branch — 3 prompt lines (rules 6, 9, 13), still 13 rules, no new section. `callbackTiming.ts` untouched: a window is still a real timing answer and still reaches `preferred_datetime` verbatim.
 - [ ] ⚠️ **Live call to verify** — the only thing that can prove it. Say *"I'd like an appointment for a burst pipe, next Wednesday afternoon"* → expect the date confirmed plus ONE time question. Then say *"next Wednesday at 3 PM"* → expect NO time question at all. Also confirm Remy never says a slot is available or booked.
 
-**Still future work, deliberately not built here:** when live calendar availability is wired up, the appointment branch should offer genuine free slots inside the caller's window and let them choose, instead of asking an open question. The availability engine exists but is unwired — see the calendar section below.
+**Still future work, deliberately not built here:** when live calendar availability is wired up, the appointment branch should offer genuine free slots inside the caller's window and let them choose, instead of asking an open question. The availability engine is now wired into the phone call (`voice/availabilityTool.ts`), though its external-calendar branch is still gated by `CALENDAR_SYNC_ENABLED` — see the calendar section below.
 
 ## 🟢 Voice — Remy can now end the call (2026-08-06, deployed `c6046cd`, LIVE-TESTED AND PASSED)
 - [x] Vapi's built-in `{ type: "endCall" }` tool added to `model.tools` on both the main and the decline assistant — Remy could previously SAY goodbye but had no way to hang up, so the line stayed open and every further "bye" got answered
@@ -45,11 +45,11 @@
 - [ ] **Live call to verify the aborted-ring case**: ring the number and hang up during the silence before Remy speaks — no owner email should arrive, and the call should still appear in the dashboard with its `endedReason`
 
 ## 🟡 External calendar integration — milestones 1–3 of 7 (2026-08-04; **no longer inert as of 2026-08-07**)
-**Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED` — which **is now set in Vercel production** (verified 2026-08-07), so this section is live rather than dormant. Connecting and selecting a calendar both work in production; see the verified section at the top of this file. What remains inert is the **consumption** side: no booking path reads the selected calendar yet.
+**Full handover in `SESSION_SUMMARY.md`.** Everything below is behind `INTEGRATIONS_ENABLED` — which **is now set in Vercel production** (verified 2026-08-07), so this section is live rather than dormant. Connecting and selecting a calendar both work in production; see the verified section at the top of this file. What remains inert is the **consumption** side: the phone call *is* wired to `checkBookingSlot()`, but its external-calendar branch is gated by `CALENDAR_SYNC_ENABLED`, which is unset — so nothing reads the selected calendar yet.
 - [x] Milestone 1 — schema, credential encryption (AES-256-GCM), provider abstraction (`65b71e4`)
 - [x] Milestone 1b — generalised into an Integration Framework every future integration reuses: CRM, WhatsApp, Instagram, SMS, Stripe, Xero, Apple/CalDAV (`b75cc98`)
 - [x] Milestone 2 — OAuth connection lifecycle + Settings → Integrations, one generic route pair for all providers (`3473b35`)
-- [x] Milestone 3 — availability engine written and tested, **deliberately not wired into any booking path**
+- [x] Milestone 3 — availability engine written and tested; **wired into the phone-call path only** (`voice/availabilityTool.ts` → `checkBookingSlot()`), with its external-calendar branch still gated by `CALENDAR_SYNC_ENABLED`. Chat, the widget and post-call capture remain unwired
 - [ ] ⚠️ **Complete the dev migration** — the four `integration_*` tables exist on dev but `organisations.timezone` does **not**. One `alter table` needed; exact SQL in `SESSION_SUMMARY.md` §7
 - [x] **Migration has run on prod** (`sklcqvvnuigpewzarbiv`) — corrected 2026-08-07: prod **is** reachable from this environment, and `integration_connections` / `integration_resources` were both queried successfully with live rows. The earlier "state unverified / cannot reach prod" note was wrong
 - [ ] ⚠️ **Still run the verify script's query 3 against prod** — `integration_connections` and `integration_jobs` must appear NOWHERE in the policy list, or encrypted credentials would be readable via the anon key. **This was NOT re-checked during the 2026-08-07 verification**, which only exercised the resource-selection write; `integration_jobs` was never queried at all
@@ -58,9 +58,9 @@
 - [ ] 🔴 **Start Google OAuth verification** — `calendar.events`/`calendar.readonly` are *sensitive* scopes needing app review that takes days-to-weeks. This gates real customers, not code, and is the longest lead time in the project
 - [ ] 🔴 **Publish the Google consent screen before any real business connects** — an app left in *Testing* mode issues refresh tokens that expire after **7 days**, which will look exactly like a random disconnection bug
 - [ ] Enable `INTEGRATIONS_ENABLED=true` on **dev only** and test connect → pick calendar → disconnect → reconnect against a real Google account
-- [ ] Then wire `checkBookingSlot()` into lead capture — this is the step that makes the engine live
+- [ ] Wire `checkBookingSlot()` into lead capture (chat, the embedded widget, post-call capture) — still not done. The phone call already calls it, so this no longer gates the engine being live
 - [ ] Milestones 4–7: enable blocking after validating log-only data, event creation, update/cancel sync, Microsoft
-- [ ] Milestone 8 (live in-call voice availability) is **out of scope and not started**. Note the voice prompt currently has only ~48 characters of headroom under its 11,399 budget
+- [x] Milestone 8 (live in-call voice availability) — **built and deployed** (`e1f8ce6` onward): the `check_availability` tool calls `checkBookingSlot()` mid-call, so it is no longer "out of scope and not started". Its external-calendar half still awaits `CALENDAR_SYNC_ENABLED`. Note the voice prompt currently has only ~48 characters of headroom under its 11,399 budget
 
 ## 🟢 Voice conversation flow — recap before "anything else?" (2026-08-04, deployed, NOT yet live-tested)
 - [x] End-of-call reordered to recap → caller confirms → "anything else?" → goodbye (`990c766`)

@@ -18,10 +18,18 @@ All of it is pushed and running in production.
 Milestones 1, 1b and 2 of seven are pushed and therefore present in production, but
 every code path is behind `INTEGRATIONS_ENABLED`, which is **not set anywhere**. With
 the flag unset the routes return 404, the Settings tab does not render, and no
-booking path calls anything new. Milestone 3 is code-complete but **not wired into
-any booking path** — nothing calls it.
+booking path calls anything new.
 
-**Nothing in the calendar integration can currently affect a customer.**
+Milestone 3 is code-complete and **is wired — but only into the phone call.**
+`src/lib/voice/availabilityTool.ts` calls `checkBookingSlot()` for every mid-call
+availability question (added `e1f8ce6`). Website chat, the embedded widget and
+post-call lead capture still do NOT call it.
+
+**The external calendar is nevertheless not consulted yet**, because
+`checkBookingSlot`'s external branch is gated by `CALENDAR_SYNC_ENABLED`: with that
+flag unset `resolveOrgCalendar` short-circuits to `not_connected` before any query
+runs. Enabling it would take effect on live calls immediately — that is no longer an
+inert change.
 
 ---
 
@@ -261,8 +269,10 @@ document.
 5. **Start Google verification** — do this as early as possible; it is the long pole.
 6. **Enable `INTEGRATIONS_ENABLED=true` on dev only** and test connect → pick calendar →
    disconnect → reconnect against a real Google account.
-7. **Then, and only then, resume milestone 3** by wiring `checkBookingSlot()` into lead
-   capture — this is the step that makes the engine live.
+7. **Wire `checkBookingSlot()` into lead capture** — chat, the embedded widget and
+   post-call capture still do not call it. The phone call already does, via
+   `voice/availabilityTool.ts`; there, enabling `CALENDAR_SYNC_ENABLED` is what makes
+   the external lookup live.
 8. Milestone 4 (enable blocking after validating the log-only data), then 5, 6, 7.
 
 ---
@@ -378,8 +388,11 @@ encrypted tokens through the public anon key. Only the service-role client reach
 and every query still carries an explicit `org_id`.
 
 **6. The external-calendar layer composes ON TOP of `availability.ts`, not inside it.**
-The live booking path gains no new import and no new failure mode. `bookingAvailability.ts`
-imports the existing engine; the engine knows nothing about integrations.
+`bookingAvailability.ts` imports the existing engine; the engine knows nothing about
+integrations, so chat, the widget and post-call capture gain no new import and no new
+failure mode. The phone call, which now calls `checkBookingSlot()`, does gain one once
+`CALENDAR_SYNC_ENABLED` is on: an unreadable calendar becomes "availability unknown"
+rather than a spoken time.
 
 **7. "Cannot check" is never "free".**
 A provider outage, an expired token or an unreadable calendar returns a failure, never
@@ -444,9 +457,12 @@ all.** The prompt has been unchanged since commit `860b8d5`.
 - All Integration Framework code, all `/api/integrations/*` routes and the Settings →
   Integrations page are behind `INTEGRATIONS_ENABLED`, which is unset. Verified against
   a running server: routes 404, page redirects.
-- Milestone 3's engine (`bookingAvailability.ts`, `calendarService.ts`) is **not called
-  by anything at all** — it is inactive by virtue of having no call site, which is
-  stronger than a flag.
+- Milestone 3's engine (`bookingAvailability.ts`, `calendarService.ts`) **is now called
+  from the phone-call path** (`voice/availabilityTool.ts`). The old claim that it had no
+  call site at all was true when written and stopped being true at `e1f8ce6`. What keeps
+  the external lookup inactive today is therefore the flag alone — `CALENDAR_SYNC_ENABLED`
+  is unset, so `resolveOrgCalendar` returns before any query — and not the absence of a
+  caller. Chat, the widget and post-call capture do still have no call site.
 - **The caveat:** `src/lib/availability.ts` and `src/app/(dashboard)/settings/layout.tsx`
   are live files that were genuinely edited. Both are behaviour-preserving by
   construction (defaulted parameters; same tabs while the flag is off) and covered by
