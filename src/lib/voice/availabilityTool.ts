@@ -4,9 +4,12 @@ import {
   getOrgSettings,
   getOrgTimezone,
   isWithinBusinessHours,
+  overlapsBusy,
 } from "@/lib/availability";
 import { checkBookingSlot } from "@/lib/bookingAvailability";
 import { offsetMinutesAt } from "@/lib/calendar/timezone";
+import type { BusyInterval } from "@/lib/integrations/types";
+import { startTimer, timed } from "@/lib/timing";
 
 // ── Live availability, for the phone call only ─────────────────────
 //
@@ -313,11 +316,43 @@ async function gatherAlternatives(
   orgId: string,
   searchFromIso: string,
   durationMinutes: number,
-  maxConcurrent: number
+  maxConcurrent: number,
+  busy: BusyInterval[],
+  busyWindowEndIso: string | null
 ): Promise<string[]> {
   const held = await fetchHeldSlots(orgId, searchFromIso);
-  const isAcceptable = (candidateIso: string): boolean =>
-    (held.get(candidateIso) ?? 0) < maxConcurrent;
+  const busyWindowEndMs = busyWindowEndIso
+    ? new Date(busyWindowEndIso).getTime()
+    : null;
+
+  // One synchronous predicate carrying every rule a candidate must
+  // satisfy, so the walker can settle a slot without another await.
+  //
+  // This replaces a per-candidate call back into checkBookingSlot. That
+  // call re-fetched a whole 14-day freeBusy window EVERY probe — up to
+  // six extra provider round trips, plus a nested slot walk inside each
+  // — for data already fetched by the decision that got us here. The
+  // coverage is unchanged: findNextAvailableSlot still enforces opening
+  // hours, closed days, lunch, "must finish before closing" and
+  // internal capacity; held requests and the external calendar are
+  // applied here.
+  const isAcceptable = (candidateIso: string): boolean => {
+    if ((held.get(candidateIso) ?? 0) >= maxConcurrent) return false;
+
+    // No external calendar was consulted for this decision, so there is
+    // nothing to filter against and behaviour is exactly as before.
+    if (busyWindowEndMs === null) return true;
+
+    const candidateMs = new Date(candidateIso).getTime();
+    if (!Number.isFinite(candidateMs)) return false;
+
+    // Past the end of the fetched window the busy list is silent, and
+    // silence is not evidence of free. Refusing to offer is the
+    // fail-closed choice — the same rule as "cannot check is not free".
+    if (candidateMs >= busyWindowEndMs) return false;
+
+    return !overlapsBusy(candidateIso, durationMinutes, busy);
+  };
 
   const stepMs = Math.max(durationMinutes, 1) * 60_000;
   const found: string[] = [];
@@ -334,13 +369,9 @@ async function gatherAlternatives(
     );
     if (!candidate) break;
 
-    // The walker knows hours and internal capacity; checkBookingSlot
-    // adds the external calendar, so an offered slot has cleared every
-    // check the request itself would face.
-    const decision = await checkBookingSlot(orgId, candidate, durationMinutes);
-    if (decision.available && !found.includes(candidate)) {
-      found.push(candidate);
-    }
+    // Every rule was applied inside isAcceptable, so a returned
+    // candidate is already offerable — no second decision needed.
+    if (!found.includes(candidate)) found.push(candidate);
 
     cursor = new Date(new Date(candidate).getTime() + stepMs).toISOString();
   }
@@ -353,7 +384,7 @@ async function lookup(
   date: string,
   time: string
 ): Promise<VoiceAvailabilityOutcome> {
-  const timezone = await getOrgTimezone(orgId);
+  const timezone = await timed("lookup.timezone", () => getOrgTimezone(orgId));
   const requestedIso = zonedWallClockToUtc(date, time, timezone);
   if (!requestedIso) return unknownOutcome(null);
 
@@ -373,7 +404,9 @@ async function lookup(
   // preference. Deliberately a voice-layer guard: availability.ts is
   // shared with chat, the widget and post-call capture, and its
   // behaviour there is unchanged.
-  const hours = await isWithinBusinessHours(orgId, requestedIso);
+  const hours = await timed("lookup.businessHours", () =>
+    isWithinBusinessHours(orgId, requestedIso)
+  );
   if (hours.reason === "no_hours_configured") {
     console.error(
       "[voice] availability unknown — no business hours resolved for org:",
@@ -382,15 +415,12 @@ async function lookup(
     return unknownOutcome(requestedIso);
   }
 
-  const { appointmentDurationMinutes } = await getOrgSettings(
-    createAdminClient(),
-    orgId
+  const { appointmentDurationMinutes } = await timed("lookup.orgSettings", () =>
+    getOrgSettings(createAdminClient(), orgId)
   );
 
-  const decision = await checkBookingSlot(
-    orgId,
-    requestedIso,
-    appointmentDurationMinutes
+  const decision = await timed("lookup.checkBookingSlot", () =>
+    checkBookingSlot(orgId, requestedIso, appointmentDurationMinutes)
   );
 
   // A calendar is connected but would not answer. The engine refuses to
@@ -434,11 +464,15 @@ async function lookup(
         Math.max(appointmentDurationMinutes, 1) * 60_000
     ).toISOString();
 
-  const alternativeIsos = await gatherAlternatives(
-    orgId,
-    searchFromIso,
-    appointmentDurationMinutes,
-    maxConcurrent
+  const alternativeIsos = await timed("lookup.alternatives", () =>
+    gatherAlternatives(
+      orgId,
+      searchFromIso,
+      appointmentDurationMinutes,
+      maxConcurrent,
+      decision.externalBusy,
+      decision.externalBusyWindowEndIso
+    )
   );
 
   if (alternativeIsos.length === 0) {
@@ -477,6 +511,7 @@ export async function checkVoiceAvailability(
   if (!date || !time) return unknownOutcome(null);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const elapsed = startTimer();
   try {
     return await Promise.race([
       lookup(orgId, date, time),
@@ -492,5 +527,8 @@ export async function checkVoiceAvailability(
     return unknownOutcome(null);
   } finally {
     if (timer) clearTimeout(timer);
+    // Logged for EVERY outcome, including the timeout — the 2026-08-07
+    // failure had no total to compare its stages against.
+    console.log(`[timing] lookup.total ${elapsed()}ms`);
   }
 }

@@ -318,7 +318,7 @@ export function createGoogleIntegration(config: GoogleConfig): Integration {
         return toCredentials(body);
       },
 
-      refresh: async (credentials) => {
+      refresh: async (credentials, options) => {
         const oauth = assertStrategy(credentials, "oauth2");
         if (!oauth.refreshToken) {
           throw new IntegrationError("Google connection has no refresh token.", {
@@ -336,6 +336,10 @@ export function createGoogleIntegration(config: GoogleConfig): Integration {
             client_secret: config.clientSecret,
             grant_type: "refresh_token",
           },
+          // Inherits the caller's budget when there is one: a refresh
+          // triggered mid-availability must fit that lookup, while the
+          // same refresh from Settings keeps the generous default.
+          timeoutMs: options?.timeoutMs,
         });
         return toCredentials(body);
       },
@@ -389,7 +393,7 @@ export function createGoogleIntegration(config: GoogleConfig): Integration {
     },
 
     calendar: {
-      getBusyIntervals: async (credentials, calendarId, fromIso, toIso) => {
+      getBusyIntervals: async (credentials, calendarId, fromIso, toIso, options) => {
         // ONE request for the whole window — a caller scanning for a
         // free slot depends on that, or suggesting an alternative would
         // cost a round trip per candidate.
@@ -403,6 +407,7 @@ export function createGoogleIntegration(config: GoogleConfig): Integration {
             timeMax: new Date(toIso).toISOString(),
             items: [{ id: calendarId }],
           },
+          timeoutMs: options?.timeoutMs,
         });
         return parseFreeBusyResponse(body, calendarId);
       },

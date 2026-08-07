@@ -4,15 +4,21 @@ import {
   encryptCredentials,
   loadKeyringFromEnv,
 } from "@/lib/integrations/crypto";
-import { mergeRefreshedCredentials, needsRefresh } from "@/lib/integrations/auth";
+import {
+  isOAuth2Strategy,
+  mergeRefreshedCredentials,
+  needsRefresh,
+} from "@/lib/integrations/auth";
 import { IntegrationError, requiresReauth } from "@/lib/integrations/errors";
 import { getIntegration } from "@/lib/integrations/registry";
+import { timed } from "@/lib/timing";
 import type {
   ConnectionStatus,
   Integration,
   IntegrationAccount,
   IntegrationCredentials,
   IntegrationResource,
+  ProviderCallOptions,
 } from "@/lib/integrations/types";
 
 // ── Connection lifecycle ──────────────────────────────────────────
@@ -311,7 +317,8 @@ export async function setConnectionStatus(
  */
 export async function getValidCredentials(
   orgId: string,
-  connectionId: string
+  connectionId: string,
+  options?: ProviderCallOptions
 ): Promise<IntegrationCredentials> {
   const supabase = createAdminClient();
 
@@ -340,10 +347,19 @@ export async function getValidCredentials(
   if (!needsRefresh(stored)) return stored;
 
   const integration = getIntegration(data.provider as string);
-  if (integration.auth.id !== "oauth2") return stored;
+  // Narrowed through the existing type guard rather than an inline `id`
+  // check, so the oauth2 shape survives into the closure below.
+  const auth = integration.auth;
+  if (!isOAuth2Strategy(auth)) return stored;
 
   try {
-    const refreshed = await integration.auth.refresh(stored);
+    // Timed separately from the surrounding credential load: on the live
+    // availability path this is the one step that makes a network call,
+    // and it is what silently consumed the caller's budget on
+    // 2026-08-07 when the stored token had already expired.
+    const refreshed = await timed("credentials.refresh", () =>
+      auth.refresh(stored, options)
+    );
     const merged = mergeRefreshedCredentials(stored, refreshed);
 
     await supabase

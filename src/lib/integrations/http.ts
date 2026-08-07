@@ -17,6 +17,28 @@ import {
 
 export type FetchLike = typeof fetch;
 
+/**
+ * A BACKSTOP, not a budget.
+ *
+ * Every provider request is bounded, because without a signal a stalled
+ * connection had no client-side deadline at all: a caller that gave up
+ * left the request running until the platform killed the invocation.
+ * That is what the 2026-08-07 blocking test hit — the OAuth refresh
+ * landed 4.0s AFTER the caller had already been answered.
+ *
+ * This ceiling only has to be lower than the platform's own limit, so
+ * nothing is orphaned. It is deliberately GENEROUS: it applies to OAuth
+ * code exchange during connect, to listing a Google account's calendars
+ * in Settings, and to event writes — operations with no caller waiting
+ * on a phone line, where a tight deadline would turn a slow-but-working
+ * response into a failure that never used to happen.
+ *
+ * An operation that genuinely has less time passes its own `timeoutMs`.
+ * The availability lookup does exactly that; see
+ * AVAILABILITY_REQUEST_TIMEOUT_MS in capabilities/calendarService.ts.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+
 export interface IntegrationRequest {
   url: string;
   method?: string;
@@ -34,6 +56,8 @@ export interface IntegrationRequest {
    * "insufficient permission", and only the body tells them apart.
    */
   refineError?: (status: number, body: unknown) => IntegrationErrorKind | null;
+  /** Deadline for this request. Defaults to DEFAULT_REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 export interface IntegrationResponse<T> {
@@ -100,6 +124,7 @@ export async function integrationFetch<T = unknown>(
     provider,
     fetchImpl = fetch,
     refineError,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
   } = request;
 
   const requestHeaders: Record<string, string> = { ...headers };
@@ -117,20 +142,39 @@ export async function integrationFetch<T = unknown>(
     requestHeaders.authorization = `Bearer ${accessToken}`;
   }
 
+  // The controller is what makes the deadline REAL: aborting cancels
+  // the in-flight request rather than merely abandoning the promise, so
+  // no provider work outlives the caller that asked for it.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   let response: Response;
+  let text: string;
   try {
-    response = await fetchImpl(url, { method, headers: requestHeaders, body });
-  } catch (cause) {
-    // Network failure, DNS, timeout — always worth retrying.
-    const message = cause instanceof Error ? cause.message : String(cause);
-    throw new IntegrationError(`${provider} request failed: ${message}`, {
-      kind: "transient",
-      provider,
-      cause,
+    response = await fetchImpl(url, {
+      method,
+      headers: requestHeaders,
+      body,
+      signal: controller.signal,
     });
+    // Read the body under the SAME deadline. Headers can arrive promptly
+    // and the stream still stall, which would otherwise be unbounded.
+    text = await response.text();
+  } catch (cause) {
+    // Network failure, DNS, stall — always worth retrying. An abort is
+    // our own deadline firing rather than the provider refusing, and it
+    // is named as such so logs distinguish "too slow" from "rejected".
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new IntegrationError(
+      controller.signal.aborted
+        ? `${provider} request timed out after ${timeoutMs}ms`
+        : `${provider} request failed: ${message}`,
+      { kind: "transient", provider, cause }
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
-  const text = await response.text();
   let parsed: unknown = null;
   if (text) {
     try {

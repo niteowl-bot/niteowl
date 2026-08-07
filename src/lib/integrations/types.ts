@@ -104,11 +104,28 @@ export interface AuthUrlParams {
   forceConsent?: boolean;
 }
 
+/**
+ * Per-operation overrides for a provider call.
+ *
+ * Exists so an operation with a caller waiting — the availability
+ * lookup, which races an 8s timer with someone on the phone — can
+ * impose its own deadline WITHOUT tightening it for connect, resource
+ * listing or event writes, which have no such caller and a different
+ * latency profile.
+ */
+export interface ProviderCallOptions {
+  /** Deadline for the underlying HTTP request(s). */
+  timeoutMs?: number;
+}
+
 export interface OAuth2Strategy {
   readonly id: "oauth2";
   buildAuthUrl(params: AuthUrlParams): string;
   exchangeCode(code: string, redirectUri: string): Promise<IntegrationCredentials>;
-  refresh(credentials: IntegrationCredentials): Promise<IntegrationCredentials>;
+  refresh(
+    credentials: IntegrationCredentials,
+    options?: ProviderCallOptions
+  ): Promise<IntegrationCredentials>;
   /** Best effort on disconnect. Must not throw — a revoked token is fine. */
   revoke(credentials: IntegrationCredentials): Promise<void>;
 }
@@ -228,7 +245,8 @@ export interface CalendarCapability {
     credentials: IntegrationCredentials,
     calendarId: string,
     fromIso: string,
-    toIso: string
+    toIso: string,
+    options?: ProviderCallOptions
   ): Promise<BusyInterval[]>;
 
   createEvent(

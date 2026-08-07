@@ -69,6 +69,24 @@ export interface BookingSlotDecision {
    * blocking is safe to enable.
    */
   externalConflictObserved: boolean;
+  /**
+   * The busy intervals this decision was made against, and the instant
+   * up to which they are known to be complete.
+   *
+   * Exposed so a caller searching for ALTERNATIVES can reuse them
+   * instead of asking the provider again. `gatherAlternatives` used to
+   * call back into checkBookingSlot per candidate, and each of those
+   * issued its own fresh 14-day freeBusy request — up to seven provider
+   * round trips for one question.
+   *
+   * `externalBusyWindowEndIso` is null when no external calendar was
+   * consulted (feature off, nothing connected, or availability disabled
+   * on the resource). A caller must treat a candidate at or beyond that
+   * instant as UNVERIFIED rather than free — the busy list says nothing
+   * about times it never covered.
+   */
+  externalBusy: BusyInterval[];
+  externalBusyWindowEndIso: string | null;
 }
 
 /** How far ahead to fetch busy windows, matching the slot search window. */
@@ -113,6 +131,8 @@ export async function checkBookingSlot(
       externalCheckFailed: false,
       externalChecked: false,
       externalConflictObserved: false,
+      externalBusy: [],
+      externalBusyWindowEndIso: null,
     };
   }
 
@@ -133,6 +153,8 @@ export async function checkBookingSlot(
         externalCheckFailed: false,
         externalChecked: false,
         externalConflictObserved: false,
+        externalBusy: [],
+        externalBusyWindowEndIso: null,
       };
     }
 
@@ -148,6 +170,9 @@ export async function checkBookingSlot(
       externalCheckFailed: true,
       externalChecked: false,
       externalConflictObserved: false,
+      // Nothing was verified, so nothing may be reused as if it had been.
+      externalBusy: [],
+      externalBusyWindowEndIso: null,
     };
   }
 
@@ -161,6 +186,8 @@ export async function checkBookingSlot(
       externalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: false,
+      externalBusy: lookup.busy,
+      externalBusyWindowEndIso: windowEnd,
     };
   }
 
@@ -178,6 +205,8 @@ export async function checkBookingSlot(
       externalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: true,
+      externalBusy: lookup.busy,
+      externalBusyWindowEndIso: windowEnd,
     };
   }
 
@@ -193,6 +222,8 @@ export async function checkBookingSlot(
     externalCheckFailed: false,
     externalChecked: true,
     externalConflictObserved: true,
+    externalBusy: lookup.busy,
+    externalBusyWindowEndIso: windowEnd,
   };
 }
 

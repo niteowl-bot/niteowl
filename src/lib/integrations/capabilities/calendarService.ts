@@ -7,6 +7,7 @@ import { isIntegrationError } from "@/lib/integrations/errors";
 import { isCalendarSyncEnabled } from "@/lib/integrations/flags";
 import { initialiseIntegrations } from "@/lib/integrations/providers";
 import { getCalendarCapability } from "@/lib/integrations/registry";
+import { timed } from "@/lib/timing";
 import type {
   BusyInterval,
   CalendarEventInput,
@@ -31,6 +32,19 @@ import type {
 //      expired token or an unreadable calendar returns `unavailable`,
 //      never an empty busy list. Treating "we could not look" as "there
 //      is nothing there" is how a customer gets double-booked.
+
+/**
+ * How long a provider call may take when it is part of an availability
+ * lookup, where someone is on the phone and `checkVoiceAvailability`
+ * races an 8s timer.
+ *
+ * Sized so a credential refresh AND a freeBusy call can both complete
+ * inside that budget with room for the database round trips either
+ * side. Scoped to this one operation on purpose — the same 3.5s applied
+ * to OAuth connect or to listing an account's calendars would turn a
+ * slow-but-working response into a failure that never used to happen.
+ */
+export const AVAILABILITY_REQUEST_TIMEOUT_MS = 3_500;
 
 /** Why an external lookup produced no answer. */
 export type CalendarUnavailableReason =
@@ -101,13 +115,24 @@ export async function getOrgBusyIntervals(
   initialiseIntegrations();
 
   try {
-    const credentials = await getValidCredentials(orgId, calendar.connectionId);
+    // The availability budget is applied HERE and nowhere else: this is
+    // the one calendar operation with a caller waiting on the line.
+    // createOrgEvent, updateOrgEvent, cancelOrgEvent and the Settings
+    // resource listing deliberately keep the generous default.
+    const budget = { timeoutMs: AVAILABILITY_REQUEST_TIMEOUT_MS };
+
+    const credentials = await timed("calendar.credentials", () =>
+      getValidCredentials(orgId, calendar.connectionId, budget)
+    );
     const capability = getCalendarCapability(calendar.provider);
-    const busy = await capability.getBusyIntervals(
-      credentials,
-      calendar.calendarId,
-      fromIso,
-      toIso
+    const busy = await timed("calendar.freeBusy", () =>
+      capability.getBusyIntervals(
+        credentials,
+        calendar.calendarId,
+        fromIso,
+        toIso,
+        budget
+      )
     );
     return { ok: true, busy, provider: calendar.provider };
   } catch (err) {
