@@ -2,6 +2,29 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Google Calendar sync — LIVE-VERIFIED end to end on the test org)
+
+**Documentation of a verification, not a code change.** Production runs `7fb7b0414df0d621dbb0a6f860fb38d071ec200e`; `CALENDAR_EVENT_CREATION_ORG_IDS` is set in **Production only** to the `Niteowl Test` org and nothing else.
+
+Milestones 5 and 6 are live for one org and proven against a real Google Calendar:
+
+| Step | Result |
+|---|---|
+| **Book** | One event, one `integration_links` row (`subject_type='appointment'`, `synced`), correct org/connection/resource. Reply "14:00", stored `13:00Z` = 14:00 BST |
+| **Reschedule (manage link)** | Same event id, etag changed, no duplicate |
+| **Reschedule (chat)** | Same event id, etag changed, no duplicate |
+| **Cancel** | Link `deleted`, `last_error` null, lead `cancelled` — **owner confirmed in Google Calendar that the event is gone** |
+
+Etags are issued by Google, not by us, so each change is Google confirming it modified that specific event. **Isolation held**: every link in production belongs to the test org, and a booking on the non-allowlisted org produced zero links and attempted no external write.
+
+### The one defect the live test caught
+A widget reschedule moved the appointment *and* the event, while the reply said *"I'm sorry, but I can't change or update appointments."* Root cause: the chat routes run two independent model calls, and only **failure** was ever communicated to the one writing the reply — on success it was told nothing. Production logs confirmed the intent was `reschedule`, so BOOKING MODE and the "never say you cannot change a booking" rule were both in the prompt. A negative constraint is not a fact.
+
+Fixed in `7fb7b04` and re-verified live: *"Your appointment has been successfully moved to Tuesday, 25 August 2026 at 11:00."* — matching the persisted instant exactly, one link, same event id, changed etag.
+
+### Cleanup
+Both live test appointments cancelled through the normal `/api/bookings/manage` path — no bespoke mutation. Verified by column-by-column diff of a 52-lead snapshot: **only the target row changed** (`status`, `updated_at`), no rows added or deleted, non-test-org data byte-identical, zero active integration links remaining. The unrelated `Verification Plumbing Co` isolation-check lead was deliberately left untouched.
+
 ## 2026-08-08 (Calendar — event creation is now an org allowlist, not a global switch)
 
 **NOT DEPLOYED. Nothing enabled.** `CALENDAR_EVENT_CREATION_ENABLED` is **replaced** by `CALENDAR_EVENT_CREATION_ORG_IDS`. The old variable is gone from the code; it was never set anywhere, so removing it changes nothing.
