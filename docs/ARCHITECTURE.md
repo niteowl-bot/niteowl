@@ -700,6 +700,56 @@ This is a decision plus one rule, not a build:
 - Pairs directly with Part I's P1 (`subject_type = 'appointment'`); take both together,
   once, before milestone 5.
 
+#### R3. The check-to-create race, and what an offered slot actually guarantees
+
+Recorded now because it is cheap to design for and expensive to retrofit, and because
+the voice flow already offers alternatives that a caller can accept.
+
+**What is guaranteed today.** An alternative offered mid-call is *not* a second guess.
+`gatherAlternatives` derives every candidate from the **same authoritative result** as
+the original decision: the one `busy` list `checkBookingSlot` already fetched, plus
+`findNextAvailableSlot` enforcing opening hours, closed days, lunch, must-finish-before-
+closing and internal capacity, plus `fetchHeldSlots` excluding slots another caller has
+already requested. A candidate past `externalBusyWindowEndIso` is refused rather than
+offered, because silence outside the fetched window is not evidence of free.
+
+So when a caller accepts an offered alternative, that slot was validated against the
+external calendar and the internal engine at the moment it was offered. **Re-checking on
+acceptance is redundant** and would cost a provider round trip mid-call; the voice model
+sometimes does it anyway, which is harmless. *No code change is warranted, and none was
+made.*
+
+**What is NOT guaranteed, and will matter the moment `createOrgEvent` is wired.** The
+window between "we checked" and "we wrote" is currently unbounded — seconds of
+conversation, plus post-call processing. Nothing prevents the calendar changing inside
+it: the owner books over the slot in Google, another caller takes it, or a second Remy
+call runs concurrently. Today that is harmless, because nothing is ever written and
+nothing is ever called booked. It stops being harmless the instant a create can succeed
+against a slot that is no longer free.
+
+The protection required at milestone 5 — design intent, not a build:
+
+1. **Re-verify immediately before the write, not at conversation time.** The freshness
+   that matters is at the instant of creation. This is the one place a second freeBusy
+   call is justified, and it belongs next to the write rather than in the dialogue.
+2. **Let the provider arbitrate, not our read.** A read-then-write is racy however
+   tightly it is scoped. Google's client-supplied event id already makes creation
+   idempotent (`toGoogleEventId`); the remaining need is a conflict answer from the
+   provider rather than a second opinion from us.
+3. **Order the internal claim before the external write**, so two concurrent Remy calls
+   cannot both pass. The internal capacity check is the only thing we fully control —
+   and note it is currently exact-timestamp equality, so C1 must be fixed before it can
+   serve as a claim at all.
+4. **A failed or conflicted create must never become "booked".** It becomes a request the
+   owner sees, exactly as an unreadable calendar does today. The three states —
+   available / selected-pending / booked — must stay distinct, and only a *successful*
+   create may reach the third.
+5. **Never re-check in a way that can silently move the appointment.** If the slot has
+   gone, the caller is told; the time is not quietly shifted to the next free one.
+
+The voice prompt is already correct for this and needs no change: it says "preferred
+time", never booked, confirmed or reserved.
+
 ### BEFORE SCALE
 
 | # | Item | Why it matters before paying businesses |

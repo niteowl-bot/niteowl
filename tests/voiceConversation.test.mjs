@@ -229,8 +229,12 @@ describe("conversation order — the job comes before the caller", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /confirm ONLY that one field back — "Got it — 15 Oak Drive\." — and go straight on to "anything else\?"/
+      /confirm ONLY that one field back and check the remainder in the SAME breath: "Got it — 15 Oak Drive\. Everything else is correct\?"/
     );
+    // "everything else", not "everything I've summarised" — the rest is
+    // already agreed, and re-asking the wider question invited the full
+    // re-read this fix exists to stop.
+    assert.match(prompt, /Say "everything else", not "everything I've summarised"/);
     assert.match(prompt, /Do NOT repeat the recap, and do not restate a single unchanged detail/);
     // One genuine reason to re-recap survives: the appointment itself.
     assert.match(
@@ -675,6 +679,37 @@ describe("corrections win", () => {
     );
     // The contact-number label is intentionally unchanged.
     assert.match(summaryInstructions, /"Callback number" keeps its name either way/);
+  });
+
+  // 2026-08-08 third live call: the owner summary read "Callback number:
+  // Not provided" while the email's own Caller ID row directly above it
+  // showed the real number, and the lead stored it. The summarising model
+  // only sees the transcript, and rule 7 forbids Remy from ever reading
+  // the digits aloud — so no number appears there and "Not provided" was
+  // the honest-looking wrong answer. An earlier call rendered the same
+  // situation as "Number calling from", which is the convention.
+  test("a known caller ID is never summarised as 'Not provided'", () => {
+    const { summaryInstructions } = configFor();
+    assert.match(
+      summaryInstructions,
+      /NEVER missing merely because no digits appear in the transcript/
+    );
+    assert.match(
+      summaryInstructions,
+      /If the caller agreed to be reached on the number they are calling from, write exactly "Number calling from"/
+    );
+    // A genuinely different spoken number still wins.
+    assert.match(
+      summaryInstructions,
+      /If they gave a DIFFERENT number aloud, write that number as they gave it/
+    );
+    // "Not provided" survives for the one case that earns it.
+    assert.match(
+      summaryInstructions,
+      /Write "Not provided" ONLY if the caller explicitly refused to give a number AND declined the one they were calling from/
+    );
+    // The general "Not provided" rule for the other five labels stands.
+    assert.match(summaryInstructions, /Include all six labels every time/);
     // Still six labels, and the grounding rules still apply to both.
     assert.match(summaryInstructions, /Include all six labels every time/);
     assert.match(

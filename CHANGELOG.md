@@ -2,6 +2,36 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Voice — verification pass on the third live call; two tiny changes)
+
+### Verified working from the stored row, not the transcript
+The 12:53 UTC call ran on `56cd1af`. Checked against the actual `leads` record rather than the transcript rendering:
+
+- **Spoken email normalised correctly.** Caller said *"jason 1 2 1 at gmail dot com"*; the transcript renders it that way, but the **stored value is `jason121@gmail.com`**. Structured extraction is converting spoken form to a real address, and the ambiguity confirmation still fired ("I've got that as… is that right?") before the caller corrected it.
+- **Address correction is authoritative.** Deepgram transcribed *"32 Ellen Drive"* for a spoken "21 Elm Drive". The caller corrected it at the recap and the **stored `metadata.service_address` is `"21 Elm Drive"`** — the corrected value, with no trace of the misheard one.
+- **Correction no longer triggers a full re-read.** *"Got it. 21 Elm Drive. Is everything I've summarized correct?"* — one field, then a single short question. The previous call re-read the entire summary here.
+- **Semantic field validation held.** Asked for an email, the caller answered with an address; Remy rejected it — *"Sorry, Jason. Could you please provide your email address?"* — rather than storing whatever the transcriber returned.
+- **Appointment labelled correctly.** The owner summary now reads *"Appointment date: Wednesday, 12 August. Appointment time: 4 PM"*, not "Callback date/time".
+- **Availability-first intact**, and `appointment_datetime` `2026-08-12T15:00:00Z` = 4 PM BST, correct.
+
+### Changed — the recap re-ask now scopes itself to the remainder
+After a single-field correction, the wording is now *"Got it — 15 Oak Drive. Everything else is correct?"* rather than re-asking the wider "Is everything I've summarised correct?", which is what invited the full re-read in the first place. One sentence in rule 11.
+
+### Documented, not built — the check-to-create race (`docs/ARCHITECTURE.md` §R3)
+An alternative offered mid-call is **already safely derived** from the same authoritative availability result — the one `busy` list the decision fetched, plus the slot walker's hours/capacity rules, plus held-request exclusion, with anything past the fetched window refused rather than offered. **Re-checking on acceptance is redundant and no code was changed.** What is *not* guaranteed is the window between checking and writing, which is harmless while nothing is ever written and becomes real at milestone 5. Five required protections recorded, including that re-verification belongs next to the write rather than in the dialogue, and that a failed or conflicted create must never become "booked".
+
+### Not fixed — address mis-transcription is a provider problem
+"21 Elm" became "32 Ellen" — both the number and the street. Remy cannot see per-word confidence (Vapi does not expose it), so no prompt can distinguish a confident wrong string from a right one. The control that works is the final recap, and it worked: the caller heard it and corrected it. **No extra confirmations were added** — that would trade a real cost on every call against an error the recap already catches.
+
+### Fixed — a known caller ID was summarised to the owner as "Not provided"
+The owner summary printed **"Callback number: Not provided"** while the same email's **Caller ID row directly above it showed `+353871465274`**, and the lead stored it. A business reading that would conclude they had no way to ring the customer back.
+
+- **Root cause: the summarising model only ever sees the transcript, and rule 7 forbids Remy from reading the caller's number aloud** — so no digits appear there, and the instruction to write "Not provided" when the caller gave no value was followed correctly. It was the honest-looking wrong answer. An earlier call rendered the same situation as "Number calling from", so the label was also inconsistent between calls.
+- **Fix: one bullet in `buildSummaryInstructions()`** stating that the caller's own number is captured automatically from Caller ID and shown elsewhere in the email, so it is never missing merely because the transcript has no digits. If the caller agreed to be reached on the number they called from → exactly **"Number calling from"** (the existing convention). A different number spoken aloud → that number. **"Not provided"** survives only where it is earned: the caller explicitly refused a number *and* declined the one they were calling from.
+- **No change to the email template**, which already renders the real number as its own `Caller ID` row — the defect was only the generated paragraph contradicting it.
+
+Scope: `src/lib/voice/assistant.ts` (one sentence in rule 11, one summary bullet) and `docs/ARCHITECTURE.md`. `npm test` **506 passing, 0 failing**; `tsc --noEmit` clean; `vapi.ts` and `email.ts` untouched.
+
 ## 2026-08-08 (Voice — correction repetition, stock acknowledgements, and an appointment emailed as a callback)
 
 ### Availability-first worked. Preserved unchanged.
