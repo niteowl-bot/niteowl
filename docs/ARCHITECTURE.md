@@ -831,6 +831,23 @@ gets a 409 rather than a duplicate event — so the failure mode is a false "alr
 booked", not two events. Closing it properly needs a database-level claim on the slot,
 which is L1/L2 territory.
 
+#### The write gate is an org allowlist, not a global switch (2026-08-08)
+
+`CALENDAR_EVENT_CREATION_ORG_IDS` — comma-separated org UUIDs, whitespace ignored,
+matching case-insensitive. **Unset or empty means nobody**, matching the fail-closed
+direction of the three switches above it, and `CALENDAR_SYNC_ENABLED` remains a
+prerequisite.
+
+It replaced a global boolean because that boolean could not express "the test org only".
+A global flip would have been safe only because one org happened to have connected a
+calendar — a property of the DATA, not of the flag. `setPrimaryResource` hard-codes
+`sync_enabled: true`, so any org connecting a calendar mid-rollout would have begun
+receiving writes with no further action. The allowlist makes the blast radius something
+stated rather than inferred, and it is how the first paying business should be enabled
+too — one org at a time.
+
+`orgId` is threaded through every gate; there is no bypass path.
+
 #### Milestone 6 — reschedule and cancel sync (2026-08-08)
 
 Two operations added alongside creation, sharing the same flag and the same module.

@@ -51,20 +51,39 @@ export function isCalendarAvailabilityBlocking(
 }
 
 /**
- * Whether a confirmed booking may actually be WRITTEN to the calendar.
+ * Which organisations may have events WRITTEN to their calendar.
  *
  * The fourth level, and the first that changes anything in someone's
- * Google account. Reading is a question; writing is a consequence, so it
- * gets its own switch: an org can have availability blocking live for
- * days before Remy is allowed to create a single event, and a bad write
- * can be stopped without also blinding the availability check.
+ * Google account. Reading is a question; writing is a consequence — so
+ * unlike the three switches above, this one is an ALLOWLIST rather than
+ * a boolean.
  *
- * Off ⇒ confirmAppointmentOnCalendar reports "no calendar", which is the
- * same path every org with no connection already takes, so booking
- * behaves exactly as it did before this existed.
+ * A global boolean could not express "the test org only". It would have
+ * been safe today purely because one org happens to have connected a
+ * calendar, and that is a property of the DATA, not of the flag:
+ * selecting a calendar sets sync_enabled = true automatically, so any
+ * org connecting one during a rollout would start receiving writes with
+ * no further action. An allowlist makes the blast radius something you
+ * state rather than something you infer.
+ *
+ * Format: comma-separated org UUIDs. Whitespace is ignored and matching
+ * is case-insensitive, so a copy-pasted id cannot fail silently.
+ *
+ * UNSET OR EMPTY MEANS NOBODY. Same failure direction as the switches
+ * above: a misconfigured environment writes to no calendar at all,
+ * never to the wrong one.
  */
 export function isCalendarEventCreationEnabled(
+  orgId: string,
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return isCalendarSyncEnabled(env) && isTrue(env.CALENDAR_EVENT_CREATION_ENABLED);
+  if (!isCalendarSyncEnabled(env)) return false;
+  if (!orgId) return false;
+
+  const allowed = (env.CALENDAR_EVENT_CREATION_ORG_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean);
+
+  return allowed.includes(orgId.trim().toLowerCase());
 }

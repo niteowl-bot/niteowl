@@ -59,6 +59,7 @@ function installStubs({
   deleteStatus = 200,
   existingLinks = [],
   eventCreation = "true",
+  allowedOrgIds = undefined,
   syncEnabled = true,
   connected = true,
   linkInsertFails = false,
@@ -67,7 +68,17 @@ function installStubs({
   process.env.INTEGRATIONS_ENABLED = "true";
   process.env.CALENDAR_SYNC_ENABLED = "true";
   process.env.CALENDAR_AVAILABILITY_BLOCKING = "true";
-  process.env.CALENDAR_EVENT_CREATION_ENABLED = eventCreation;
+  // The allowlist replaced the global boolean: unset means nobody.
+  // `eventCreation:"false"` is kept as the shorthand the older tests
+  // use for "disabled", and now clears the list rather than setting a
+  // flag to false.
+  const allow =
+    allowedOrgIds !== undefined
+      ? allowedOrgIds
+      : eventCreation === "true"
+      ? ORG_ID
+      : "";
+  process.env.CALENDAR_EVENT_CREATION_ORG_IDS = allow;
   process.env.INTEGRATION_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
   process.env.GOOGLE_CALENDAR_CLIENT_ID = "client-id";
   process.env.GOOGLE_CALENDAR_CLIENT_SECRET = "client-secret";
@@ -254,7 +265,7 @@ function installStubs({
     calls,
     restore() {
       globalThis.fetch = realFetch;
-      delete process.env.CALENDAR_EVENT_CREATION_ENABLED;
+      delete process.env.CALENDAR_EVENT_CREATION_ORG_IDS;
     },
   };
 }
@@ -516,7 +527,7 @@ describe("no calendar connected — the ordinary case, unchanged", () => {
 
   test("an unset flag is off — a deploy alone changes nothing", async () => {
     stubs = installStubs({ eventCreation: "" });
-    delete process.env.CALENDAR_EVENT_CREATION_ENABLED;
+    delete process.env.CALENDAR_EVENT_CREATION_ORG_IDS;
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
     assert.equal(result.outcome, "no_calendar");
   });
@@ -900,6 +911,10 @@ function bookedLeadStubs(opts = {}) {
     if (url.includes("/rest/v1/leads") && method === "GET") {
       const row = {
         id: LEAD_ID,
+        // Selected by every real query (LEAD_FIELDS includes it) and
+        // required now that the write gate is per-org — without it the
+        // gate correctly fails closed and nothing reaches Google.
+        org_id: ORG_ID,
         name: "Brian Murphy",
         email: "brian@example.com",
         phone: null,
@@ -1004,5 +1019,196 @@ describe("BLOCKER 2 — cancellation is local-first", () => {
     assert.ok(cancelled, "the lead is cancelled regardless of Google");
     assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "failed");
     assert.ok(stubs.calls.linkUpdates.at(-1).last_error, "the ghost event is recorded");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  The org allowlist — CALENDAR_EVENT_CREATION_ORG_IDS
+// ══════════════════════════════════════════════════════════════════
+//
+// A global boolean could not express "the test org only". It would have
+// been safe purely because one org happened to have connected a
+// calendar — a property of the DATA, not of the flag. Selecting a
+// calendar sets sync_enabled = true automatically, so any org
+// connecting one mid-rollout would have started receiving writes with
+// no further action.
+//
+// These pin the gate itself and then prove all three operations obey it.
+
+import { isCalendarEventCreationEnabled } from "@/lib/integrations/flags";
+
+const CAL_ENV = {
+  INTEGRATIONS_ENABLED: "true",
+  CALENDAR_SYNC_ENABLED: "true",
+};
+
+describe("the allowlist gate", () => {
+  const gate = (list, org = ORG_ID, extra = {}) =>
+    isCalendarEventCreationEnabled(org, {
+      ...CAL_ENV,
+      CALENDAR_EVENT_CREATION_ORG_IDS: list,
+      ...extra,
+    });
+
+  test("an allowlisted org is enabled", () => {
+    assert.equal(gate(ORG_ID), true);
+  });
+
+  test("a non-allowlisted org is NOT — no cross-org leakage", () => {
+    assert.equal(gate(ORG_ID, OTHER_ORG), false);
+  });
+
+  test("an empty list disables everyone", () => {
+    assert.equal(gate(""), false);
+    assert.equal(gate("", OTHER_ORG), false);
+  });
+
+  test("a missing variable disables everyone", () => {
+    assert.equal(
+      isCalendarEventCreationEnabled(ORG_ID, { ...CAL_ENV }),
+      false
+    );
+  });
+
+  test("a list of only separators and whitespace disables everyone", () => {
+    for (const junk of [",", " , , ", "   "]) {
+      assert.equal(gate(junk), false, `"${junk}" must not enable anyone`);
+    }
+  });
+
+  test("multiple ids parse, with whitespace tolerated", () => {
+    const list = ` ${OTHER_ORG} , ${ORG_ID} `;
+    assert.equal(gate(list), true);
+    assert.equal(gate(list, OTHER_ORG), true);
+    assert.equal(gate(list, "77777777-7777-4777-8777-777777777777"), false);
+  });
+
+  test("matching is case-insensitive, so a copy-paste cannot fail silently", () => {
+    assert.equal(gate(ORG_ID.toUpperCase()), true);
+    assert.equal(gate(ORG_ID, ORG_ID.toUpperCase()), true);
+  });
+
+  test("a partial or prefix id never matches", () => {
+    assert.equal(gate(ORG_ID.slice(0, 8)), false);
+    assert.equal(gate(ORG_ID, ORG_ID.slice(0, 8)), false);
+    assert.equal(gate(`${ORG_ID}-extra`), false);
+  });
+
+  test("an empty or missing orgId is never allowed", () => {
+    // Called directly: the helper's default parameter would swallow an
+    // explicit `undefined` and silently test ORG_ID instead.
+    const env = { ...CAL_ENV, CALENDAR_EVENT_CREATION_ORG_IDS: ORG_ID };
+    assert.equal(isCalendarEventCreationEnabled("", env), false);
+    assert.equal(isCalendarEventCreationEnabled(undefined, env), false);
+    assert.equal(isCalendarEventCreationEnabled(null, env), false);
+  });
+
+  test("CALENDAR_SYNC_ENABLED remains a prerequisite", () => {
+    assert.equal(
+      isCalendarEventCreationEnabled(ORG_ID, {
+        INTEGRATIONS_ENABLED: "true",
+        CALENDAR_SYNC_ENABLED: "false",
+        CALENDAR_EVENT_CREATION_ORG_IDS: ORG_ID,
+      }),
+      false,
+      "an allowlisted org must still be gated by calendar sync"
+    );
+    assert.equal(
+      isCalendarEventCreationEnabled(ORG_ID, {
+        INTEGRATIONS_ENABLED: "false",
+        CALENDAR_SYNC_ENABLED: "true",
+        CALENDAR_EVENT_CREATION_ORG_IDS: ORG_ID,
+      }),
+      false,
+      "and by the framework switch above it"
+    );
+  });
+});
+
+describe("create, reschedule and cancel all obey the same org gate", () => {
+  test("CREATE writes for an allowlisted org", async () => {
+    stubs = installStubs({ allowedOrgIds: ORG_ID });
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+    assert.equal(result.outcome, "created");
+    assert.equal(stubs.calls.creates.length, 1);
+  });
+
+  test("CREATE writes nothing for an org that is not listed", async () => {
+    stubs = installStubs({ allowedOrgIds: OTHER_ORG });
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+    assert.equal(result.outcome, "no_calendar");
+    assert.ok(mayConfirmBooking(result.outcome), "booking still proceeds as today");
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.equal(stubs.calls.freeBusy, 0, "not one provider call for an unlisted org");
+  });
+
+  test("RESCHEDULE moves nothing for an org that is not listed", async () => {
+    stubs = installStubs({ allowedOrgIds: OTHER_ORG, existingLinks: LINKED });
+    const { rescheduleAppointmentOnCalendar } = await import("@/lib/calendarSync");
+    const result = await rescheduleAppointmentOnCalendar(
+      { ...APPOINTMENT, startIso: MOVED_ISO },
+      START_ISO
+    );
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.updates.length, 0);
+  });
+
+  test("CANCEL removes nothing for an org that is not listed", async () => {
+    stubs = installStubs({ allowedOrgIds: OTHER_ORG, existingLinks: LINKED });
+    const { cancelAppointmentOnCalendar } = await import("@/lib/calendarSync");
+    const result = await cancelAppointmentOnCalendar(ORG_ID, LEAD_ID);
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.deletes.length, 0);
+  });
+
+  test("an EMPTY allowlist stops all three operations", async () => {
+    const { rescheduleAppointmentOnCalendar, cancelAppointmentOnCalendar } =
+      await import("@/lib/calendarSync");
+
+    stubs = installStubs({ allowedOrgIds: "", existingLinks: LINKED });
+    assert.equal((await confirmAppointmentOnCalendar(APPOINTMENT)).outcome, "no_calendar");
+    assert.equal(
+      (await rescheduleAppointmentOnCalendar({ ...APPOINTMENT, startIso: MOVED_ISO }, START_ISO)).outcome,
+      "no_calendar"
+    );
+    assert.equal((await cancelAppointmentOnCalendar(ORG_ID, LEAD_ID)).outcome, "no_calendar");
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.equal(stubs.calls.updates.length, 0);
+    assert.equal(stubs.calls.deletes.length, 0);
+  });
+
+  test("one listed org does not enable another that shares a connection", async () => {
+    // The stubbed connection/resource are returned for ANY org, so if
+    // the gate leaked, this write would land on the listed org's
+    // calendar under a different org's id — the worst outcome there is.
+    stubs = installStubs({ allowedOrgIds: ORG_ID, existingLinks: [] });
+    const result = await confirmAppointmentOnCalendar({
+      ...APPOINTMENT,
+      orgId: OTHER_ORG,
+    });
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.creates.length, 0, "no write may occur under an unlisted org");
+  });
+});
+
+describe("the lead engine obeys the allowlist too", () => {
+  test("an unlisted org books exactly as it does today, with no writes", async () => {
+    stubs = installStubs({ allowedOrgIds: OTHER_ORG });
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const result = await capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      "conv-1",
+      "boiler service Tuesday at 10am",
+      BOOKING_LEAD,
+      "web_widget"
+    );
+    // Straight to booked in one write — no pending phase, no provider call.
+    assert.equal(stubs.calls.leadInserts[0].status, "booked");
+    assert.equal(stubs.calls.leadUpdates.length, 0);
+    assert.equal(result.unavailableReason, null);
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.equal(stubs.calls.freeBusy, 0);
   });
 });

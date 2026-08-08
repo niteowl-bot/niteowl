@@ -2,6 +2,30 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Calendar — event creation is now an org allowlist, not a global switch)
+
+**NOT DEPLOYED. Nothing enabled.** `CALENDAR_EVENT_CREATION_ENABLED` is **replaced** by `CALENDAR_EVENT_CREATION_ORG_IDS`. The old variable is gone from the code; it was never set anywhere, so removing it changes nothing.
+
+### Why
+Preparing the live calendar test raised a question worth answering honestly: can the write flag be scoped to the test org? It could not. `isCalendarEventCreationEnabled()` took no org and was consulted at five call sites, none of which passed one — a single global boolean, on for every org or off for every org.
+
+Flipping it globally *would* have been safe today, because only `Niteowl Test` has connected a calendar. But that is a property of the **data**, not of the flag, and it is not a guarantee: `setPrimaryResource` hard-codes `sync_enabled: true`, so any org connecting a calendar mid-rollout would have started receiving writes with no further action and no warning. `CALENDAR_SYNC_ENABLED` is also set for `Preview, Production`, so the same shape would have let preview builds write into a real calendar.
+
+### What it is now
+A comma-separated allowlist of org UUIDs. Whitespace is ignored and matching is case-insensitive, so a copy-pasted id cannot fail silently. **Unset or empty means nobody** — the same failure direction as the three switches above it: a misconfigured environment writes to no calendar at all, never to the wrong one. `CALENDAR_SYNC_ENABLED` remains a prerequisite.
+
+`orgId` is threaded through **every** gate — `confirmAppointmentOnCalendar`, `rescheduleAppointmentOnCalendar`, `cancelAppointmentOnCalendar`, and both `leadCapture` gates. No parallel or bypass path: a grep for a bare `isCalendarEventCreationEnabled()` returns zero.
+
+### Tests
+`npm test` **625 passing, 0 failing** (608 → 625, +17). `tsc --noEmit` clean, lint clean.
+
+Covers: allowlisted org enabled; non-allowlisted refused; empty and missing variable disabling everyone; separator/whitespace-only junk disabling everyone; multiple ids parsing with whitespace; case-insensitive matching; partial and prefix ids never matching; empty/undefined/null orgId never allowed; `CALENDAR_SYNC_ENABLED` and `INTEGRATIONS_ENABLED` still prerequisites; create, reschedule and cancel each obeying the gate; an unlisted org booking exactly as it does today with zero provider calls; and no cross-org leakage even when the connection lookup would have answered.
+
+**Mutation-verified against fail-open specifically** — each of these was applied and confirmed to break tests: empty list meaning *everyone* (9 failures), dropping the sync prerequisite (1), prefix matching instead of exact (1), and allowing a missing orgId (1).
+
+### One fixture bug this surfaced
+A cancel test's stubbed lead row omitted `org_id`. Under the global flag that went unnoticed; under the per-org gate it correctly **failed closed** and the test broke. The fixture was wrong — every real query selects `org_id` — and is now faithful. That is the gate doing its job before it ever reached production.
+
 ## 2026-08-08 (Calendar milestone 6 — reschedule and cancel now move and remove the event)
 
 **NOT DEPLOYED, and dark on arrival** — same `CALENDAR_EVENT_CREATION_ENABLED` flag as milestone 5, still unset everywhere. No new flag, no schema change.

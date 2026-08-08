@@ -219,7 +219,7 @@ export async function rescheduleAppointmentOnCalendar(
   previousStartIso: string | null
 ): Promise<CalendarChangeResult> {
   try {
-    if (!isCalendarEventCreationEnabled()) {
+    if (!isCalendarEventCreationEnabled(details.orgId)) {
       return { outcome: "no_calendar", suggestedIso: null };
     }
 
@@ -287,7 +287,7 @@ export async function cancelAppointmentOnCalendar(
   leadId: string
 ): Promise<CalendarChangeResult> {
   try {
-    if (!isCalendarEventCreationEnabled()) {
+    if (!isCalendarEventCreationEnabled(orgId)) {
       return { outcome: "no_calendar", suggestedIso: null };
     }
 
@@ -340,7 +340,7 @@ export async function confirmAppointmentOnCalendar(
 
   // Checked first, so an org with no calendar — every org today — costs
   // nothing and behaves exactly as before.
-  if (!isCalendarEventCreationEnabled()) return none("no_calendar");
+  if (!isCalendarEventCreationEnabled(details.orgId)) return none("no_calendar");
 
   try {
     const calendar = await resolveOrgCalendar(details.orgId);

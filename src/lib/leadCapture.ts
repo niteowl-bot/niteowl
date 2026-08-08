@@ -725,8 +725,8 @@ export async function markNeedsReviewNotificationSent(
 // the booking path is byte-identical to what it was.
 
 /** True when a booking must be backed by a real calendar event. */
-function requiresCalendarBacking(status: LeadStatus): boolean {
-  return status === "booked" && isCalendarEventCreationEnabled();
+function requiresCalendarBacking(status: LeadStatus, orgId: string): boolean {
+  return status === "booked" && isCalendarEventCreationEnabled(orgId);
 }
 
 /** The status a calendar-backed booking is written under while pending. */
@@ -933,7 +933,7 @@ export async function capturePartialLead(
       existing.appointment_datetime &&
       requestedAppointmentIso &&
       requestedAppointmentIso !== existing.appointment_datetime &&
-      isCalendarEventCreationEnabled()
+      isCalendarEventCreationEnabled(orgId)
     ) {
       const { appointmentDurationMinutes } = await getOrgSettings(
         createAdminClient(),
@@ -1003,7 +1003,7 @@ export async function capturePartialLead(
     // as pending first; settleCalendarBacking below promotes it only if
     // Google actually accepted the event.
     const backsWithCalendar =
-      requiresCalendarBacking(safeNextStatus) && existing.status !== "booked";
+      requiresCalendarBacking(safeNextStatus, orgId) && existing.status !== "booked";
     const statusToWrite = backsWithCalendar ? PENDING_CALENDAR_STATUS : safeNextStatus;
 
 
@@ -1186,7 +1186,7 @@ export async function capturePartialLead(
   // Same two-phase rule as the update path: with a calendar in play the
   // row is inserted pending, so the lead exists before anything is
   // written to Google and a crash between the two is recoverable.
-  const insertBacksWithCalendar = requiresCalendarBacking(safeInsertStatus);
+  const insertBacksWithCalendar = requiresCalendarBacking(safeInsertStatus, orgId);
   const insertStatusToWrite = insertBacksWithCalendar
     ? PENDING_CALENDAR_STATUS
     : safeInsertStatus;
