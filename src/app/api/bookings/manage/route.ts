@@ -193,7 +193,12 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const available = await isSlotAvailable(lead.org_id, newIso);
+      // The lead's OWN booking must not count against its move. Under
+      // overlap, a 10:00 appointment shifting to 10:30 collides with
+      // itself, so without this every short reschedule would be refused.
+      const available = await isSlotAvailable(lead.org_id, newIso, {
+        excludeLeadId: lead.id,
+      });
       if (!available) {
         const suggested = await findNextAvailableSlot(lead.org_id, newIso);
         return NextResponse.json(

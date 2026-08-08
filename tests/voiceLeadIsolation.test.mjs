@@ -80,9 +80,39 @@ function applyFilters(url, rows) {
       continue;
     }
 
+    // Timestamps compare as instants, not text — the overlap window
+    // uses strict gt/lt bounds, and dropping them would make every row
+    // match.
+    const cmp = (a, b) => {
+      const x = Date.parse(a);
+      const y = Date.parse(b);
+      return Number.isFinite(x) && Number.isFinite(y)
+        ? x - y
+        : String(a) < String(b)
+        ? -1
+        : String(a) > String(b)
+        ? 1
+        : 0;
+    };
+
     if (raw.startsWith("eq.")) {
       const value = raw.slice(3);
       result = result.filter((row) => String(row[key] ?? "") === value);
+    } else if (raw.startsWith("neq.")) {
+      const value = raw.slice(4);
+      result = result.filter((row) => String(row[key] ?? "") !== value);
+    } else if (raw.startsWith("gt.")) {
+      const value = raw.slice(3);
+      result = result.filter((row) => cmp(String(row[key] ?? ""), value) > 0);
+    } else if (raw.startsWith("lt.")) {
+      const value = raw.slice(3);
+      result = result.filter((row) => cmp(String(row[key] ?? ""), value) < 0);
+    } else if (raw.startsWith("gte.")) {
+      const value = raw.slice(4);
+      result = result.filter((row) => cmp(String(row[key] ?? ""), value) >= 0);
+    } else if (raw.startsWith("lte.")) {
+      const value = raw.slice(4);
+      result = result.filter((row) => cmp(String(row[key] ?? ""), value) <= 0);
     } else if (raw.startsWith("in.")) {
       const allowed = raw.slice(3).replace(/^\(|\)$/g, "").split(",").map((v) => v.replace(/^"|"$/g, ""));
       result = result.filter((row) => allowed.includes(String(row[key] ?? "")));

@@ -1,7 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
-import { isWithinBusinessHours, findNextAvailableSlot, isSlotAvailable } from "@/lib/availability";
+import { isWithinBusinessHours, findNextAvailableSlot, checkSlotCapacity } from "@/lib/availability";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
 import { enforceBookedInvariant } from "@/lib/bookingInvariant";
 import { after } from "next/server";
@@ -46,6 +46,22 @@ export const EMPTY_LEAD: ExtractedLead = {
   preferred_datetime: null,
   confidence: 0,
 };
+
+/**
+ * Why a requested time could not be taken.
+ *
+ * `lookup_failed` is NOT "unavailable" — it means the check itself could
+ * not be made (a failed business-hours or capacity read). Kept distinct
+ * so the assistant is never told to say a time is outside opening hours
+ * or fully booked on the strength of a database error; it must say only
+ * that it could not confirm.
+ */
+export type UnavailableReason =
+  | "hours"
+  | "capacity"
+  | "ends_after_close"
+  | "lookup_failed"
+  | null;
 
 export const ACTIONABLE_INTENTS: LeadIntent[] = [
   "new_booking",
@@ -694,7 +710,7 @@ export async function capturePartialLead(
   leadSource: string = "chat",
   needsReview: boolean = false,
   conversationTranscript: string | null = null
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: "hours" | "capacity" | "ends_after_close" | null; leadId: string | null; needsReviewContactCaptured?: boolean }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean }> {
 
 
   const safeConversationId =
@@ -711,20 +727,47 @@ export async function capturePartialLead(
   }
   let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
-  let unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null;
+  let unavailableReason:
+    | "hours"
+    | "capacity"
+    | "ends_after_close"
+    | "lookup_failed"
+    | null = null;
+
+  // Resolved BEFORE the availability check, which is the only reason
+  // this lookup moved up from below. Capacity is now an OVERLAP test,
+  // so a lead moving its own appointment (10:00 → 10:30) would collide
+  // with its existing row and every short reschedule would be refused
+  // as a clash with itself. The lead's id excludes it from its own
+  // count. Nothing in this lookup depends on the availability block, so
+  // the move changes only that.
+  const existing = await findOpenLeadForCapture(
+    supabase,
+    orgId,
+    safeConversationId,
+    extracted,
+    leadSource
+  );
 
     if (resolvedIso) {
     const availability = await isWithinBusinessHours(orgId, resolvedIso);
-    const slotAvailable = availability.isAvailable
-      ? await isSlotAvailable(orgId, resolvedIso)
-      : true;
+    const capacity = availability.isAvailable
+      ? await checkSlotCapacity(orgId, resolvedIso, { excludeLeadId: existing?.id })
+      : { available: true, failed: false };
+    const slotAvailable = capacity.available;
 
     if (!availability.isAvailable || !slotAvailable) {
       outsideBusinessHours = true;
       unavailableReason = !availability.isAvailable
         ? availability.reason === "ends_after_close"
           ? "ends_after_close"
+          : availability.reason === "lookup_failed"
+          ? "lookup_failed"
           : "hours"
+        // A failed count is not a full diary. Saying "fully booked"
+        // here would be inventing a fact from a database error.
+        : capacity.failed
+        ? "lookup_failed"
         : "capacity";
       suggestedAlternativeIso = await findNextAvailableSlot(orgId, resolvedIso);
       console.log(
@@ -747,15 +790,6 @@ export async function capturePartialLead(
 
 
 
-
-
-  const existing = await findOpenLeadForCapture(
-    supabase,
-    orgId,
-    safeConversationId,
-    extracted,
-    leadSource
-  );
 
 
   if (existing) {

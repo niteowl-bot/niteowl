@@ -104,6 +104,7 @@ function installStubs({
   bookedAt = [],
   leads = [],
   hoursFail = false,
+  leadsFail = false,
   durationMinutes = 60,
 } = {}) {
   const leadRows = [...bookedAt.map(bookedLead), ...leads];
@@ -171,6 +172,12 @@ function installStubs({
     }
 
     if (url.includes("/rest/v1/leads")) {
+      if (leadsFail) {
+        return new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
       // Two different counts hit this table: the shared engine's
       // capacity check (status=booked) and the voice pending-request
       // check (metadata->>appointment_request=true, status not in
@@ -186,18 +193,45 @@ function installStubs({
               : undefined
             : row[key];
 
+          // Timestamps must compare as instants, not as strings:
+          // "…T14:00:00.000Z" and "…T14:00:00+00:00" are the same
+          // moment but sort differently as text.
+          const cmp = (a, b) => {
+            const x = Date.parse(a);
+            const y = Date.parse(b);
+            return Number.isFinite(x) && Number.isFinite(y)
+              ? x - y
+              : String(a) < String(b)
+              ? -1
+              : String(a) > String(b)
+              ? 1
+              : 0;
+          };
+          const v = String(value ?? "");
+
           if (raw.startsWith("eq.")) {
-            if (String(value ?? "") !== raw.slice(3)) return false;
+            if (v !== raw.slice(3)) return false;
+          } else if (raw.startsWith("neq.")) {
+            if (v === raw.slice(4)) return false;
           } else if (raw.startsWith("not.in.")) {
             const excluded = raw
               .slice(7)
               .replace(/^\(|\)$/g, "")
               .split(",");
-            if (excluded.includes(String(value ?? ""))) return false;
+            if (excluded.includes(v)) return false;
           } else if (raw.startsWith("gte.")) {
-            if (!(String(value ?? "") >= raw.slice(4))) return false;
+            if (!(cmp(v, raw.slice(4)) >= 0)) return false;
           } else if (raw.startsWith("lte.")) {
-            if (!(String(value ?? "") <= raw.slice(4))) return false;
+            if (!(cmp(v, raw.slice(4)) <= 0)) return false;
+            // gt/lt carry the OVERLAP window's strict bounds — without
+            // them the range filter is silently dropped and every row
+            // matches, which would make these tests prove nothing.
+          } else if (raw.startsWith("gt.")) {
+            if (!(cmp(v, raw.slice(3)) > 0)) return false;
+          } else if (raw.startsWith("lt.")) {
+            if (!(cmp(v, raw.slice(3)) < 0)) return false;
+          } else {
+            throw new Error(`Unsupported filter in test stub: ${key}=${raw}`);
           }
         }
         return true;
@@ -427,6 +461,62 @@ describe("a pending appointment request holds the slot", () => {
       toolCallBody({ date: "2026-08-12", time: "11:00" })
     );
     assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  // 2026-08-08: the held-slot check was itself an exact-timestamp match
+  // (`.eq("appointment_datetime", …)`), so voice carried the very
+  // double-booking hole the shared engine had. A request at 15:00 left
+  // 15:30 lookable and offerable.
+  test("a request at 15:00 also holds 15:30 — overlap, not equality", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "15:30" })
+    );
+    assert.match(json.results[0].result, /^NOT AVAILABLE:/);
+  });
+
+  test("it holds 14:30 too — the overlap reaches backwards", async () => {
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "14:30" })
+    );
+    assert.match(json.results[0].result, /^NOT AVAILABLE:/);
+  });
+
+  test("back-to-back is still offerable, after and before", async () => {
+    // 16:00 starts exactly as the 15:00 request ends, and 14:00 ends
+    // exactly as it begins. Neither shares a minute with it.
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const after = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "16:00" })
+    );
+    assert.match(after.json.results[0].result, /^AVAILABLE:/);
+
+    stubs.restore();
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const before = await callTool(
+      toolCallBody({ date: "2026-08-12", time: "14:00" })
+    );
+    assert.match(before.json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("an overlapping request is never OFFERED as an alternative either", async () => {
+    // The alternatives search reads held slots as a range; it must apply
+    // the same overlap rule, or a refused 15:00 could be answered with
+    // a 15:30 that is equally spoken for.
+    stubs = installStubs({ leads: [requestLead(WED_3PM)] });
+    const { json } = await callTool(toolCallBody());
+    const result = json.results[0].result;
+    assert.match(result, /^NOT AVAILABLE:/);
+    assert.doesNotMatch(result, /3:30 pm|15:30/i);
+  });
+
+  test("an unreadable held-slot list never invents availability", async () => {
+    // Fails CLOSED, matching the shared engine: the answer is UNKNOWN,
+    // and the call falls back to taking a preferred time.
+    stubs = installStubs({ leadsFail: true });
+    const { json } = await callTool(toolCallBody());
+    assert.doesNotMatch(json.results[0].result, /^AVAILABLE:/);
   });
 
   test("cancelled and lost requests release the slot", async () => {

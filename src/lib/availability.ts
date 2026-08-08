@@ -40,6 +40,11 @@ export interface AvailabilityResult {
     | "outside_hours"
     | "lunch_break"
     | "no_hours_configured"
+    // The business-hours query itself failed. Distinct from
+    // "no_hours_configured" — which is a real, configured state that
+    // deliberately fails OPEN — because a failed read tells us nothing,
+    // and "we could not check" must never be treated as "it is free".
+    | "lookup_failed"
     // Start time is inside opening hours, but the appointment would run
     // past closing (e.g. 18:45 + 60 min against a 19:00 close). Kept
     // distinct from "outside_hours" so Remy can explain that it's the
@@ -89,10 +94,26 @@ function timeStringToMinutes(time: string | null): number | null {
   return h * 60 + m;
 }
 
+/**
+ * The org's configured hours, and whether the read actually succeeded.
+ *
+ * `failed` exists because an empty array used to mean two completely
+ * different things: "this business has configured no hours" — a real
+ * state the checks below deliberately fail OPEN on, so a business that
+ * has not finished setup can still take bookings — and "the query
+ * failed", which tells us nothing at all. Collapsing them meant a
+ * transient database error read as "no hours configured" and produced a
+ * CONFIRMED booking for a time nothing had validated.
+ */
+interface BusinessHoursLookup {
+  rows: BusinessHoursRow[];
+  failed: boolean;
+}
+
 async function getBusinessHoursForOrg(
   supabase: ReturnType<typeof createAdminClient>,
   orgId: string
-): Promise<BusinessHoursRow[]> {
+): Promise<BusinessHoursLookup> {
   const { data, error } = await supabase
     .from("business_hours")
     .select("day_of_week, is_closed, open_time, close_time, lunch_start, lunch_end")
@@ -100,9 +121,9 @@ async function getBusinessHoursForOrg(
 
   if (error) {
     console.error("[availability] failed to fetch business hours:", error.message);
-    return [];
+    return { rows: [], failed: true };
   }
-  return data ?? [];
+  return { rows: data ?? [], failed: false };
 }
 
 // Exported (2026-08-06) only so the voice availability tool can obtain
@@ -183,6 +204,54 @@ export function overlapsBusy(
   });
 }
 
+/**
+ * The window an EXISTING appointment must start inside to overlap a
+ * candidate one.
+ *
+ * Appointments have no per-appointment length — every one is the org's
+ * configured `appointment_duration_minutes` — so both intervals are the
+ * same width D. [existingStart, existingStart+D) then overlaps
+ * [start, start+D) exactly when existingStart lies strictly inside
+ * (start-D, start+D).
+ *
+ * STRICT at both ends, which is what preserves the half-open semantics
+ * `overlapsBusy` already uses: an appointment finishing exactly when
+ * this one begins (existingStart = start-D), or beginning exactly when
+ * this one finishes (existingStart = start+D), does NOT overlap. That
+ * is the rule that keeps back-to-back bookings legal.
+ *
+ * Exported so the capacity check and the voice held-slot check are
+ * provably the same rule rather than two implementations that can drift.
+ */
+export function appointmentOverlapWindow(
+  startIso: string,
+  durationMinutes: number
+): { afterIso: string; beforeIso: string } | null {
+  const start = new Date(startIso).getTime();
+  if (Number.isNaN(start)) return null;
+
+  const span = Math.max(durationMinutes, 1) * 60_000;
+  return {
+    afterIso: new Date(start - span).toISOString(),
+    beforeIso: new Date(start + span).toISOString(),
+  };
+}
+
+/**
+ * Whether two same-length appointments overlap. The in-memory twin of
+ * appointmentOverlapWindow, for callers holding the instants already.
+ */
+export function appointmentsOverlap(
+  startIsoA: string,
+  startIsoB: string,
+  durationMinutes: number
+): boolean {
+  const a = new Date(startIsoA).getTime();
+  const b = new Date(startIsoB).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b)) return false;
+  return Math.abs(a - b) < Math.max(durationMinutes, 1) * 60_000;
+}
+
 // ── Business hours as knowledge for the chat assistant ───────────────
 // The booking validator reads the business_hours table, but the chat
 // system prompt was built only from business_knowledge (the Knowledge
@@ -221,15 +290,19 @@ export async function getBusinessHoursSummary(
 ): Promise<BusinessHoursSummary> {
   const supabase = createAdminClient();
 
-  const [settings, hours] = await Promise.all([
+  const [settings, lookup] = await Promise.all([
     getOrgSettings(supabase, orgId),
     getBusinessHoursForOrg(supabase, orgId),
   ]);
+  const hours = lookup.rows;
 
   // No rows at all is the "no hours configured" case, which the checks
   // above deliberately fail open on. Listing seven closed days here would
   // contradict that, so nothing is stated and the prompt omits the section.
-  if (hours.length === 0) {
+  // A FAILED read lands here too, and must: stating nothing lets the
+  // assistant say it does not know the hours, where inventing a list
+  // from an unread table would have it quote hours that do not exist.
+  if (lookup.failed || hours.length === 0) {
     return {
       hasConfiguredHours: false,
       emergencyModeEnabled: settings.emergencyModeEnabled,
@@ -287,7 +360,16 @@ export async function isWithinBusinessHours(
     return { isAvailable: true };
   }
 
-  const hours = await getBusinessHoursForOrg(supabase, orgId);
+  const lookup = await getBusinessHoursForOrg(supabase, orgId);
+
+  // FAIL CLOSED. An unread table is not an open diary: confirming a
+  // booking here would promise a time nothing ever validated, which is
+  // the same mistake as treating an unreadable calendar as free.
+  if (lookup.failed) {
+    return { isAvailable: false, reason: "lookup_failed" };
+  }
+
+  const hours = lookup.rows;
   if (hours.length === 0) {
     return { isAvailable: true, reason: "no_hours_configured" };
   }
@@ -365,7 +447,14 @@ export async function findNextAvailableSlot(
     return isoDatetime;
   }
 
-  const hours = await getBusinessHoursForOrg(supabase, orgId);
+  const lookup = await getBusinessHoursForOrg(supabase, orgId);
+
+  // FAIL CLOSED, mirroring isWithinBusinessHours: a suggestion built on
+  // an unread table is a time nobody checked. Returning null means the
+  // caller offers no alternative rather than a fabricated one.
+  if (lookup.failed) return null;
+
+  const hours = lookup.rows;
   if (hours.length === 0) {
     return isoDatetime;
   }
@@ -416,36 +505,106 @@ export async function findNextAvailableSlot(
 
   return null;
 }
+export interface SlotCapacityOptions {
+  /**
+   * A lead whose own booking must not count against it.
+   *
+   * Required for RESCHEDULES. Under the old exact-match rule a lead
+   * moving from 10:00 to 10:30 never met itself, because the two
+   * timestamps differed. Under overlap it does: its existing 10:00
+   * booking overlaps the 10:30 it is moving to, so without this the
+   * engine would refuse every short reschedule as a clash with itself.
+   */
+  excludeLeadId?: string | null;
+}
+
 /**
- * Checks how many "booked" leads already occupy the same appointment slot
- * (based on exact appointment_datetime match) and compares against the
- * org's configured max_concurrent_bookings.
+ * Whether an appointment starting at `isoDatetime` fits within the org's
+ * configured `max_concurrent_bookings`.
+ *
+ * Counts every CONFIRMED booking whose interval OVERLAPS this one, not
+ * merely those starting at the same instant. With 60-minute
+ * appointments and a limit of one, 10:00 and 10:30 used to both pass:
+ * neither timestamp equalled the other, so each saw a count of zero and
+ * the business was double-booked. Overlap is expressed as a range on
+ * `appointment_datetime` (see appointmentOverlapWindow) so the database
+ * can still answer it with an index range scan rather than a table scan.
+ *
+ * Half-open, so genuinely adjacent appointments remain bookable: one
+ * finishing exactly as this begins is not a conflict.
+ *
+ * FAILS CLOSED. A failed count used to return true — "don't block
+ * bookings on a query error" — which meant a database blip produced a
+ * confirmed booking nothing had validated. An unknown is not a free
+ * slot, and the caller already treats false as "offer an alternative".
  */
-export async function isSlotAvailable(
+export interface SlotCapacityResult {
+  available: boolean;
+  /**
+   * True when the count could not be made at all. `available` is false
+   * either way — the distinction exists so a caller can say "we could
+   * not check" instead of the untrue "that slot is fully booked".
+   */
+  failed: boolean;
+}
+
+/**
+ * The detailed form of isSlotAvailable, for callers that must tell a
+ * genuine clash apart from an unreadable one.
+ */
+export async function checkSlotCapacity(
   orgId: string,
-  isoDatetime: string
-): Promise<boolean> {
+  isoDatetime: string,
+  options: SlotCapacityOptions = {}
+): Promise<SlotCapacityResult> {
   const supabase = createAdminClient();
 
   const { data: orgData } = await supabase
     .from("organisations")
-    .select("max_concurrent_bookings")
+    .select("max_concurrent_bookings, appointment_duration_minutes")
     .eq("id", orgId)
     .maybeSingle();
 
   const maxConcurrent = orgData?.max_concurrent_bookings ?? 1;
+  const durationMinutes = orgData?.appointment_duration_minutes ?? 60;
 
-  const { count, error } = await supabase
+  const window = appointmentOverlapWindow(isoDatetime, durationMinutes);
+  if (!window) {
+    console.error("[availability] unparseable appointment instant:", isoDatetime);
+    return { available: false, failed: true };
+  }
+
+  let query = supabase
     .from("leads")
     .select("id", { count: "exact", head: true })
     .eq("org_id", orgId)
     .eq("status", "booked")
-    .eq("appointment_datetime", isoDatetime);
+    .gt("appointment_datetime", window.afterIso)
+    .lt("appointment_datetime", window.beforeIso);
+
+  if (options.excludeLeadId) {
+    query = query.neq("id", options.excludeLeadId);
+  }
+
+  const { count, error } = await query;
 
   if (error) {
     console.error("[availability] failed to check slot capacity:", error.message);
-    return true; // fail open — don't block bookings on a query error
+    // Fail CLOSED — an unchecked slot is not a free one.
+    return { available: false, failed: true };
   }
 
-  return (count ?? 0) < maxConcurrent;
+  return { available: (count ?? 0) < maxConcurrent, failed: false };
+}
+
+/**
+ * Whether the slot has capacity. Boolean form, kept for the callers
+ * that only need a yes/no — the slot-grid walker and the voice path.
+ */
+export async function isSlotAvailable(
+  orgId: string,
+  isoDatetime: string,
+  options: SlotCapacityOptions = {}
+): Promise<boolean> {
+  return (await checkSlotCapacity(orgId, isoDatetime, options)).available;
 }

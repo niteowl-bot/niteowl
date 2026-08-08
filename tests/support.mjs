@@ -100,6 +100,17 @@ export function installStubs({
   emergencyModeEnabled = false,
   maxConcurrentBookings = 1,
   bookedCount = 0,
+  /**
+   * Real lead rows for the capacity check, so the OVERLAP window is
+   * actually exercised. `bookedCount` remains for the older tests that
+   * only care about the count; when `bookedLeads` is given it wins and
+   * the stub filters properly.
+   */
+  bookedLeads = null,
+  /** Make the business_hours read fail, for fail-closed tests. */
+  hoursFail = false,
+  /** Make the leads read fail, for fail-closed tests. */
+  leadsFail = false,
   modelIso = null,
   modelStatus = 200,
 } = {}) {
@@ -121,6 +132,12 @@ export function installStubs({
 
     if (url.includes("/rest/v1/business_hours")) {
       calls.business_hours += 1;
+      if (hoursFail) {
+        return new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
       // Mirror the columns availability.ts selects.
       return json(
         hours.map((h) => ({
@@ -147,10 +164,52 @@ export function installStubs({
 
     if (url.includes("/rest/v1/leads")) {
       calls.leads += 1;
+      if (leadsFail) {
+        return new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      // When real rows are supplied, apply the query's own filters —
+      // otherwise the overlap window would be silently ignored and a
+      // capacity test would prove nothing.
+      let count = bookedCount;
+      if (bookedLeads) {
+        const params = new URL(url).searchParams;
+        const cmp = (a, b) => {
+          const x = Date.parse(a);
+          const y = Date.parse(b);
+          return Number.isFinite(x) && Number.isFinite(y) ? x - y : 0;
+        };
+        count = bookedLeads.filter((row) => {
+          for (const [key, raw] of params.entries()) {
+            if (["select", "order", "limit", "offset"].includes(key)) continue;
+            const v = String(row[key] ?? "");
+            if (raw.startsWith("eq.")) {
+              if (v !== raw.slice(3)) return false;
+            } else if (raw.startsWith("neq.")) {
+              if (v === raw.slice(4)) return false;
+            } else if (raw.startsWith("gt.")) {
+              if (!(cmp(v, raw.slice(3)) > 0)) return false;
+            } else if (raw.startsWith("lt.")) {
+              if (!(cmp(v, raw.slice(3)) < 0)) return false;
+            } else if (raw.startsWith("gte.")) {
+              if (!(cmp(v, raw.slice(4)) >= 0)) return false;
+            } else if (raw.startsWith("lte.")) {
+              if (!(cmp(v, raw.slice(4)) <= 0)) return false;
+            } else {
+              throw new Error(`Unsupported filter in test stub: ${key}=${raw}`);
+            }
+          }
+          return true;
+        }).length;
+      }
+
       // Capacity check uses head:true + exact count, read from Content-Range.
       const headers = {
         "content-type": "application/json",
-        "content-range": `*/${bookedCount}`,
+        "content-range": `*/${count}`,
       };
       return method === "HEAD"
         ? new Response(null, { status: 200, headers })

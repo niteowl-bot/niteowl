@@ -10,6 +10,7 @@ import {
   markNeedsReviewNotificationSent,
   resolveEscalationQuestion,
 } from "@/lib/leadCapture";
+import type { UnavailableReason } from "@/lib/leadCapture";
 import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
 import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
@@ -241,7 +242,7 @@ function buildSystemPrompt(
   knowledge: KnowledgeRecord[],
   intent: LeadIntent = "unknown",
   suggestedAlternativeIso: string | null = null,
-  unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null,
+  unavailableReason: UnavailableReason = null,
   handoffAskContact: boolean = false,
   handoffContactCaptured: boolean = false,
   hoursSummary: BusinessHoursSummary | null = null
@@ -344,7 +345,9 @@ function buildSystemPrompt(
     sections.push(
       [
         "## Availability Note",
-        unavailableReason === "capacity"
+        unavailableReason === "lookup_failed"
+          ? `You could NOT check whether the customer's requested time is free — the availability lookup failed. Do NOT say it is unavailable, fully booked, or outside business hours: none of that is known. Say only that you cannot confirm that time right now, that their request has been noted, and that a team member will confirm it shortly. You may mention ${formatted} as a possible alternative, but never present it as confirmed either.`
+          : unavailableReason === "capacity"
           ? `The customer's requested time is unfortunately already fully booked. Politely let them know it's no longer available, and suggest ${formatted} as the nearest available alternative instead.`
           : unavailableReason === "ends_after_close"
           ? `The customer's requested start time IS within business hours, but the appointment would not finish before the business closes that day. Do NOT tell them the requested time is outside business hours or closed — that is wrong and confusing. Explain that the appointment itself would run past closing time, and suggest ${formatted} as the nearest time that fits in full instead.`
@@ -499,7 +502,7 @@ export async function POST(req: NextRequest) {
 
   let detectedIntent: LeadIntent = "unknown";
   let suggestedAlternativeIso: string | null = null;
-  let unavailableReason: "hours" | "capacity" | "ends_after_close" | null = null;
+  let unavailableReason: UnavailableReason = null;
   let handoffAskContact = false;
   let handoffContactCaptured = false;
 

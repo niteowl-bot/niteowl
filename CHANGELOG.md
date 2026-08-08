@@ -2,6 +2,39 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Booking — overlapping appointments are now prevented, and unchecked slots fail closed)
+
+### Fixed — a booking conflicted only when the START TIMES were identical
+`isSlotAvailable` counted booked leads with `.eq("appointment_datetime", isoDatetime)`. With production's 60-minute appointments and `max_concurrent_bookings = 1`, a booking at 10:00 and another at 10:30 **both passed**: neither timestamp equalled the other, each saw a count of zero, and the business was double-booked. `overlapsBusy` in the same file already had correct half-open interval logic — but it was only ever applied to the *external* calendar's busy windows, never to the org's own bookings. `PROJECT_CONTEXT.md` has listed "Double Booking Prevention" as complete throughout; it prevented identical-timestamp collisions only.
+
+- **Semantics, not examples.** Two appointments conflict when their occupied intervals share any time. Appointments are all one org-configured length, so `[existingStart, +D)` overlaps `[start, +D)` exactly when `existingStart` lies strictly inside `(start-D, start+D)` — expressed as a strict range on `appointment_datetime` so Postgres still answers it with an index range scan rather than a table scan.
+- **Half-open preserved**, so genuinely adjacent appointments stay bookable: one finishing exactly as the next begins is not a conflict. This is why the range bounds are strict.
+- **One definition, two callers.** `appointmentOverlapWindow` (for the query) and `appointmentsOverlap` (for in-memory checks) are exported from `availability.ts` and used by both the shared capacity check and the voice held-slot check, so the two cannot drift apart.
+
+### Fixed — voice carried the same hole
+`isHeldByPendingRequest` and `fetchHeldSlots` were also exact-timestamp. A pending phone request at 15:00 left 15:30 both lookable *and* offerable as an alternative. Both now apply the same overlap rule; the alternatives search returns start instants rather than an instant-keyed map, because a map keyed by exact instant cannot express "14:00 also holds 14:30".
+
+### Fixed — a database read failure produced a confirmed booking
+`getBusinessHoursForOrg` returned `[]` for **both** "no hours configured" and "the query failed", discarding the `error` object it held. A Supabase blip therefore read as `no_hours_configured`, which deliberately fails OPEN, and produced a **confirmed, emailed booking for a time nothing had validated**.
+
+- The two are now distinct. A failed read yields `reason: "lookup_failed"` and fails **closed**; a genuinely empty table still fails **open**, which is the behaviour a business mid-setup depends on.
+- `isSlotAvailable` fails closed too (was `return true` — *"don't block bookings on a query error"*).
+- `checkSlotCapacity` reports **why** a slot was refused, so a failed count is never spoken as *"that slot is fully booked"*. Both chat routes gained a branch that says only that the time could not be confirmed.
+- `findNextAvailableSlot` returns null rather than a suggestion built on an unread table.
+
+### Behaviour changes, deliberate
+- **Bookings that used to be accepted are now refused** — any overlap, on every channel.
+- **A reschedule no longer clashes with itself.** Under exact-match a lead moving 10:00 → 10:30 never met itself; under overlap it does. `isSlotAvailable` takes `excludeLeadId`, used by `/api/bookings/manage` and by lead capture. This is why `capturePartialLead` now resolves the existing lead *before* the availability check — the only structural change in the pass, and a pure reordering.
+- **Voice says UNKNOWN, not "not available", on a failed hours read.** Caught by an existing test: the new fail-closed path made the voice guard fall through to "cannot be offered", which is as false as claiming it free. The guard now treats `lookup_failed` and `no_hours_configured` alike.
+
+### A test-infrastructure gap found on the way
+The PostgREST stubs implemented `eq`, `not.in`, `gte` and `lte` but silently ignored unknown operators — so the new `gt`/`lt`/`neq` filters were dropped and **every row matched**, producing four false failures that looked like bugs in the fix. The stubs now implement the missing operators, compare timestamps as instants rather than as text, and **throw on an unrecognised filter** so this cannot happen quietly again.
+
+### Verified against the old code
+The new tests were re-run with the overlap reverted to `.eq(...)`: **8 fail** (6 in `bookingOverlap`, 2 in `voiceAvailability`). A test that passes either way proves nothing, so this was checked rather than assumed; both files were confirmed byte-identical after restoring.
+
+Scope: `src/lib/availability.ts`, `src/lib/voice/availabilityTool.ts`, `src/lib/leadCapture.ts`, `src/app/api/bookings/manage/route.ts`, both chat routes (type + one truthful branch each). **No change to OAuth, Google event creation, Stripe, provider configuration, voice prompt wording, schema or deployment config; no production data touched.** `npm test` **551 passing, 0 failing** (+36); `tsc --noEmit` clean.
+
 ## 2026-08-08 (Voice — call quality: stock phrases, false enthusiasm and "Good Goodbye.")
 
 The fifth live call was **correct end to end** — availability-first, three email confirmations each with its own "is that right?", email in the owner summary, corrected address and alternate number both persisted, appointment labels right. This is a tone pass only; no behaviour was changed.

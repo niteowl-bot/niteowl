@@ -171,6 +171,11 @@ Classified per the guardrail: **CRITICAL NOW** (a real current risk),
 
 ### CRITICAL NOW
 
+> **RESOLVED 2026-08-08 (not yet deployed).** Capacity is now an interval
+> overlap, and both it and the business-hours read fail closed. The finding is
+> kept below as the record of what was wrong and why. See the note after it for
+> what the fix does and does not cover.
+
 #### C1. The internal capacity check compares exact timestamps, so overlapping appointments are not prevented
 
 `isSlotAvailable` (`src/lib/availability.ts:438`) counts booked leads with
@@ -193,6 +198,38 @@ bookings.
 - **Scope of a fix, when approved:** replace the equality predicate with an overlap
   query over `[start, start + duration)`, reusing `overlapsBusy`'s existing
   semantics so back-to-back bookings stay legal. One function.
+
+#### C1/R1 — what the 2026-08-08 fix actually covers
+
+**Fixed.** One overlap definition (`appointmentOverlapWindow` /
+`appointmentsOverlap`) now serves the shared capacity check *and* the voice
+held-slot check, expressed as a strict range on `appointment_datetime` so
+Postgres can still answer it with an index range scan. Half-open is preserved,
+so back-to-back appointments remain bookable. Both the capacity read and the
+business-hours read fail closed, with `lookup_failed` kept distinct from
+`no_hours_configured` — the latter still fails open, which is what a business
+mid-setup depends on.
+
+**Two limits worth recording, neither introduced by the fix:**
+
+1. **Duration is org-level.** Every appointment is
+   `organisations.appointment_duration_minutes` long, so all intervals are the
+   same width and one can never strictly *contain* another — containment
+   reduces to partial overlap. Changing the org default retroactively changes
+   every stored appointment's implied end, and therefore which historical
+   bookings would now be considered clashes. This is L2, and it is the thing to
+   fix before per-service or per-staff durations arrive.
+2. **The overlap is checked, not claimed.** Two concurrent bookings can still
+   both pass the check before either writes, because nothing takes a lock. That
+   is the check-to-create race in §R3, and it is why §R3 asks for the internal
+   claim to precede the external write at milestone 5.
+
+**A behaviour change the fix required.** Capacity now excludes the lead being
+rescheduled (`excludeLeadId`). Under exact-match a lead moving 10:00 → 10:30
+never met itself; under overlap it does, so without the exclusion every short
+reschedule would be refused as a clash with its own booking. `capturePartialLead`
+resolves the existing lead *before* the availability check for this reason — the
+only structural change in the pass.
 
 #### C2. Chat and the widget book without consulting the calendar, while the phone refuses on the same calendar
 

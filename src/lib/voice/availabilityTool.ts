@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  appointmentOverlapWindow,
+  appointmentsOverlap,
   findNextAvailableSlot,
   getOrgSettings,
   getOrgTimezone,
@@ -72,29 +74,38 @@ const RELEASED_STATUSES = ["cancelled", "lost"];
  *     questions, general enquiries, needs_review records without an
  *     appointment, chat leads and widget leads never carry it and can
  *     never consume appointment capacity.
- *   - the row must sit at exactly this instant.
+ *   - the row must OVERLAP this appointment, by the same half-open rule
+ *     the shared engine uses (appointmentOverlapWindow). It used to
+ *     require an exact timestamp match, which let a request at 14:00
+ *     and a 60-minute request at 14:30 both be accepted.
  *   - cancelled and lost are excluded, so rejecting a request releases
  *     the slot.
  *   - a request in the past holds nothing.
  *
- * Fails OPEN on a query error: an unreadable count must not invent a
- * conflict. The shared engine's own checks have already run by this
- * point, so the worst case is today's behaviour.
+ * FAILS CLOSED on a query error, matching isSlotAvailable: an unknown
+ * is not a free slot. The caller turns this into "not available" and
+ * offers alternatives, so the cost of a blip is a slot not offered —
+ * never two callers promised the same one.
  */
 async function isHeldByPendingRequest(
   orgId: string,
   isoDatetime: string,
-  maxConcurrent: number
+  maxConcurrent: number,
+  durationMinutes: number
 ): Promise<boolean> {
   // A slot that has already passed cannot be held by anything.
   if (new Date(isoDatetime).getTime() < Date.now()) return false;
+
+  const window = appointmentOverlapWindow(isoDatetime, durationMinutes);
+  if (!window) return true;
 
   const admin = createAdminClient();
   const { count, error } = await admin
     .from("leads")
     .select("id", { count: "exact", head: true })
     .eq("org_id", orgId)
-    .eq("appointment_datetime", isoDatetime)
+    .gt("appointment_datetime", window.afterIso)
+    .lt("appointment_datetime", window.beforeIso)
     .eq("metadata->>appointment_request", "true")
     .not("status", "in", `(${RELEASED_STATUSES.join(",")})`);
 
@@ -103,7 +114,7 @@ async function isHeldByPendingRequest(
       "[voice] pending-request capacity check failed:",
       error.message
     );
-    return false;
+    return true;
   }
 
   return (count ?? 0) >= maxConcurrent;
@@ -116,28 +127,34 @@ async function isHeldByPendingRequest(
  */
 const ALTERNATIVE_WINDOW_DAYS = 14;
 
+/** A pending request's start instant, in epoch ms. */
+type HeldStarts = { startsMs: number[]; failed: boolean };
+
 /**
- * Every instant already held by a pending request in the search window,
- * as instant → number of requests holding it.
+ * Every pending request in the search window, as start instants.
  *
  * Loaded in ONE query because findNextAvailableSlot's `isAcceptable`
  * hook is synchronous — the same reason findNextExternallyFreeSlot
  * pre-fetches the calendar's busy intervals and passes a sync
- * predicate. This is a range read for the alternatives search;
- * isHeldByPendingRequest above remains the point lookup for the slot
- * the caller actually asked for, and is deliberately left untouched
- * since that path has been verified in production.
+ * predicate.
  *
- * Fails OPEN, exactly as the point lookup does: an unreadable list must
- * not invent conflicts and start hiding real slots.
+ * Returns raw instants rather than an instant→count map because holding
+ * is now an OVERLAP question, not an equality one: a request at 14:00
+ * holds 14:30 as well, and a map keyed by exact instant could never
+ * express that. The window is widened by one appointment length at each
+ * end so a request starting just before `fromIso`, and still running
+ * into it, is not missed.
  */
 async function fetchHeldSlots(
   orgId: string,
-  fromIso: string
-): Promise<Map<string, number>> {
-  const held = new Map<string, number>();
+  fromIso: string,
+  durationMinutes: number
+): Promise<HeldStarts> {
+  const spanMs = Math.max(durationMinutes, 1) * 60_000;
+  const fromMs = new Date(fromIso).getTime();
+  const startIso = new Date(fromMs - spanMs).toISOString();
   const toIso = new Date(
-    new Date(fromIso).getTime() + ALTERNATIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    fromMs + ALTERNATIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000 + spanMs
   ).toISOString();
 
   const admin = createAdminClient();
@@ -147,20 +164,22 @@ async function fetchHeldSlots(
     .eq("org_id", orgId)
     .eq("metadata->>appointment_request", "true")
     .not("status", "in", `(${RELEASED_STATUSES.join(",")})`)
-    .gte("appointment_datetime", fromIso)
+    .gte("appointment_datetime", startIso)
     .lte("appointment_datetime", toIso);
 
   if (error) {
     console.error("[voice] held-slot lookup failed:", error.message);
-    return held;
+    return { startsMs: [], failed: true };
   }
 
+  const startsMs: number[] = [];
   for (const row of data ?? []) {
     const iso = row.appointment_datetime;
     if (typeof iso !== "string") continue;
-    held.set(iso, (held.get(iso) ?? 0) + 1);
+    const ms = new Date(iso).getTime();
+    if (Number.isFinite(ms)) startsMs.push(ms);
   }
-  return held;
+  return { startsMs, failed: false };
 }
 
 /** The org's concurrent-appointment limit, as the engine reads it. */
@@ -320,7 +339,14 @@ async function gatherAlternatives(
   busy: BusyInterval[],
   busyWindowEndIso: string | null
 ): Promise<string[]> {
-  const held = await fetchHeldSlots(orgId, searchFromIso);
+  const held = await fetchHeldSlots(orgId, searchFromIso, durationMinutes);
+
+  // The held list could not be read, so no candidate can be shown to be
+  // free of pending requests. Offering one anyway would be the "cannot
+  // check means it is free" mistake; offering none is truthful, and the
+  // caller falls back to taking a preferred time.
+  if (held.failed) return [];
+
   const busyWindowEndMs = busyWindowEndIso
     ? new Date(busyWindowEndIso).getTime()
     : null;
@@ -337,7 +363,21 @@ async function gatherAlternatives(
   // internal capacity; held requests and the external calendar are
   // applied here.
   const isAcceptable = (candidateIso: string): boolean => {
-    if ((held.get(candidateIso) ?? 0) >= maxConcurrent) return false;
+    // OVERLAP, not equality: a pending request at 14:00 holds 14:30 too
+    // when appointments are an hour long, so counting only exact matches
+    // would offer the caller a slot already spoken for.
+    const overlapping = held.startsMs.reduce(
+      (n, startMs) =>
+        appointmentsOverlap(
+          new Date(startMs).toISOString(),
+          candidateIso,
+          durationMinutes
+        )
+          ? n + 1
+          : n,
+      0
+    );
+    if (overlapping >= maxConcurrent) return false;
 
     // No external calendar was consulted for this decision, so there is
     // nothing to filter against and behaviour is exactly as before.
@@ -388,28 +428,32 @@ async function lookup(
   const requestedIso = zonedWallClockToUtc(date, time, timezone);
   if (!requestedIso) return unknownOutcome(null);
 
-  // "No hours configured" must not be spoken as "available".
+  // Neither "no hours configured" nor "the hours could not be read" may
+  // be spoken as an answer about availability.
   //
-  // getBusinessHoursForOrg fails SOFT — a failed query returns an empty
-  // list, which isWithinBusinessHours reads as no_hours_configured and
-  // treats as open. That is right for post-call lead capture, where the
-  // alternative is refusing every booking a business ever makes. It is
-  // wrong on a live call: it would have Remy tell a customer 3 PM is
-  // free on the strength of a database error, which is exactly what the
-  // engine's own "could not check is never it is free" rule forbids.
-  //
-  // The two cases are indistinguishable from here — a genuinely
-  // unconfigured business and a failed query produce the same reason —
-  // so voice treats both as unknown and falls back to taking a
-  // preference. Deliberately a voice-layer guard: availability.ts is
-  // shared with chat, the widget and post-call capture, and its
-  // behaviour there is unchanged.
+  // These used to be the same reason, because a failed query returned an
+  // empty list. They are now distinct — `lookup_failed` vs
+  // `no_hours_configured` — and the engine itself fails CLOSED on the
+  // former. Both still land here, for different reasons:
+  //   lookup_failed        we genuinely do not know. Saying "not
+  //                        available" would be as false as saying it is
+  //                        free: nothing was ever checked.
+  //   no_hours_configured  the engine deliberately fails OPEN, which is
+  //                        right for post-call capture (the alternative
+  //                        is refusing every booking a business ever
+  //                        makes) and wrong on a live call, where it
+  //                        would have Remy call 3 PM free on the
+  //                        strength of an unconfigured diary.
+  // Either way the honest answer is UNKNOWN, and the call falls back to
+  // taking a preferred time. Deliberately a voice-layer guard:
+  // availability.ts is shared with chat, the widget and post-call
+  // capture, and its behaviour there is unchanged.
   const hours = await timed("lookup.businessHours", () =>
     isWithinBusinessHours(orgId, requestedIso)
   );
-  if (hours.reason === "no_hours_configured") {
+  if (hours.reason === "no_hours_configured" || hours.reason === "lookup_failed") {
     console.error(
-      "[voice] availability unknown — no business hours resolved for org:",
+      `[voice] availability unknown (${hours.reason}) for org:`,
       orgId
     );
     return unknownOutcome(requestedIso);
@@ -432,7 +476,12 @@ async function lookup(
   const maxConcurrent = await getMaxConcurrent(orgId);
   const heldByRequest =
     decision.available &&
-    (await isHeldByPendingRequest(orgId, requestedIso, maxConcurrent));
+    (await isHeldByPendingRequest(
+      orgId,
+      requestedIso,
+      maxConcurrent,
+      appointmentDurationMinutes
+    ));
 
   if (heldByRequest) {
     console.log(
