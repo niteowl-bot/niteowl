@@ -2,6 +2,46 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Voice — correction repetition, stock acknowledgements, and an appointment emailed as a callback)
+
+### Availability-first worked. Preserved unchanged.
+The live call did exactly the intended thing: requested Wednesday 3 PM → tool check → *"not available"* → two real alternatives → caller chose Thursday 9 AM → **checked again** → *"is available. I'll record that as your preferred time"* → only then name, email, address, number. Nothing in this change touches rule 5 step 4, rule 9, or `stopSpeakingPlan`; `vapi.ts` was not modified at all, and the markers are asserted.
+
+### Fixed — one corrected field triggered the entire recap again
+```
+User: "No. It Elm. My address is Elm Drive, e l m, Elm."
+AI:   "Thank you for correcting that. I've updated the address to 21 Elm Drive.
+       Just to confirm, Jimmy, I've noted your preferred time as Thursday,
+       13 August at 9 AM for the radiator repair. At 21 Elm Drive. I have your
+       email as jimmy at gmail dot com, and the team will contact you on the
+       number you're calling from. Is everything I've summarized correct?"
+```
+- **Root cause: rule 11 said to do it.** Its CONFIRMATION clause read *"If they correct anything (rule 10), recap once more and ask again."* Remy followed the instruction exactly.
+- **Fix:** confirm only the corrected field — *"Got it — 15 Oak Drive."* — then go straight to "anything else?", restating no unchanged detail. The full recap repeats **only** when what changed was the appointment itself (date, time or service), where a mistake sends someone to the wrong job at the wrong hour. The same "correct only what changed" rule was added to the email read-back.
+
+### Fixed — a stock thank-you opened almost every turn
+Nine in a 175-second call: *"Thank you, Jimmy."*, *"Thanks."*, *"Thank you for correcting that."* ×2, *"Great, Jimmy."*, *"Thank you."*, *"Just to confirm..."* ×3, *"Perfect."*
+- **Root cause: the prompt both instructed and scripted them.** Rule 2 said *"Ask, wait, acknowledge briefly, ask the next"*, and the worked examples the model copies from began with thanks — `"Thanks, I've got that as…"`, `"Thank you for correcting that. I've updated…"`, `take with a brief "Thanks."`
+- **Fix, at the source rather than by adding variety:** rule 2 gains **SAY LESS** — most answers need no acknowledgement at all, never open two turns in a row with thanks, and *"the goal is FEWER WORDS, not a wider set of openers — do not swap one stock phrase for another."* The three scripted thank-yous were deleted from the examples; a test asserts they cannot come back.
+
+### Fixed — an appointment was emailed as a callback
+The owner's summary read *"Callback date: Thursday, 13 August. Callback time: 9 AM"* for a radiator repair visit.
+- **Root cause: hardcoded labels in `buildSummaryInstructions()`** — *"give these six details… Name, Callback number, Callback date, Callback time, Address, Issue"* — regardless of what the caller asked for. The summarising model wrote precisely what it was told to.
+- **The data itself was already correct.** The lead row carried `metadata.appointment_request: true`, `appointment_datetime` `2026-08-13T08:00:00Z` (09:00 BST, correct), and `service_address` `"21 Elm Drive"` — the corrected value, not the misheard one. Only the email wording was wrong.
+- **Fix:** the date and time labels are now chosen from what the caller actually wanted — "Appointment date"/"Appointment time" for a service visit, "Callback date"/"Callback time" for a call back — *"decided from what the caller asked for, never from which words the receptionist happened to use."* "Callback number" deliberately keeps its name; it is the number to reach them on either way. Still six labels, and the existing grounding and urgency rules apply to both.
+
+### Verified, not changed
+- **Corrections persist correctly.** `service_address` stored the corrected `"21 Elm Drive"`; `email` stored the corrected `jimmy@gmail.com`. Structured extraction already treats the caller's correction as authoritative — no code change needed.
+- **Caller ID was handled right**: asked once, no digits spoken.
+- **`status: awaiting_confirmation` is correct, not an availability bug.** Traced to `serviceConfirmed === false` in `calls.ts` — the Knowledge Base has no radiator-repair entry, so the deliberate "team will confirm whether we can provide that service" path applied. Business hours (Thu 09:00–17:00) and capacity both passed; nothing occupied the slot.
+- **Truthful language held**: *"I'll record that as your preferred time"*, never booked/confirmed/reserved. `createOrgEvent` still has no call sites, so that remains correct.
+
+### Name softened, email read-back kept
+An ordinary name is now taken as given and read back only where it may genuinely have been misheard. The email read-back is explicitly marked as the one that always happens — it is the detail speech-to-text mangles most, and a wrong one silently loses the confirmation.
+
+### Scope
+`src/lib/voice/assistant.ts` only (rules 2, 5, 11 and the summary instructions). **No change to `vapi.ts`, availability logic, alternative-slot generation, timezone, date parsing, lead capture, extraction, caller ID, email delivery, schema, credentials, routes or deploy config.** `npm test` **505 passing, 0 failing** (+4 tests; two pins updated for wording deliberately changed). `tsc --noEmit` clean. Prompt 18,550 → **19,829** characters.
+
 ## 2026-08-08 (Voice — live call after the flow fix: three causes, only one of them the prompt)
 
 ### The first and largest cause: the fix was never deployed. Third occurrence.

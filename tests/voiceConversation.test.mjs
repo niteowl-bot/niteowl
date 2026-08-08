@@ -216,6 +216,57 @@ describe("conversation order — the job comes before the caller", () => {
     );
   });
 
+  // 2026-08-08 live call. The caller corrected one field during the
+  // final recap and got the entire recap again:
+  //   User: "No. It Elm. My address is Elm Drive, e l m, Elm."
+  //   AI:   "Thank you for correcting that. I've updated the address to
+  //          21 Elm Drive. Just to confirm, Jimmy, I've noted your
+  //          preferred time as Thursday, 13 August at 9 AM for the
+  //          radiator repair. At 21 Elm Drive. I have your email as..."
+  // Rule 11's CONFIRMATION clause literally said "recap once more and
+  // ask again", so Remy was following instructions.
+  test("a correction during the recap confirms only the corrected field", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /confirm ONLY that one field back — "Got it — 15 Oak Drive\." — and go straight on to "anything else\?"/
+    );
+    assert.match(prompt, /Do NOT repeat the recap, and do not restate a single unchanged detail/);
+    // One genuine reason to re-recap survives: the appointment itself.
+    assert.match(
+      prompt,
+      /ONLY when what changed was the appointment itself — the date, the time or the service/
+    );
+  });
+
+  test("acknowledgements are cut at the source, not swapped for synonyms", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /SAY LESS/);
+    assert.match(prompt, /Most answers need no acknowledgement at all/);
+    assert.match(prompt, /Never open two turns in a row with thanks/);
+    // The objective is less speech, not a bigger phrase book.
+    assert.match(
+      prompt,
+      /The goal is FEWER WORDS, not a wider set of openers — do not swap one stock phrase for another/
+    );
+    // The scripted thank-yous the live call echoed are gone from the
+    // examples the model copies.
+    assert.doesNotMatch(prompt, /Thank you for correcting that/);
+    assert.doesNotMatch(prompt, /Thanks, I've got that as/);
+    assert.doesNotMatch(prompt, /take with a brief "Thanks\."/);
+  });
+
+  test("the email read-back survives — it is the one that must not be dropped", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /I've got that as michaelryan@hotmail\.com — is that right\?/);
+    assert.match(prompt, /This one read-back always happens/);
+    // But a corrected email confirms the email and nothing else.
+    assert.match(
+      prompt,
+      /read the corrected address back the same way and NOTHING else — never restate their name, time or anything already settled/
+    );
+  });
+
   test("a read-back is never merged with the next question", () => {
     const prompt = promptFor();
     assert.match(prompt, /A READ-BACK IS A WHOLE TURN/);
@@ -598,6 +649,39 @@ describe("corrections win", () => {
     assert.match(summaryInstructions, /report ONLY their corrected version/i);
     assert.match(summaryInstructions, /never report both/i);
   });
+
+  // 2026-08-08: the caller booked a service visit for a broken radiator
+  // and the owner's email read "Callback date: Thursday, 13 August.
+  // Callback time: 9 AM." The lead row was right (metadata carried
+  // appointment_request: true) — only the summary was wrong, because
+  // the six labels were hardcoded to callback wording regardless of
+  // what the caller actually asked for.
+  test("an appointment is labelled an appointment, not a callback", () => {
+    const { summaryInstructions } = configFor();
+    assert.match(summaryInstructions, /LABEL THE DATE AND TIME FOR WHAT THEY ACTUALLY ARE/);
+    assert.match(
+      summaryInstructions,
+      /the labels are "Appointment date" and "Appointment time"/
+    );
+    assert.match(
+      summaryInstructions,
+      /If they were asking to be RUNG BACK, the labels are "Callback date" and "Callback time"/
+    );
+    assert.match(summaryInstructions, /never label an appointment as a callback/);
+    // Decided from the caller's request, not from Remy's phrasing.
+    assert.match(
+      summaryInstructions,
+      /never from which words the receptionist happened to use/
+    );
+    // The contact-number label is intentionally unchanged.
+    assert.match(summaryInstructions, /"Callback number" keeps its name either way/);
+    // Still six labels, and the grounding rules still apply to both.
+    assert.match(summaryInstructions, /Include all six labels every time/);
+    assert.match(
+      summaryInstructions,
+      /apply exactly the same way when the labels are "Appointment date" and "Appointment time"/
+    );
+  });
 });
 
 describe("repetition", () => {
@@ -662,7 +746,10 @@ describe("spoken polish", () => {
     );
     assert.match(
       prompt,
-      /Thank you for correcting that\. I've updated the address to 15 Oak Drive\./
+      // The "Thank you for correcting that." preamble was dropped
+      // 2026-08-08 — it was one of the stock openers the live call
+      // repeated. The whole-address read-back it introduced is intact.
+      /never the version you first heard again: "Got it — 15 Oak Drive\."/
     );
   });
 

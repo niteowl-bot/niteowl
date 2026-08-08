@@ -236,7 +236,10 @@ describe("assistant prompt — when Remy asks for a number", () => {
     for (const line of [
       /What the caller needs, in their own words/i,
       /The day and time they want/i,
-      /Their name — repeat it back/i,
+      // Softened 2026-08-08: an ordinary name is taken as given, and
+      // read back only where it may genuinely have been misheard. The
+      // field is still a mandatory step, which is what this pins.
+      /Their name — take an ordinary name as given/i,
       /The address where the work is needed/i,
       /The callback number/i,
     ]) {
