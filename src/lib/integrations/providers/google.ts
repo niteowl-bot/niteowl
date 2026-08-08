@@ -32,27 +32,56 @@ const USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
 /**
- * Least privilege that still works:
- *   calendar.events    create/update/delete Remy's own events
- *   calendar.readonly  list calendars, and query free/busy
- *   openid, email      identify which account was connected
+ * Least privilege that still works. One scope per thing Remy actually
+ * does, verified against the reference docs for each endpoint:
  *
- * calendar.events and calendar.readonly are SENSITIVE scopes: an app
- * using them needs Google verification before external users can
- * consent at scale, and an unverified app left in Testing mode has
- * refresh tokens that expire after seven days.
+ *   calendar.calendarlist.readonly  GET  /users/me/calendarList
+ *   calendar.freebusy               POST /freeBusy
+ *   calendar.events                 POST/PATCH/DELETE /calendars/…/events
+ *   openid, email                   identify which account was connected
+ *
+ * calendar.readonly USED to cover the first two, and was dropped
+ * because of what else it carries: "see and download any calendar you
+ * can access" — the full contents of every event on every calendar the
+ * owner can reach. Remy never reads an event it did not create, so
+ * holding that was a promise in the privacy policy rather than a limit
+ * Google enforced. Now it is enforced.
+ *
+ * calendar.events remains SENSITIVE, so this does NOT avoid
+ * verification, the unverified-app warning, or the user cap. What it
+ * buys is a consent screen a customer can say yes to without alarm
+ * ("view your availability", "edit events" rather than "download any
+ * calendar"), a far easier verification review, and a smaller blast
+ * radius if credentials ever leak.
+ *
+ * NOT chosen, deliberately:
+ *   calendar.events.owned  narrower, but breaks the moment a business
+ *                          points Remy at a calendar it can write to
+ *                          without owning — which the picker allows.
+ *   calendar.app.created   most private, but confines Remy to its own
+ *                          secondary calendar. A product decision, not
+ *                          a scope tweak.
  */
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.freebusy",
 ];
 
-/** The scopes a connection must actually hold to be usable. */
+/**
+ * The scopes a connection must actually hold to be usable.
+ *
+ * Enforced at the callback (hasRequiredScopes), because Google lets a
+ * user untick individual permissions on the consent screen — a partial
+ * grant is refused there rather than surfacing as a 403 mid-booking.
+ * Every entry here must therefore stay in step with GOOGLE_SCOPES.
+ */
 export const GOOGLE_REQUIRED_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.freebusy",
 ];
 
 export interface GoogleConfig {

@@ -62,6 +62,52 @@ export default function PrivacyPolicyPage() {
               <li>Appointment and booking details, where you book, reschedule, or cancel a service</li>
             </ul>
 
+            <h3 className="text-white font-medium mt-5 mb-2">From a connected Google Calendar (optional)</h3>
+            <p className="mb-2">
+              If a Customer chooses to connect a Google Calendar, Remy is granted access to that account
+              strictly to schedule appointments. We request the narrowest permissions Google offers for
+              this — the ability to see the list of calendars, to check availability, and to manage events
+              — and deliberately <strong className="text-white">not</strong> permission to read the calendar
+              itself. Remy is therefore unable to see the content of events it did not create, even in
+              principle. We access only the following, and only for that purpose:
+            </p>
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li>
+                <strong className="text-white">The list of calendars on the account</strong> — the name and
+                identifier of each, so the Customer can choose which one Remy should use. We store only the
+                chosen calendar&rsquo;s name and identifier.
+              </li>
+              <li>
+                <strong className="text-white">Free/busy times</strong> — the start and end times of periods
+                already occupied on that calendar, so Remy does not double-book. Google returns
+                <strong className="text-white"> times only</strong> for this permission: no event titles,
+                descriptions, locations, attendees or guests are shared with us. These times are used to
+                answer a single availability question and are{" "}
+                <strong className="text-white">never stored</strong>.
+              </li>
+              <li>
+                <strong className="text-white">Appointments Remy creates</strong> — Remy can add, move and
+                cancel calendar events for bookings made through it. It does not read, change or delete any
+                other event on the calendar. For each appointment we store only Google&rsquo;s identifier for
+                the event we created, so we can move or cancel that same event later.
+              </li>
+              <li>
+                <strong className="text-white">Which Google account was connected</strong> — the account
+                identifier, email address and display name, so the Customer can see which calendar is linked.
+              </li>
+            </ul>
+            <p className="mt-3">
+              Events created by Remy contain the booking details already provided in the conversation: the
+              service requested, the End User&rsquo;s name, their email address (added as a guest so they
+              receive the invitation), the service address where one was given, and the appointment time.
+            </p>
+            <p className="mt-3">
+              Access is granted by the Customer through Google&rsquo;s own consent screen and can be withdrawn
+              at any time — by choosing <em>Disconnect</em> in Settings &rarr; Integrations, which also asks
+              Google to revoke our access and deletes the stored credentials, or from the Customer&rsquo;s
+              Google Account permissions page. Access tokens are encrypted before storage.
+            </p>
+
             <h3 className="text-white font-medium mt-5 mb-2">Collected automatically</h3>
             <ul className="list-disc pl-5 space-y-1.5">
               <li>Basic technical data (such as IP address) used briefly to prevent abuse of our chat and booking systems — this is not linked to your identity or stored long-term</li>
@@ -109,7 +155,31 @@ export default function PrivacyPolicyPage() {
               <li><strong className="text-white">Stripe</strong> — processing subscription payments</li>
               <li><strong className="text-white">Vercel</strong> — application hosting</li>
               <li><strong className="text-white">Sentry</strong> — error monitoring and diagnostics</li>
+              <li><strong className="text-white">Google Calendar</strong> — checking availability and creating, moving and cancelling appointments, where a Customer has connected their calendar</li>
             </ul>
+            <p className="mt-3">
+              <strong className="text-white">Google user data.</strong> NiteOwl&rsquo;s use and transfer of
+              information received from Google APIs adheres to the{" "}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                className="text-blue-400 hover:text-blue-300 underline"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Google API Services User Data Policy
+              </a>
+              , including its Limited Use requirements. We use calendar data only to provide the scheduling
+              features described above. We do not sell it, use it for advertising or to build advertising
+              profiles, use it to train AI models, or allow anyone to read it — except where the Customer asks
+              us to, where it is needed to investigate a security issue or a fault they have reported, or
+              where the law requires it.
+            </p>
+            <p className="mt-3">
+              One clarification, because it is easy to assume otherwise: our AI provider never receives your
+              calendar. When Remy tells an End User that a time is unavailable, or offers an alternative, the
+              only calendar-derived information involved is that decision and the suggested times themselves.
+              Event titles, descriptions, locations, guests and attendees are never sent to any AI provider.
+            </p>
             <p className="mt-3">
               A Customer using Remy can see the enquiries, leads, and bookings that come through their own
               account — that is the core function of the product. We do not sell personal information to
@@ -135,6 +205,12 @@ export default function PrivacyPolicyPage() {
               End User conversation, lead, and booking data is retained by the relevant Customer&rsquo;s account
               for as long as that account exists, so the business can maintain its own customer records.
               Technical rate-limiting data is held only briefly, in memory, and is not persisted.
+            </p>
+            <p className="mt-3">
+              Google Calendar free/busy times are never stored — they are read to answer one availability
+              question and discarded. Calendar access credentials are deleted as soon as a Customer
+              disconnects the integration. The identifiers linking a booking to the calendar event Remy
+              created are kept alongside that booking, so the appointment can be moved or cancelled later.
             </p>
           </section>
 
