@@ -2,6 +2,31 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Production data — 11 stale test rows cancelled, releasing six blocked appointment slots)
+
+**Documentation of a production data operation. No code, schema, configuration or deployment change.** Full record, verification queries and rollback in `docs/sql/2026-08-08_stale_capacity_holds_cancelled.sql`, following the convention set by `2026-07-12_voice_test_rows_cleanup.sql`.
+
+**Why.** The overlap fix deployed as `c6f5bd1` changed capacity from an exact-timestamp match to an interval overlap. Under the old rule a stale test request at 15:00 blocked only that instant; under overlap it blocks the open interval (14:00, 16:00). Eleven leads left behind by the owner's own test calls on 6–8 August therefore began blocking **six real hourly starts** across 10–13 August. The rows were correct data — the fix simply made their footprint honest.
+
+**Cancelled, not deleted.** The held-slot check excludes `cancelled`/`lost` by design, so cancelling frees the slots exactly as deleting would, while preserving every row, its metadata and its link to the originating `voice_calls` record. It is also trivially reversible.
+
+**Scope and safety.** Eleven **explicit ids**, never a status/date/org predicate — a broad `WHERE` would have swept up rows that were audited and deliberately excluded. All 11 re-read immediately before the write and checked on eight criteria each (88/88 passed); the mutation was gated on that result. Issued as one statement, so it committed as a single transaction.
+
+**Verified by diffing a full 49-row pre-change snapshot against a post-change read, column by column:**
+
+| | Before | After |
+|---|---|---|
+| Total production leads | 49 | **49 — no rows deleted** |
+| `awaiting_confirmation` | 30 | 19 |
+| Future capacity-holding rows | 11 | **0** |
+| Future confirmed bookings | 0 | 0 |
+
+Columns changed on the 11 targets: **`status` and `updated_at` only** (the latter maintained by the table, not set by the operation). **Rows changed outside the 11: zero.** `voice_calls` untouched.
+
+**Capacity re-verified** by issuing the two predicates the deployed code actually runs, rather than re-deriving the rule: all 32 hourly starts across 10–13 August are free, and all six previously-blocked starts are restored — Mon 10:00; Tue 10:00 and 11:00; Wed 15:00 and 16:00; Thu 09:00. The off-grid 15:02 row, from a mis-transcribed "3:02 PM", is released too.
+
+Untouched as audited: the 4 inert future rows, the 15 past/null-datetime rows, all `Verification Plumbing Co` records, and every dashboard/widget lead. Contact details are deliberately omitted from the audit file — they are fabricated test personas and the ids are authoritative.
+
 ## 2026-08-08 (Booking — overlapping appointments are now prevented, and unchecked slots fail closed)
 
 ### Fixed — a booking conflicted only when the START TIMES were identical
