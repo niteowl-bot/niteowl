@@ -606,6 +606,40 @@ export async function recordAppointmentLink(
 }
 
 /**
+ * Updates a link after the remote event has been moved or removed.
+ *
+ * Like recordAppointmentLink, a failure here is NOT a booking failure —
+ * the calendar has already changed either way. Losing the bookkeeping
+ * costs a sync badge, and must never undo what the customer was told.
+ */
+export async function updateAppointmentLink(
+  orgId: string,
+  linkId: string,
+  fields: {
+    syncStatus: "synced" | "failed" | "deleted";
+    externalEtag?: string | null;
+    lastError?: string | null;
+  }
+): Promise<void> {
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("integration_links")
+    .update({
+      sync_status: fields.syncStatus,
+      ...(fields.externalEtag !== undefined ? { external_etag: fields.externalEtag } : {}),
+      last_error: fields.lastError ?? null,
+      synced_at: fields.syncStatus === "synced" ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", linkId)
+    .eq("org_id", orgId);
+
+  if (error) {
+    console.error("[integrations] failed to update appointment link:", error.message);
+  }
+}
+
+/**
  * Disconnects an integration: revokes with the provider where possible,
  * then removes the stored credentials and the selected resources so
  * nothing can sync afterwards.

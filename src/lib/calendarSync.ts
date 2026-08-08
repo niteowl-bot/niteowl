@@ -1,11 +1,15 @@
+import { appointmentsOverlap } from "@/lib/availability";
 import { checkBookingSlot, getOrgTimezone } from "@/lib/bookingAvailability";
 import {
+  cancelOrgEvent,
   createOrgEvent,
   resolveOrgCalendar,
+  updateOrgEvent,
 } from "@/lib/integrations/capabilities/calendarService";
 import {
   findAppointmentLink,
   recordAppointmentLink,
+  updateAppointmentLink,
 } from "@/lib/integrations/connections";
 import { isCalendarEventCreationEnabled } from "@/lib/integrations/flags";
 
@@ -46,12 +50,10 @@ export type CalendarConfirmOutcome =
   /** The write itself failed. */
   | "failed"
   /**
-   * A link exists, but for a DIFFERENT instant than this appointment now
-   * holds — i.e. it was rescheduled after the event was created. Moving
-   * the event is milestone 6; until then this is handed to a human
-   * rather than silently confirmed against a stale event.
+   * A link exists and the event was moved to match this appointment.
+   * Reached when the time changed outside the reschedule path.
    */
-  | "stale_link";
+  | "realigned";
 
 export interface CalendarConfirmResult {
   outcome: CalendarConfirmOutcome;
@@ -61,9 +63,13 @@ export interface CalendarConfirmResult {
   suggestedIso: string | null;
 }
 
-/** Only these two mean the calendar genuinely holds the appointment. */
+/** These mean the calendar genuinely holds the appointment, at this time. */
 export function isCalendarConfirmed(outcome: CalendarConfirmOutcome): boolean {
-  return outcome === "created" || outcome === "already_linked";
+  return (
+    outcome === "created" ||
+    outcome === "already_linked" ||
+    outcome === "realigned"
+  );
 }
 
 /**
@@ -132,6 +138,191 @@ function summarise(details: AppointmentDetails): { title: string; description: s
 }
 
 /**
+ * Points an existing event at the appointment's current time.
+ *
+ * Idempotent by nature — an update that sets an event to the time it
+ * already holds is a no-op at the provider — which is why the caller
+ * never has to know where the event currently sits. `changed` is only
+ * ever a hint for logging; correctness does not depend on it.
+ */
+async function moveEventToMatch(
+  details: AppointmentDetails,
+  linkId: string,
+  eventId: string
+): Promise<{ ok: boolean; changed: boolean }> {
+  const timezone = await getOrgTimezone(details.orgId);
+  const { title, description } = summarise(details);
+
+  const write = await updateOrgEvent(details.orgId, eventId, {
+    title,
+    description,
+    location: details.location,
+    startIso: details.startIso,
+    durationMinutes: details.durationMinutes,
+    timezone,
+    idempotencyKey: buildAppointmentIdempotencyKey(details.leadId, details.startIso),
+    attendeeEmail: details.customerEmail,
+    attendeeName: details.customerName,
+  });
+
+  if (!write.ok) {
+    console.error(
+      `[calendar-sync] could not move event ${eventId} for lead ${details.leadId}: ${write.reason}`
+    );
+    await updateAppointmentLink(details.orgId, linkId, {
+      syncStatus: "failed",
+      lastError: write.reason,
+    });
+    return { ok: false, changed: false };
+  }
+
+  await updateAppointmentLink(details.orgId, linkId, {
+    syncStatus: "synced",
+    externalEtag: write.ref.etag,
+    lastError: null,
+  });
+  return { ok: true, changed: true };
+}
+
+/** How a reschedule or cancellation ended. */
+export type CalendarChangeOutcome =
+  /** Nothing to change — no calendar, or this appointment has no event. */
+  | "no_calendar"
+  /** The calendar was updated. */
+  | "synced"
+  /** The slot is not free on the calendar. Nothing was moved. */
+  | "conflict"
+  /** The provider refused or could not be reached. */
+  | "failed";
+
+export interface CalendarChangeResult {
+  outcome: CalendarChangeOutcome;
+  suggestedIso: string | null;
+}
+
+/**
+ * Moves an appointment's calendar event to a new time.
+ *
+ * The caller must NOT tell the customer the appointment moved unless
+ * this returns "no_calendar" or "synced". Updating the local time while
+ * the event stays put is exactly the desync milestone 6 exists to close.
+ *
+ * The new slot is re-verified first — with one deliberate exception. If
+ * the new time OVERLAPS the old one (moving 10:00 to 10:30), the org's
+ * OWN event is sitting in that window and free/busy cannot tell it apart
+ * from anyone else's, so the external check is skipped and the internal
+ * ones stand. Without that, every short reschedule would be refused as a
+ * clash with the very event it is about to move.
+ */
+export async function rescheduleAppointmentOnCalendar(
+  details: AppointmentDetails,
+  previousStartIso: string | null
+): Promise<CalendarChangeResult> {
+  try {
+    if (!isCalendarEventCreationEnabled()) {
+      return { outcome: "no_calendar", suggestedIso: null };
+    }
+
+    const calendar = await resolveOrgCalendar(details.orgId);
+    if (!calendar || !calendar.syncEnabled) {
+      return { outcome: "no_calendar", suggestedIso: null };
+    }
+
+    const link = await findAppointmentLink(
+      details.orgId,
+      details.leadId,
+      calendar.connectionId
+    );
+    // Nothing was ever written for this appointment, so there is nothing
+    // to move. Creation is confirmAppointmentOnCalendar's job.
+    if (!link) return { outcome: "no_calendar", suggestedIso: null };
+
+    const movingWithinItself =
+      previousStartIso !== null &&
+      appointmentsOverlap(previousStartIso, details.startIso, details.durationMinutes);
+
+    if (!movingWithinItself) {
+      const decision = await checkBookingSlot(
+        details.orgId,
+        details.startIso,
+        details.durationMinutes
+      );
+      if (decision.externalCheckFailed) {
+        return { outcome: "failed", suggestedIso: null };
+      }
+      if (!decision.available || decision.externalConflictObserved) {
+        return { outcome: "conflict", suggestedIso: decision.suggestedIso };
+      }
+    }
+
+    const moved = await moveEventToMatch(details, link.id, link.externalId);
+    return {
+      outcome: moved.ok ? "synced" : "failed",
+      suggestedIso: null,
+    };
+  } catch (err) {
+    console.error(
+      "[calendar-sync] unexpected failure moving an event:",
+      err instanceof Error ? err.message : String(err)
+    );
+    return { outcome: "failed", suggestedIso: null };
+  }
+}
+
+/**
+ * Removes an appointment's calendar event.
+ *
+ * DELIBERATELY ASYMMETRIC with reschedule: a customer must always be
+ * able to cancel. The caller cancels locally whatever this returns, and
+ * a failure here leaves the link marked `failed` with its error for the
+ * owner to see. A business clearing one ghost event is a far better
+ * outcome than a customer trapped in an appointment because Google was
+ * unreachable.
+ *
+ * Already-gone is success, not failure — the provider layer maps 404 and
+ * 410 to the same place, so a repeated cancel is safe.
+ */
+export async function cancelAppointmentOnCalendar(
+  orgId: string,
+  leadId: string
+): Promise<CalendarChangeResult> {
+  try {
+    if (!isCalendarEventCreationEnabled()) {
+      return { outcome: "no_calendar", suggestedIso: null };
+    }
+
+    const calendar = await resolveOrgCalendar(orgId);
+    if (!calendar || !calendar.syncEnabled) {
+      return { outcome: "no_calendar", suggestedIso: null };
+    }
+
+    const link = await findAppointmentLink(orgId, leadId, calendar.connectionId);
+    if (!link) return { outcome: "no_calendar", suggestedIso: null };
+
+    const removed = await cancelOrgEvent(orgId, link.externalId);
+
+    await updateAppointmentLink(orgId, link.id, {
+      syncStatus: removed.ok ? "deleted" : "failed",
+      lastError: removed.ok ? null : (removed.reason ?? "cancel failed"),
+    });
+
+    if (!removed.ok) {
+      console.error(
+        `[calendar-sync] event ${link.externalId} could not be removed for lead ${leadId}: ${removed.reason}`
+      );
+    }
+
+    return { outcome: removed.ok ? "synced" : "failed", suggestedIso: null };
+  } catch (err) {
+    console.error(
+      "[calendar-sync] unexpected failure cancelling an event:",
+      err instanceof Error ? err.message : String(err)
+    );
+    return { outcome: "failed", suggestedIso: null };
+  }
+}
+
+/**
  * Creates the calendar event for an appointment that has already passed
  * every internal check, and reports honestly what happened.
  *
@@ -167,22 +358,24 @@ export async function confirmAppointmentOnCalendar(
     );
 
     if (existing) {
-      // The stored external id is derived from the instant, so it only
-      // matches while the appointment still sits where it did.
-      const stillCurrent =
-        existing.externalId.includes(String(new Date(details.startIso).getTime()));
-      if (stillCurrent) {
-        return {
-          outcome: "already_linked",
-          externalEventId: existing.externalId,
-          suggestedIso: null,
-        };
-      }
-      console.error(
-        `[calendar-sync] lead ${details.leadId} has an event for a different time ` +
-          `(${existing.externalId}); moving it is not implemented — sending for review`
+      // An event already mirrors this appointment. Whether it sits at
+      // the right time can no longer be inferred from its id — a moved
+      // event keeps the id it was created with (milestone 6 PATCHes in
+      // place rather than recreating). So instead of guessing, make it
+      // true: an update is idempotent, and setting an event to the time
+      // it already holds costs one request and changes nothing.
+      const realigned = await moveEventToMatch(
+        details,
+        existing.id,
+        existing.externalId
       );
-      return none("stale_link");
+      return realigned.ok
+        ? {
+            outcome: realigned.changed ? "realigned" : "already_linked",
+            externalEventId: existing.externalId,
+            suggestedIso: null,
+          }
+        : none("failed");
     }
 
     // ── Re-verify AT the write, not at conversation time ──

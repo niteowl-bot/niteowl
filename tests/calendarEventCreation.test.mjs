@@ -55,6 +55,8 @@ const APPOINTMENT = {
 function installStubs({
   busy = [],
   createStatus = 200,
+  updateStatus = 200,
+  deleteStatus = 200,
   existingLinks = [],
   eventCreation = "true",
   syncEnabled = true,
@@ -82,7 +84,10 @@ function installStubs({
   );
 
   const realFetch = globalThis.fetch;
-  const calls = { freeBusy: 0, creates: [], linkInserts: [], orgIds: [], leadInserts: [], leadUpdates: [] };
+  const calls = {
+    freeBusy: 0, creates: [], updates: [], deletes: [],
+    linkInserts: [], linkUpdates: [], orgIds: [], leadInserts: [], leadUpdates: [],
+  };
 
   const json = (body, status = 200) =>
     new Response(JSON.stringify(body), {
@@ -112,9 +117,25 @@ function installStubs({
       return json({ calendars: { [CALENDAR_ID]: { busy } } });
     }
 
-    // The event create.
+    // Event create (POST), move (PATCH) and removal (DELETE) all live
+    // under the same path — kept apart so a test can tell "a second
+    // event was created" from "the existing one was moved".
     if (url.includes("/calendar/v3/calendars/") && url.includes("/events")) {
       const body = init.body ? JSON.parse(init.body) : {};
+      if (method === "PATCH") {
+        calls.updates.push({ url, body });
+        if (updateStatus !== 200) {
+          return json({ error: { message: "boom" } }, updateStatus);
+        }
+        return json({ id: "existing-event", etag: '"etag-2"' });
+      }
+      if (method === "DELETE") {
+        calls.deletes.push({ url });
+        if (deleteStatus !== 200) {
+          return json({ error: { message: "boom" } }, deleteStatus);
+        }
+        return json({});
+      }
       calls.creates.push({ method, url, body });
       if (createStatus === 409) {
         return json({ error: { errors: [{ reason: "duplicate" }] } }, 409);
@@ -162,6 +183,10 @@ function installStubs({
     }
 
     if (url.includes("/rest/v1/integration_links")) {
+      if (method === "PATCH") {
+        calls.linkUpdates.push(init.body ? JSON.parse(init.body) : {});
+        return json([]);
+      }
       if (method === "POST") {
         calls.linkInserts.push(init.body ? JSON.parse(init.body) : {});
         if (linkInsertFails) {
@@ -428,7 +453,6 @@ describe("duplicate protection", () => {
       ],
     });
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
-    assert.equal(result.outcome, "already_linked");
     assert.ok(mayConfirmBooking(result.outcome), "the event is genuinely there");
     assert.equal(stubs.calls.creates.length, 0, "no duplicate event");
     assert.equal(stubs.calls.linkInserts.length, 0, "no duplicate link");
@@ -450,17 +474,21 @@ describe("duplicate protection", () => {
     assert.equal(stubs.calls.creates[0].body.id, expected);
   });
 
-  test("a link pointing at a DIFFERENT time is never silently confirmed", async () => {
-    // The appointment was rescheduled after the event was created.
-    // Moving it is milestone 6; until then a human decides.
-    const staleEventId = toGoogleEventId(
+  // Milestone 5 handed this case to a human ("stale_link"), because
+  // moving an event did not exist yet. Milestone 6 makes it true
+  // instead: the event is realigned to whatever time the appointment
+  // now holds. A moved event keeps the id it was created with, so
+  // staleness can no longer be inferred from that id — which is exactly
+  // why guessing was replaced by an idempotent update.
+  test("a link pointing at a DIFFERENT time is REALIGNED, not duplicated", async () => {
+    const originalEventId = toGoogleEventId(
       buildAppointmentIdempotencyKey(LEAD_ID, "2026-08-11T13:00:00.000Z")
     );
     stubs = installStubs({
       existingLinks: [
         {
           id: "link-1",
-          external_id: staleEventId,
+          external_id: originalEventId,
           external_etag: null,
           sync_status: "synced",
           resource_id: RESOURCE_ID,
@@ -468,9 +496,11 @@ describe("duplicate protection", () => {
       ],
     });
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
-    assert.equal(result.outcome, "stale_link");
-    assert.equal(mayConfirmBooking(result.outcome), false);
-    assert.equal(stubs.calls.creates.length, 0);
+    assert.ok(mayConfirmBooking(result.outcome));
+    assert.equal(stubs.calls.creates.length, 0, "never a second event");
+    assert.equal(stubs.calls.updates.length, 1, "the existing one is moved");
+    // Moved to the appointment's CURRENT time, in local wall time.
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-11T10:00:00");
   });
 });
 
@@ -644,5 +674,335 @@ describe("end to end — the customer is only told what is true", () => {
     assert.equal(result.unavailableReason, null);
     assert.equal(stubs.calls.creates.length, 0);
     assert.equal(stubs.calls.freeBusy, 0);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  Milestone 6 — reschedule and cancel sync
+// ══════════════════════════════════════════════════════════════════
+//
+// The truthfulness rule is deliberately ASYMMETRIC, and that asymmetry
+// is the whole design:
+//
+//   RESCHEDULE  must not be claimed unless Google moved. Saying "moved
+//               to Thursday" while the event sits on Tuesday is the
+//               desync this milestone exists to close, and the customer
+//               loses nothing by trying again.
+//
+//   CANCEL      must always succeed locally. Trapping a customer in an
+//               appointment because Google is unreachable is far worse
+//               than leaving the business one ghost event to clear.
+
+const LINKED = [
+  {
+    id: "link-1",
+    external_id: "rem-existing-event",
+    external_etag: '"etag-1"',
+    sync_status: "synced",
+    resource_id: RESOURCE_ID,
+  },
+];
+
+// Thursday 13 August 2026, 10:00 London — well clear of START_ISO.
+const MOVED_ISO = "2026-08-13T09:00:00.000Z";
+
+async function reschedule(toIso, fromIso = START_ISO, opts = {}) {
+  const { rescheduleAppointmentOnCalendar } = await import("@/lib/calendarSync");
+  return rescheduleAppointmentOnCalendar(
+    { ...APPOINTMENT, startIso: toIso, ...opts },
+    fromIso
+  );
+}
+
+describe("milestone 6 — reschedule moves the event", () => {
+  test("a clear new slot moves the existing event, never creates a new one", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "synced");
+    assert.equal(stubs.calls.updates.length, 1);
+    assert.equal(stubs.calls.creates.length, 0, "a move is not a new booking");
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-13T10:00:00");
+    assert.equal(stubs.calls.updates[0].body.start.timeZone, "Europe/London");
+  });
+
+  test("the link is re-stamped as synced, with the new etag", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    await reschedule(MOVED_ISO);
+    const patch = stubs.calls.linkUpdates.at(-1);
+    assert.equal(patch.sync_status, "synced");
+    assert.equal(patch.external_etag, '"etag-2"');
+    assert.equal(patch.last_error, null);
+  });
+
+  test("the new slot is re-verified before the move", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    await reschedule(MOVED_ISO);
+    assert.ok(stubs.calls.freeBusy >= 1);
+  });
+
+  test("a busy new slot refuses the move and offers an alternative", async () => {
+    stubs = installStubs({
+      existingLinks: LINKED,
+      busy: [{ start: MOVED_ISO, end: "2026-08-13T10:00:00.000Z" }],
+    });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "conflict");
+    assert.equal(stubs.calls.updates.length, 0, "nothing may move onto a busy slot");
+  });
+
+  test("a failed provider move reports failure — the caller keeps the old time", async () => {
+    stubs = installStubs({ existingLinks: LINKED, updateStatus: 500 });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "failed");
+    const patch = stubs.calls.linkUpdates.at(-1);
+    assert.equal(patch.sync_status, "failed", "the desync is recorded, not hidden");
+    assert.ok(patch.last_error);
+  });
+
+  test("a SHORT move does not clash with the appointment's own event", async () => {
+    // 10:00 -> 10:30. The org's own event occupies that window and
+    // free/busy cannot tell it from anyone else's, so the external
+    // check is skipped; without that, every short reschedule would be
+    // refused as a clash with the very event it is about to move.
+    stubs = installStubs({
+      existingLinks: LINKED,
+      busy: [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }],
+    });
+    const result = await reschedule("2026-08-11T09:30:00.000Z", START_ISO);
+    assert.equal(result.outcome, "synced");
+    assert.equal(stubs.calls.updates.length, 1);
+  });
+
+  test("an appointment with no event is left alone", async () => {
+    stubs = installStubs({ existingLinks: [] });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.updates.length, 0);
+  });
+
+  test("the flag off does nothing at all", async () => {
+    stubs = installStubs({ existingLinks: LINKED, eventCreation: "false" });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.updates.length, 0);
+    assert.equal(stubs.calls.freeBusy, 0);
+  });
+});
+
+describe("milestone 6 — cancel removes the event", () => {
+  async function cancel(orgId = ORG_ID, leadId = LEAD_ID) {
+    const { cancelAppointmentOnCalendar } = await import("@/lib/calendarSync");
+    return cancelAppointmentOnCalendar(orgId, leadId);
+  }
+
+  test("the event is deleted and the link marked deleted", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    const result = await cancel();
+    assert.equal(result.outcome, "synced");
+    assert.equal(stubs.calls.deletes.length, 1);
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "deleted");
+  });
+
+  test("an already-gone event is success, so a repeated cancel is safe", async () => {
+    stubs = installStubs({ existingLinks: LINKED, deleteStatus: 404 });
+    const result = await cancel();
+    assert.equal(result.outcome, "synced", "404/410 mean the desired end state");
+  });
+
+  test("a provider failure is recorded, never hidden", async () => {
+    stubs = installStubs({ existingLinks: LINKED, deleteStatus: 500 });
+    const result = await cancel();
+    assert.equal(result.outcome, "failed");
+    const patch = stubs.calls.linkUpdates.at(-1);
+    assert.equal(patch.sync_status, "failed");
+    assert.ok(patch.last_error, "the owner must be able to see the ghost event");
+  });
+
+  test("no event, nothing to remove", async () => {
+    stubs = installStubs({ existingLinks: [] });
+    const result = await cancel();
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.deletes.length, 0);
+  });
+
+  test("every query stays scoped to the calling org", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    await cancel();
+    assert.ok(stubs.calls.orgIds.every((id) => id === ORG_ID));
+  });
+
+  test("neither operation ever throws into the caller", async () => {
+    stubs = installStubs({ existingLinks: LINKED });
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (u, i) => {
+      if (String(u).includes("/calendar/v3/calendars/")) throw new TypeError("down");
+      return inner(u, i);
+    };
+    assert.equal((await cancel()).outcome, "failed");
+    assert.equal((await reschedule(MOVED_ISO)).outcome, "failed");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  Blocker regressions found reviewing milestone 6
+// ══════════════════════════════════════════════════════════════════
+//
+// Both were real, both were missed by the tests above, and both are
+// pinned here through the paths a customer actually travels.
+
+/**
+ * A chat/widget turn arriving at a lead that is ALREADY booked — the
+ * shape of every reschedule that does not go through the manage link.
+ */
+// The target time comes from the datetime parser, which bookedLeadStubs
+// pins to MOVED_ISO — there is no argument to vary here, and pretending
+// otherwise would suggest control this helper does not have.
+async function chatReschedule() {
+  const { capturePartialLead } = await import("@/lib/leadCapture");
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  return capturePartialLead(
+    createAdminClient(),
+    ORG_ID,
+    "conv-1",
+    "actually, can we move it?",
+    {
+      intent: "reschedule",
+      name: "Brian Murphy",
+      email: "brian@example.com",
+      phone: null,
+      service: null,
+      preferred_datetime: "Thursday at 10am",
+      confidence: 0.9,
+    },
+    "web_widget"
+  );
+}
+
+/**
+ * Stubs a lead that is already booked at `fromIso`, so the merge path
+ * finds it and treats the turn as a reschedule.
+ */
+function bookedLeadStubs(opts = {}) {
+  const s = installStubs({ existingLinks: LINKED, ...opts });
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(typeof input === "string" ? input : input.url);
+    const method = (init.method ?? "GET").toUpperCase();
+    const wantsObject = (new Headers(init.headers ?? {}).get("accept") ?? "").includes(
+      "pgrst.object"
+    );
+    if (url.includes("api.openai.com")) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: MOVED_ISO } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.includes("/rest/v1/leads") && method === "GET") {
+      const row = {
+        id: LEAD_ID,
+        name: "Brian Murphy",
+        email: "brian@example.com",
+        phone: null,
+        service_needed: "Boiler service",
+        preferred_datetime: "Tuesday 10am",
+        appointment_datetime: START_ISO,
+        message: "hi",
+        status: "booked",
+        conversation_id: "conv-1",
+        manage_token: "mt",
+        metadata: {},
+      };
+      return new Response(JSON.stringify(wantsObject ? row : [row]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return inner(input, init);
+  };
+  return s;
+}
+
+describe("BLOCKER 1 — a chat reschedule moves the real event", () => {
+  test("the existing event is moved, and the new time is stored", async () => {
+    stubs = bookedLeadStubs();
+    await chatReschedule();
+    assert.equal(stubs.calls.updates.length, 1, "the Google event must actually move");
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-13T10:00:00");
+    assert.equal(stubs.calls.creates.length, 0, "a move is never a second event");
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, MOVED_ISO);
+  });
+
+  test("a REFUSED move keeps the original time — the silent desync", async () => {
+    // The bug this replaces: the lead moved to Thursday while the event
+    // stayed on Tuesday, and the customer was told Thursday.
+    stubs = bookedLeadStubs({ updateStatus: 500 });
+    const result = await chatReschedule();
+    const written = stubs.calls.leadUpdates.at(-1);
+    assert.equal(
+      written.appointment_datetime,
+      START_ISO,
+      "the stored time must NOT move when Google refused"
+    );
+    assert.equal(written.status, "booked", "the original booking still stands");
+    assert.equal(result.unavailableReason, "lookup_failed");
+  });
+
+  test("a CONFLICT on the new slot keeps the original time too", async () => {
+    stubs = bookedLeadStubs({
+      busy: [{ start: MOVED_ISO, end: "2026-08-13T10:00:00.000Z" }],
+    });
+    const result = await chatReschedule();
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, START_ISO);
+    assert.equal(result.unavailableReason, "capacity");
+    assert.equal(stubs.calls.updates.length, 0, "nothing moves onto a busy slot");
+  });
+
+  test("with the flag off the time still moves — behaviour as before", async () => {
+    stubs = bookedLeadStubs({ eventCreation: "false" });
+    await chatReschedule();
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, MOVED_ISO);
+    assert.equal(stubs.calls.updates.length, 0);
+    assert.equal(stubs.calls.freeBusy, 0);
+  });
+});
+
+describe("BLOCKER 2 — cancellation is local-first", () => {
+  async function cancelViaManageLink() {
+    const { POST } = await import("@/app/api/bookings/manage/route");
+    const { NextRequest } = await import("next/server");
+    const req = new NextRequest("https://app.test/api/bookings/manage", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": `1.2.3.${Math.floor(Math.random() * 250)}` },
+      body: JSON.stringify({ token: "mt", action: "cancel" }),
+    });
+    return POST(req);
+  }
+
+  test("the lead is cancelled BEFORE Google is touched", async () => {
+    stubs = bookedLeadStubs();
+    const order = [];
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(typeof input === "string" ? input : input.url);
+      const method = (init.method ?? "GET").toUpperCase();
+      if (url.includes("/rest/v1/leads") && method === "PATCH") order.push("local");
+      if (url.includes("/calendar/v3/calendars/") && method === "DELETE") order.push("google");
+      return inner(input, init);
+    };
+    await cancelViaManageLink();
+    assert.deepEqual(order, ["local", "google"], "local state must be safe first");
+  });
+
+  test("a provider failure still leaves the lead cancelled", async () => {
+    // The failure this ordering makes impossible: event deleted while
+    // the lead still says booked. The accepted failure is the reverse —
+    // a ghost event, recorded on the link.
+    stubs = bookedLeadStubs({ deleteStatus: 500 });
+    const res = await cancelViaManageLink();
+    assert.equal(res.status, 200, "the customer's cancellation must not fail");
+    const cancelled = stubs.calls.leadUpdates.find((u) => u.status === "cancelled");
+    assert.ok(cancelled, "the lead is cancelled regardless of Google");
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "failed");
+    assert.ok(stubs.calls.linkUpdates.at(-1).last_error, "the ghost event is recorded");
   });
 });

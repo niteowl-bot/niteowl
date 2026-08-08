@@ -831,10 +831,49 @@ gets a 409 rather than a duplicate event — so the failure mode is a false "alr
 booked", not two events. Closing it properly needs a database-level claim on the slot,
 which is L1/L2 territory.
 
-**Not built:** reschedule and cancel do not yet move or delete the event (milestone 6).
-`/api/bookings/manage` can therefore leave a stale event behind; `stale_link` exists so
-that state is surfaced for review rather than silently confirmed. **This is the immediate
-follow-up** and should land before the flag is enabled for a business that reschedules.
+#### Milestone 6 — reschedule and cancel sync (2026-08-08)
+
+Two operations added alongside creation, sharing the same flag and the same module.
+
+**A reschedule PATCHes the event in place** rather than deleting and recreating it: the
+customer keeps one event in their calendar with its history, and the attendee is not sent
+a cancellation followed by a fresh invite. The consequence is that a moved event keeps
+the id it was *created* with, so the event id no longer encodes the current time — which
+is why milestone 5's `stale_link` inference is gone. Guessing was replaced by *making it
+true*: when a link already exists, the event is realigned with an idempotent update.
+Setting an event to the time it already holds costs one request and changes nothing.
+
+**The truthfulness rule is deliberately asymmetric**, and this is the core of the design:
+
+| | On provider failure | Why |
+|---|---|---|
+| **Reschedule** | The move is **refused**; the local time is unchanged and the customer is asked to retry | Saying "moved to Thursday" while the event sits on Tuesday is the exact desync this closes. The customer loses nothing by trying again |
+| **Cancel** | The local cancellation **goes ahead anyway**; the link is marked `failed` with its error | A customer must always be able to cancel. Trapping them because Google is unreachable is far worse than leaving the business one ghost event to clear |
+
+**One known limitation, handled explicitly.** Google's free/busy returns intervals with no
+event ids, so the org's *own* event cannot be filtered out of a conflict check. Moving an
+appointment by less than one appointment-duration (10:00 → 10:30) would therefore clash
+with the very event it is about to move. The check is skipped when the new slot overlaps
+the old one — the internal checks still apply, and the only thing plausibly occupying that
+window is the appointment itself. Closing it properly needs an event-id-aware busy read
+(`events.list` rather than `freeBusy`), which is not worth it yet.
+
+**Chat-initiated reschedules move the event immediately.** `capturePartialLead` detects an
+already-booked lead whose `appointment_datetime` is changing and calls
+`rescheduleAppointmentOnCalendar` *before* writing the new time — a refusal keeps the old
+time and reports it truthfully. This needed its own path: the calendar-backing block only
+ever fires on the transition *into* `booked`, so a reschedule of an already-booked lead
+was never covered by it. (Caught in review: the first implementation moved the stored time
+and left the event where it was, silently, on a live chat/widget path.)
+
+**Cancellation is local-first.** The lead is marked `cancelled` before Google is touched.
+Google-first created the one failure this design does not accept — the event deleted from
+the business's diary while the lead still said `booked`, holding the slot internally and
+showing nothing in the calendar. This ordering leaves only the accepted failure: a ghost
+event, recorded on the link with its error.
+
+**Still not built:** nothing writes to the calendar from the voice path, because voice
+never sets `booked`.
 
 ### BEFORE SCALE
 

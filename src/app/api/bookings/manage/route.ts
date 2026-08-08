@@ -8,6 +8,10 @@ import {
   isSlotAvailable,
   findNextAvailableSlot,
 } from "@/lib/availability";
+import {
+  cancelAppointmentOnCalendar,
+  rescheduleAppointmentOnCalendar,
+} from "@/lib/calendarSync";
 
 // Public, unauthenticated route — a customer reaches this via the
 // manage-booking link in their confirmation email, with no logged-in
@@ -144,6 +148,16 @@ export async function POST(req: NextRequest) {
   const bookingReference = lead.id.slice(0, 8).toUpperCase();
 
   if (action === "cancel") {
+    // LOCAL FIRST, deliberately. The local record is the system of
+    // record, and a customer must always be able to cancel — so the
+    // cancellation is persisted before Google is touched at all.
+    //
+    // Doing it the other way round created the one failure this design
+    // does not accept: the event deleted from the business's calendar
+    // while the lead still said "booked", holding the slot internally
+    // and showing nothing in the diary. This ordering leaves only the
+    // failure that IS accepted — a ghost event, recorded on the link
+    // with its error for the owner to clear.
     const { error: updateError } = await supabase
       .from("leads")
       .update({ status: "cancelled" })
@@ -151,6 +165,14 @@ export async function POST(req: NextRequest) {
 
     if (updateError) {
       return NextResponse.json({ error: "Failed to cancel booking" }, { status: 500 });
+    }
+
+    const removed = await cancelAppointmentOnCalendar(lead.org_id, lead.id);
+    if (removed.outcome === "failed") {
+      console.error(
+        `[bookings/manage] lead ${lead.id} is cancelled locally but its calendar event ` +
+          `could not be removed — the link records the failure for the owner`
+      );
     }
 
     const ownerInfo = await getOrgOwnerEmail(lead.org_id);
@@ -212,6 +234,50 @@ export async function POST(req: NextRequest) {
     }
 
     const previousDatetime = lead.appointment_datetime ?? "";
+
+    // The calendar moves BEFORE the local record, and a refusal stops
+    // the reschedule outright. This is the opposite of cancel on
+    // purpose: saying "moved to Thursday" while the event sits on
+    // Tuesday is precisely the desync this is here to prevent, and
+    // unlike a cancellation the customer loses nothing by trying again.
+    const { data: org } = await supabase
+      .from("organisations")
+      .select("appointment_duration_minutes")
+      .eq("id", lead.org_id)
+      .maybeSingle();
+
+    const moved = await rescheduleAppointmentOnCalendar(
+      {
+        orgId: lead.org_id,
+        leadId: lead.id,
+        startIso: newIso,
+        durationMinutes: org?.appointment_duration_minutes ?? 60,
+        serviceNeeded: lead.service_needed,
+        customerName: lead.name,
+        customerEmail: lead.email,
+        location: null,
+      },
+      lead.appointment_datetime
+    );
+
+    if (moved.outcome === "conflict") {
+      return NextResponse.json(
+        {
+          error: "That time is no longer available.",
+          suggestedAlternative: moved.suggestedIso,
+        },
+        { status: 409 }
+      );
+    }
+    if (moved.outcome === "failed") {
+      return NextResponse.json(
+        {
+          error:
+            "We couldn't move your appointment just now. Your original time is unchanged — please try again shortly.",
+        },
+        { status: 503 }
+      );
+    }
 
     const { error: updateError } = await supabase
       .from("leads")

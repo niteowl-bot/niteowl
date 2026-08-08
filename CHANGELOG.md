@@ -2,6 +2,48 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Calendar milestone 6 — reschedule and cancel now move and remove the event)
+
+**NOT DEPLOYED, and dark on arrival** — same `CALENDAR_EVENT_CREATION_ENABLED` flag as milestone 5, still unset everywhere. No new flag, no schema change.
+
+### A reschedule moves the event; it does not recreate it
+`rescheduleAppointmentOnCalendar` PATCHes the existing event, so the customer keeps one event with its history rather than receiving a cancellation followed by a fresh invite.
+
+The consequence is worth stating: a moved event keeps the id it was **created** with, so the event id no longer encodes the current time — which is why milestone 5's `stale_link` inference had to go. Guessing was replaced by **making it true**: when a link already exists, `confirmAppointmentOnCalendar` realigns the event with an idempotent update. Setting an event to the time it already holds costs one request and changes nothing, so the caller never has to know where the event currently sits.
+
+### The truthfulness rule is deliberately asymmetric
+This is the core of the design, not an inconsistency:
+
+| | On provider failure | Why |
+|---|---|---|
+| **Reschedule** | Refused — local time unchanged, customer asked to retry (503) | Saying "moved to Thursday" while the event sits on Tuesday is the exact desync this closes, and the customer loses nothing by trying again |
+| **Cancel** | Local cancellation goes ahead anyway; link marked `failed` with its error | A customer must **always** be able to cancel. Trapping them because Google is unreachable is far worse than leaving the business one ghost event to clear |
+
+A reschedule also re-verifies the new slot before moving, and refuses on a conflict with the engine's suggested alternative.
+
+### One known limitation, handled rather than ignored
+Google's free/busy returns intervals with **no event ids**, so the org's own event cannot be filtered out of a conflict check. Moving an appointment by less than one appointment-duration (10:00 → 10:30) would clash with the very event it is about to move. The external check is therefore skipped when the new slot overlaps the old one — the internal checks still apply, and the only thing plausibly in that window is the appointment itself. Closing it properly needs an event-id-aware busy read (`events.list` rather than `freeBusy`), which is not worth it yet.
+
+### Wiring
+`/api/bookings/manage` and `capturePartialLead`. A reschedule moves the event **before** touching the local record and aborts if it cannot; a cancellation persists locally **first**. `updateOrgEvent` and `cancelOrgEvent` are used unmodified.
+
+### Two blockers found in review, before anything shipped
+Both were real, both were on live paths, and both were missed by the first round of tests.
+
+- **A chat/widget reschedule never synced at all.** The calendar-backing block only fires on the transition *into* `booked`, so an already-booked lead being rescheduled skipped it entirely — the stored time moved to Thursday, the Google event stayed on Tuesday, and the assistant told the customer Thursday. Exactly the desync this milestone exists to close. Proved with a throwaway probe against the real engine (`GOOGLE CALLS: (none)`) rather than argued from the code. Now handled by its own path in `capturePartialLead`, before the local write, with a refusal keeping the original time.
+- **Cancellation was Google-first.** If the delete succeeded and the local update then failed, the event was gone from the business's diary while the lead still said `booked` — holding the slot internally and showing nothing in the calendar. That is the one failure this design does not accept. Now local-first, leaving only the accepted failure: a ghost event, recorded on the link.
+
+Also corrected: my own implementation note claimed chat reschedules "realign on the next confirmation pass". There was no such pass.
+
+### Tests
+`npm test` **602 passing, 0 failing** (588 → 602, +14). `tsc --noEmit` clean.
+
+Covers: a clear move, link re-stamped with the new etag, re-verification before the move, a busy slot refusing it, provider failure recording the desync rather than hiding it, the short-move self-conflict exception, no-event and flag-off cases; and for cancel: deletion, already-gone treated as success (so a repeated cancel is safe), failure recorded with `last_error`, no-event, tenant scoping, and neither operation ever throwing into the caller.
+
+**Mutation-verified:** letting a failed move report success — the reschedule lie — fails 2 tests; removing the pre-move conflict check fails 1.
+
+Two milestone-5 tests were updated because the behaviour deliberately changed: `stale_link` is now `realigned`, and an existing link at a different time is moved rather than sent for review.
+
 ## 2026-08-08 (Calendar milestone 5 — a validated appointment now creates the Google event)
 
 **NOT DEPLOYED, and dark on arrival.** Gated behind a new fourth kill switch, `CALENDAR_EVENT_CREATION_ENABLED`. Unset means off, so deploying this changes nothing for anyone until the variable is set.

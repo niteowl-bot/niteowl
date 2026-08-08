@@ -10,6 +10,7 @@ import {
 import {
   confirmAppointmentOnCalendar,
   mayConfirmBooking,
+  rescheduleAppointmentOnCalendar,
 } from "@/lib/calendarSync";
 import { isCalendarEventCreationEnabled } from "@/lib/integrations/flags";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
@@ -911,7 +912,61 @@ export async function capturePartialLead(
     // a failed reschedule keeps the already-confirmed time rather than
     // nulling it, which would otherwise leave a "booked" lead with no
     // calendar entry.
-    const updatedAppointmentIso = resolvedIso ?? existing.appointment_datetime;
+    const requestedAppointmentIso = resolvedIso ?? existing.appointment_datetime;
+
+    // ── Rescheduling an appointment that already has a calendar event ──
+    //
+    // The lead is already "booked", so the calendar-backing block below
+    // never fires for it — it only ever runs on the transition INTO
+    // booked. Without this, a chat or widget reschedule moved the
+    // stored time and left the Google event where it was, silently,
+    // while the assistant told the customer the new time. That is the
+    // desync milestone 6 exists to close.
+    //
+    // The move happens BEFORE the local write, and a refusal keeps the
+    // OLD time — the same rule /api/bookings/manage follows. Saying
+    // "moved to Thursday" while the event sits on Tuesday is the one
+    // outcome that must not be possible.
+    let updatedAppointmentIso = requestedAppointmentIso;
+    if (
+      existing.status === "booked" &&
+      existing.appointment_datetime &&
+      requestedAppointmentIso &&
+      requestedAppointmentIso !== existing.appointment_datetime &&
+      isCalendarEventCreationEnabled()
+    ) {
+      const { appointmentDurationMinutes } = await getOrgSettings(
+        createAdminClient(),
+        orgId
+      );
+
+      const moved = await rescheduleAppointmentOnCalendar(
+        {
+          orgId,
+          leadId: existing.id,
+          startIso: requestedAppointmentIso,
+          durationMinutes: appointmentDurationMinutes,
+          serviceNeeded: existing.service_needed,
+          customerName: extracted.name ?? existing.name,
+          customerEmail: mergedEmail,
+          location: null,
+        },
+        existing.appointment_datetime
+      );
+
+      if (moved.outcome === "conflict" || moved.outcome === "failed") {
+        // Keep the appointment exactly where it is, and tell the truth
+        // about why it did not move.
+        updatedAppointmentIso = existing.appointment_datetime;
+        outsideBusinessHours = true;
+        unavailableReason =
+          moved.outcome === "conflict" ? "capacity" : "lookup_failed";
+        suggestedAlternativeIso = suggestedAlternativeIso ?? moved.suggestedIso;
+        console.log(
+          `[lead capture] reschedule refused for lead ${existing.id} (${moved.outcome}) — keeping ${existing.appointment_datetime}`
+        );
+      }
+    }
 
     const nextStatus: LeadStatus =
       PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
