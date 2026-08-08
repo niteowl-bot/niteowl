@@ -1,7 +1,17 @@
 import type { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
-import { isWithinBusinessHours, findNextAvailableSlot, checkSlotCapacity } from "@/lib/availability";
+import {
+  isWithinBusinessHours,
+  findNextAvailableSlot,
+  checkSlotCapacity,
+  getOrgSettings,
+} from "@/lib/availability";
+import {
+  confirmAppointmentOnCalendar,
+  mayConfirmBooking,
+} from "@/lib/calendarSync";
+import { isCalendarEventCreationEnabled } from "@/lib/integrations/flags";
 import { sendBookingConfirmationEmails, sendNeedsReviewNotification } from "@/lib/email";
 import { enforceBookedInvariant } from "@/lib/bookingInvariant";
 import { after } from "next/server";
@@ -701,6 +711,101 @@ export async function markNeedsReviewNotificationSent(
 }
 
 
+// ── Calendar-backed booking (milestone 5) ────────────────────────
+//
+// When a calendar is connected, "booked" stops being ours to decide: the
+// lead is written in a PENDING state first, the event is attempted, and
+// only a genuine Google success promotes it. That ordering is deliberate
+// — the internal record is claimed before the external write, so a
+// crash between the two leaves a recoverable request rather than an
+// event nobody has a lead for.
+//
+// With no calendar connected — every org today — none of this runs and
+// the booking path is byte-identical to what it was.
+
+/** True when a booking must be backed by a real calendar event. */
+function requiresCalendarBacking(status: LeadStatus): boolean {
+  return status === "booked" && isCalendarEventCreationEnabled();
+}
+
+/** The status a calendar-backed booking is written under while pending. */
+const PENDING_CALENDAR_STATUS: LeadStatus = "awaiting_confirmation";
+
+interface CalendarBackingResult {
+  status: LeadStatus;
+  unavailableReason: UnavailableReason;
+  suggestedAlternativeIso: string | null;
+}
+
+/**
+ * Attempts the calendar event for a lead already saved as pending, then
+ * settles its final status from what actually happened.
+ *
+ * Never promotes on anything short of a confirmed write — a conflict, an
+ * unreadable calendar or a failed create all leave a truthful request
+ * for the owner instead of a confirmation nobody can honour.
+ */
+async function settleCalendarBacking(
+  supabase: DatabaseClient,
+  orgId: string,
+  leadId: string,
+  appointmentIso: string,
+  lead: {
+    service: string | null;
+    name: string | null;
+    email: string | null;
+    location: string | null;
+  }
+): Promise<CalendarBackingResult> {
+  const { appointmentDurationMinutes } = await getOrgSettings(
+    createAdminClient(),
+    orgId
+  );
+
+  const result = await confirmAppointmentOnCalendar({
+    orgId,
+    leadId,
+    startIso: appointmentIso,
+    durationMinutes: appointmentDurationMinutes,
+    serviceNeeded: lead.service,
+    customerName: lead.name,
+    customerEmail: lead.email,
+    location: lead.location,
+  });
+
+  const booked = mayConfirmBooking(result.outcome);
+  // A conflict is a real "that time has gone"; everything else that is
+  // not a success is "we could not confirm" — never dressed up as one.
+  const status: LeadStatus = booked ? "booked" : "needs_review";
+  const unavailableReason: UnavailableReason = booked
+    ? null
+    : result.outcome === "conflict"
+    ? "capacity"
+    : "lookup_failed";
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ status })
+    .eq("id", leadId);
+
+  if (error) {
+    console.error(
+      "[lead capture] failed to settle calendar-backed status:",
+      error.message
+    );
+  }
+
+  console.log(
+    `[lead capture] calendar backing for lead ${leadId}: ${result.outcome} → ${status}`
+  );
+
+  return {
+    status,
+    unavailableReason,
+    suggestedAlternativeIso: result.suggestedIso,
+  };
+}
+
 export async function capturePartialLead(
   supabase: DatabaseClient,
   orgId: string,
@@ -839,6 +944,13 @@ export async function capturePartialLead(
     // stored status and the calendar can never disagree.
     const safeNextStatus = enforceBookedInvariant(nextStatus, updatedAppointmentIso);
 
+    // A NEW booking that must be backed by a calendar event is written
+    // as pending first; settleCalendarBacking below promotes it only if
+    // Google actually accepted the event.
+    const backsWithCalendar =
+      requiresCalendarBacking(safeNextStatus) && existing.status !== "booked";
+    const statusToWrite = backsWithCalendar ? PENDING_CALENDAR_STATUS : safeNextStatus;
+
 
     // Every lead gets a manage_token so a booking-confirmation email can
     // always link to the self-service cancel/reschedule page, even for
@@ -858,7 +970,7 @@ export async function capturePartialLead(
       preferred_datetime: updatedDatetime,
       appointment_datetime: updatedAppointmentIso,
       message: deduplicateMessage(existing.message, userMessage),
-      status: safeNextStatus,
+      status: statusToWrite,
       ai_confidence: extracted.confidence,
       manage_token: manageToken,
       ...(safeConversationId ? { conversation_id: safeConversationId } : {}),
@@ -939,7 +1051,38 @@ export async function capturePartialLead(
         }
       }
 
-      if (safeNextStatus === "booked" && existing.status !== "booked") {
+      // The calendar has the final say on whether this is a booking.
+      // Only a confirmed event promotes the pending row; anything else
+      // leaves it for review, and the confirmation email below is then
+      // never sent — the customer is not told of a booking that does
+      // not exist.
+      let confirmedBooking = safeNextStatus === "booked" && existing.status !== "booked";
+      if (backsWithCalendar && updatedAppointmentIso) {
+        const settled = await settleCalendarBacking(
+          supabase,
+          orgId,
+          existing.id,
+          updatedAppointmentIso,
+          {
+            service: updatePayload.service_needed,
+            name: updatePayload.name,
+            email: mergedEmail,
+            location:
+              typeof (existing as { metadata?: Record<string, unknown> }).metadata
+                ?.service_address === "string"
+                ? ((existing as { metadata?: Record<string, unknown> }).metadata!
+                    .service_address as string)
+                : null,
+          }
+        );
+        confirmedBooking = settled.status === "booked";
+        outsideBusinessHours = outsideBusinessHours || !confirmedBooking;
+        unavailableReason = unavailableReason ?? settled.unavailableReason;
+        suggestedAlternativeIso =
+          suggestedAlternativeIso ?? settled.suggestedAlternativeIso;
+      }
+
+      if (confirmedBooking) {
       const ownerInfo = await getOrgOwnerEmail(orgId);
       // Not awaited on the request's own critical path — but a bare
       // fire-and-forget promise here is unsafe on Vercel's serverless
@@ -985,7 +1128,13 @@ export async function capturePartialLead(
   // a valid appointment timestamp.
   const safeInsertStatus = enforceBookedInvariant(insertStatus, resolvedIso);
 
-
+  // Same two-phase rule as the update path: with a calendar in play the
+  // row is inserted pending, so the lead exists before anything is
+  // written to Google and a crash between the two is recoverable.
+  const insertBacksWithCalendar = requiresCalendarBacking(safeInsertStatus);
+  const insertStatusToWrite = insertBacksWithCalendar
+    ? PENDING_CALENDAR_STATUS
+    : safeInsertStatus;
 
   const manageToken = crypto.randomUUID();
 
@@ -1003,7 +1152,7 @@ export async function capturePartialLead(
       appointment_datetime: resolvedIso,
       message: userMessage,
       ai_confidence: extracted.confidence,
-      status: safeInsertStatus,
+      status: insertStatusToWrite,
       manage_token: manageToken,
     })
     .select("id")
@@ -1014,7 +1163,29 @@ export async function capturePartialLead(
     console.error("[lead capture] insert failed:", insertError.message);
   } else {
     console.log("[lead capture] inserted new lead:", inserted?.id);
-    if (safeInsertStatus === "booked") {
+
+    let confirmedInsert = safeInsertStatus === "booked";
+    if (insertBacksWithCalendar && inserted?.id && resolvedIso) {
+      const settled = await settleCalendarBacking(
+        supabase,
+        orgId,
+        inserted.id,
+        resolvedIso,
+        {
+          service: extracted.service ?? userMessage,
+          name: extracted.name,
+          email: extracted.email,
+          location: null,
+        }
+      );
+      confirmedInsert = settled.status === "booked";
+      outsideBusinessHours = outsideBusinessHours || !confirmedInsert;
+      unavailableReason = unavailableReason ?? settled.unavailableReason;
+      suggestedAlternativeIso =
+        suggestedAlternativeIso ?? settled.suggestedAlternativeIso;
+    }
+
+    if (confirmedInsert) {
       const ownerInfo = await getOrgOwnerEmail(orgId);
       after(() =>
         sendBookingConfirmationEmails({

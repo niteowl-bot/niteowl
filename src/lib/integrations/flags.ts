@@ -49,3 +49,22 @@ export function isCalendarAvailabilityBlocking(
 ): boolean {
   return isCalendarSyncEnabled(env) && isTrue(env.CALENDAR_AVAILABILITY_BLOCKING);
 }
+
+/**
+ * Whether a confirmed booking may actually be WRITTEN to the calendar.
+ *
+ * The fourth level, and the first that changes anything in someone's
+ * Google account. Reading is a question; writing is a consequence, so it
+ * gets its own switch: an org can have availability blocking live for
+ * days before Remy is allowed to create a single event, and a bad write
+ * can be stopped without also blinding the availability check.
+ *
+ * Off ⇒ confirmAppointmentOnCalendar reports "no calendar", which is the
+ * same path every org with no connection already takes, so booking
+ * behaves exactly as it did before this existed.
+ */
+export function isCalendarEventCreationEnabled(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return isCalendarSyncEnabled(env) && isTrue(env.CALENDAR_EVENT_CREATION_ENABLED);
+}

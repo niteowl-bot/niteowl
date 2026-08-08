@@ -2,6 +2,47 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Calendar milestone 5 — a validated appointment now creates the Google event)
+
+**NOT DEPLOYED, and dark on arrival.** Gated behind a new fourth kill switch, `CALENDAR_EVENT_CREATION_ENABLED`. Unset means off, so deploying this changes nothing for anyone until the variable is set.
+
+The first thing Remy does that changes something in someone else's Google account. Everything before it was a question; this is a consequence, so the whole change is built around one rule: **an appointment is "booked" only if Google says so.**
+
+### How it works
+`confirmAppointmentOnCalendar` (`src/lib/calendarSync.ts`) is the single path that writes an event, called from `capturePartialLead` at the two points a lead becomes `booked`. The lead's status is decided **from its outcome** rather than before it:
+
+| Outcome | Status | |
+|---|---|---|
+| `no_calendar` | `booked` | flag off / nothing connected / sync disabled — **every org today, byte-identical to before** |
+| `created` / `already_linked` | `booked` | Google holds the event |
+| `conflict` | `needs_review` | the slot went while we were talking |
+| `unverified` / `failed` / `stale_link` | `needs_review` | nothing is known, so nothing is claimed |
+
+Reuses the existing pieces rather than reimplementing them: `resolveOrgCalendar` picks the connection, `checkBookingSlot` re-verifies, `createOrgEvent` writes. **`createOrgEvent` and the Google provider are unmodified.**
+
+### The protections §R3 asked for
+- **Re-verified at the write**, not at conversation time. An observed external conflict blocks the write **regardless of `CALENDAR_AVAILABILITY_BLOCKING`** — that flag decides whether a customer is turned away, but writing on top of a busy window is a double booking in the business's own diary.
+- **Internal claim before the external write.** The lead is saved in a pending state *before* Google is touched, so a crash between the two leaves a recoverable request rather than an event with no lead. This is why C1 had to land first: the capacity check can only serve as a claim now that it is overlap-aware.
+- **Only a confirmed write reaches `booked`**, and the confirmation email is gated on the same value — the customer is never told of a booking that does not exist.
+- **A conflict returns the engine's suggested alternative** and never silently moves the appointment.
+
+### Three defences against duplicates
+The deterministic Google event id (a retry re-derives it and gets a 409, which is treated as success); a pre-check on `integration_links`; and that table's own `unique (subject_type, subject_id, connection_id, capability)`.
+
+**The idempotency key is `leadId + startMs`** — and the instant is what makes `alreadyExisted` safe to trust. Keying on the lead alone, the obvious choice, would re-derive the same id after a reschedule, hit the event still sitting at the **old** time, and report success carrying the wrong hour. That is the §R2 trap; a test now fails if the key is reduced to the lead.
+
+Links are written with `subject_type = 'appointment'`, per §P1, so the stored rows already say what they mean if appointments ever separate from leads. **No schema change** — `integration_links` has existed and been empty since 2026-08-04.
+
+### Tests
+`npm test` **588 passing, 0 failing** (+37; 551 → 588). `tsc --noEmit` clean, lint clean on changed files.
+
+Covers success, timezone (local wall time plus IANA zone, never an offset), duration (60 and 30 minute orgs), conflict and partial overlap, Google 500 and 401, a lost link *not* un-booking a real event, all three duplicate defences, the stale-link case, flag-off and not-connected, sync-disabled resources, tenant isolation (every query's `org_id` observed, not assumed), and five end-to-end cases through the real `capturePartialLead`.
+
+**Verified by mutation, not assumed:** removing the conflict guard fails 3 tests; reducing the idempotency key to the lead id fails 3; making `mayConfirmBooking` always true — the exact lie this exists to prevent — fails 9.
+
+### Deliberately not built
+Microsoft, queues, provider abstractions, and **reschedule/cancel sync (milestone 6)**. `/api/bookings/manage` can therefore leave a stale event behind; the `stale_link` outcome exists so that state is surfaced for review rather than silently confirmed. **That is the immediate follow-up and should land before the flag is enabled for a business that reschedules.** No Vapi, Twilio or voice-prompt change — voice never sets `booked`, so it is untouched.
+
 ## 2026-08-08 (Production data — 11 stale test rows cancelled, releasing six blocked appointment slots)
 
 **Documentation of a production data operation. No code, schema, configuration or deployment change.** Full record, verification queries and rollback in `docs/sql/2026-08-08_stale_capacity_holds_cancelled.sql`, following the convention set by `2026-07-12_voice_test_rows_cleanup.sql`.

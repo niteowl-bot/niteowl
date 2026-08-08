@@ -62,6 +62,12 @@ export type BusyLookup =
 export interface ResolvedCalendar {
   orgId: string;
   connectionId: string;
+  /**
+   * The integration_resources row this calendar came from. Carried so a
+   * link written after an event create can name the resource as well as
+   * the connection, rather than leaving resource_id null.
+   */
+  resourceId: string;
   provider: string;
   calendarId: string;
   syncEnabled: boolean;
@@ -87,6 +93,7 @@ export async function resolveOrgCalendar(
   return {
     orgId,
     connectionId: pair.connection.id,
+    resourceId: pair.resource.id,
     provider: pair.connection.provider,
     calendarId: pair.resource.externalId,
     syncEnabled: pair.resource.syncEnabled,

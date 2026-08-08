@@ -737,6 +737,10 @@ This is a decision plus one rule, not a build:
 - Pairs directly with Part I's P1 (`subject_type = 'appointment'`); take both together,
   once, before milestone 5.
 
+> **ADDRESSED 2026-08-08 by milestone 5 (not yet deployed).** `src/lib/calendarSync.ts`
+> implements protections 1, 3, 4 and 5 below; protection 2 is satisfied by Google's
+> client-supplied event id. The residual race is stated at the end of this section.
+
 #### R3. The check-to-create race, and what an offered slot actually guarantees
 
 Recorded now because it is cheap to design for and expensive to retrofit, and because
@@ -786,6 +790,51 @@ The protection required at milestone 5 — design intent, not a build:
 
 The voice prompt is already correct for this and needs no change: it says "preferred
 time", never booked, confirmed or reserved.
+
+#### What milestone 5 actually built (2026-08-08)
+
+`confirmAppointmentOnCalendar` in `src/lib/calendarSync.ts` is the only path that writes
+an event. It is called from `capturePartialLead` at the two points a lead becomes
+`booked`, and the lead's status is decided **from its outcome** rather than before it:
+
+| Outcome | Status | Why |
+|---|---|---|
+| `no_calendar` | `booked` | Flag off, nothing connected, or sync disabled. Every org today — behaviour byte-identical to before |
+| `created` / `already_linked` | `booked` | Google holds the event |
+| `conflict` | `needs_review` | The slot went while we were talking |
+| `unverified` / `failed` / `stale_link` | `needs_review` | Nothing is known, so nothing is claimed |
+
+- **Protection 1 (re-verify at the write):** `checkBookingSlot` runs immediately before
+  the create, not at conversation time. An observed external conflict blocks the write
+  **regardless of `CALENDAR_AVAILABILITY_BLOCKING`** — that flag governs whether a
+  customer is turned away, but writing on top of a busy window is a double booking in
+  the business's own diary and is never acceptable.
+- **Protection 3 (internal claim first):** the lead row is written in a pending state
+  *before* Google is touched, so a crash between the two leaves a recoverable request
+  rather than an event with no lead. This is why C1 had to be fixed first — the capacity
+  check can only serve as a claim now that it is overlap-aware.
+- **Protection 4:** only `created`/`already_linked` reach `booked`, and the confirmation
+  email is gated on the same value.
+- **Protection 5:** a conflict returns the engine's suggested alternative; it never
+  silently moves the appointment.
+
+**The idempotency key is `leadId + startMs`,** which is what makes `alreadyExisted` safe
+to trust: the key encodes the instant, so a 409 can only mean an event for *this*
+appointment at *this* time. Keying on the lead alone — the obvious choice — would have
+re-derived the same id after a reschedule and reported success carrying the old hour.
+That is the §R2 trap, and it is now covered by a test that fails if the key is reduced.
+
+**Residual race, unchanged and accepted.** Two concurrent bookings can still both pass
+the pre-write check before either writes, because nothing takes a lock. The window is
+now milliseconds rather than minutes, and Google's client-supplied id means the loser
+gets a 409 rather than a duplicate event — so the failure mode is a false "already
+booked", not two events. Closing it properly needs a database-level claim on the slot,
+which is L1/L2 territory.
+
+**Not built:** reschedule and cancel do not yet move or delete the event (milestone 6).
+`/api/bookings/manage` can therefore leave a stale event behind; `stale_link` exists so
+that state is surfaced for review rather than silently confirmed. **This is the immediate
+follow-up** and should land before the flag is enabled for a business that reschedules.
 
 ### BEFORE SCALE
 

@@ -491,6 +491,120 @@ export async function setPrimaryResource(
   });
 }
 
+// ── integration_links: local record ↔ remote object ───────────────
+//
+// The Remy lead remains the system of record; a link only describes the
+// mirror copy in someone else's calendar. Written here rather than in
+// the booking code because this file owns every integration_* table and
+// its tenant discipline — every query carries an explicit org_id even
+// when a row id alone would be unique.
+//
+// subject_type is 'appointment', not 'lead'. The row describes the thing
+// that occupies a slot, which is what a calendar event mirrors; the two
+// are the same record today only because an appointment has no table of
+// its own yet. Writing 'appointment' from the first event means the
+// stored rows already say what they mean if that changes.
+
+export const APPOINTMENT_SUBJECT_TYPE = "appointment";
+
+export interface AppointmentLink {
+  id: string;
+  externalId: string;
+  externalEtag: string | null;
+  syncStatus: string;
+  resourceId: string | null;
+}
+
+/**
+ * The calendar event already mirroring this appointment, if any.
+ *
+ * Checked before a create so a repeated request cannot produce a second
+ * event — the first of three defences, ahead of the provider's
+ * client-supplied id and the table's own unique index.
+ */
+export async function findAppointmentLink(
+  orgId: string,
+  subjectId: string,
+  connectionId: string
+): Promise<AppointmentLink | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("integration_links")
+    .select("id, external_id, external_etag, sync_status, resource_id")
+    .eq("org_id", orgId)
+    .eq("subject_type", APPOINTMENT_SUBJECT_TYPE)
+    .eq("subject_id", subjectId)
+    .eq("connection_id", connectionId)
+    .eq("capability", "calendar")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[integrations] failed to read appointment link:", error.message);
+    return null;
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id as string,
+    externalId: data.external_id as string,
+    externalEtag: (data.external_etag as string | null) ?? null,
+    syncStatus: data.sync_status as string,
+    resourceId: (data.resource_id as string | null) ?? null,
+  };
+}
+
+export interface RecordAppointmentLinkInput {
+  orgId: string;
+  connectionId: string;
+  resourceId: string | null;
+  subjectId: string;
+  externalId: string;
+  externalEtag: string | null;
+}
+
+/**
+ * Records that an appointment now has a calendar event.
+ *
+ * A failure here is NOT a booking failure: the event exists in the
+ * customer's calendar either way, and the caller has already been told
+ * the truth about that. Losing the link costs the dashboard a sync badge
+ * and makes a later update harder to find — it must not undo a booking
+ * that genuinely happened. So this returns a boolean rather than
+ * throwing, and the caller logs it.
+ *
+ * A 23505 on either unique index means a concurrent request wrote the
+ * same link first. That is the outcome we wanted, so it counts as
+ * success rather than an error.
+ */
+export async function recordAppointmentLink(
+  input: RecordAppointmentLinkInput
+): Promise<boolean> {
+  const supabase = createAdminClient();
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from("integration_links").insert({
+    org_id: input.orgId,
+    connection_id: input.connectionId,
+    resource_id: input.resourceId,
+    capability: "calendar",
+    subject_type: APPOINTMENT_SUBJECT_TYPE,
+    subject_id: input.subjectId,
+    external_id: input.externalId,
+    external_etag: input.externalEtag,
+    sync_status: "synced",
+    synced_at: now,
+  });
+
+  if (!error) return true;
+  if (error.code === "23505") {
+    console.log("[integrations] appointment link already recorded:", input.subjectId);
+    return true;
+  }
+
+  console.error("[integrations] failed to record appointment link:", error.message);
+  return false;
+}
+
 /**
  * Disconnects an integration: revokes with the provider where possible,
  * then removes the stored credentials and the selected resources so
