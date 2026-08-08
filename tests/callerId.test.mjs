@@ -250,7 +250,7 @@ describe("assistant prompt — when Remy asks for a number", () => {
 
   test("the call closes only after a final read-back is confirmed", () => {
     const prompt = promptFor("+353861234567");
-    assert.match(prompt, /Just to confirm, Brian/i);
+    assert.match(prompt, /Brian, I've noted your preferred time/i);
     assert.match(prompt, /Only once they confirm/i);
     assert.match(prompt, /never state a time they did not say/i);
   });

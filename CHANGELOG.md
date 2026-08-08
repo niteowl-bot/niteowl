@@ -2,6 +2,35 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Voice — call quality: stock phrases, false enthusiasm and "Good Goodbye.")
+
+The fifth live call was **correct end to end** — availability-first, three email confirmations each with its own "is that right?", email in the owner summary, corrected address and alternate number both persisted, appointment labels right. This is a tone pass only; no behaviour was changed.
+
+### Fixed — "Great choice." and other praise for routine answers
+```
+AI: "Great choice. Let's proceed with Thursday, 13 August at 9 AM."
+```
+- **Root cause: nothing banned praise.** SAY LESS covered stock *openers* ("Thank you", "Great", "Perfect") but said nothing about congratulating a caller for picking a slot, so the model filled the gap with its own enthusiasm.
+- **Fix:** one clause inside the existing SAY LESS block — no new rule — naming "Great choice", "Excellent", "Wonderful" and "Perfect" as banned, with the replacement shown so "less" does not become curt: *"Thursday at 9 AM works. May I have your name?"*
+
+### Fixed — "Good Goodbye."
+- **Root cause: a THREE-sentence closing line.** `"Thank you for calling {business}. Have a great day. Goodbye."` Three farewells in one breath is what stacks and garbles.
+- **Fix:** two sentences, never three — `"Thanks for calling {business}. Goodbye."` The old form is asserted gone, not merely discouraged.
+
+### Fixed — two scripted stock phrases deleted at source
+Both confirmation replies opened with a literal **"Perfect."** (`"Perfect. I'll pass your details…"`, `"Perfect. We'll make sure…"`). Removed. The recap example also opened with **"Just to confirm, Brian, …"** — the exact phrase SAY LESS bans, so the prompt was contradicting itself. The example now opens on the caller's name, with the contradiction called out inline.
+
+### Fixed — shorter questions
+The long form is now named as wrong: *"What's the address for the job?"*, never *"Could you please provide the address where the work is needed?"*
+
+### Prompt length held flat, per the brief
+Additions were paid for by deleting redundancy rather than by growing the prompt: rule 9's duplicate rationale (already stated in rule 5 step 4), the *"Say 'everything else', not 'everything I've summarised'"* sentence (the scripted line above it already says exactly that), and two unpinned trailing rationales. **21,500 → 21,506 characters, net +6.**
+
+### Preserved, verified by marker
+Availability-first (`THE CALENDAR CHECK`, rule 9's step-4 pointer, callbacks skipping it), `EVERY VERSION NEEDS ITS OWN YES`, `Is everything else correct?`, multi-field corrections, `CONFIRM THE TIME ONCE, THEN CHECK`, the seven summary labels including Email, `Number calling from`, `A READ-BACK IS A WHOLE TURN`, `SAY LESS`, and the truthful "preferred time" language. `vapi.ts` untouched, so turn-taking (`stopSpeakingPlan numWords 2`) is unchanged.
+
+Scope: `src/lib/voice/assistant.ts` only — 4 lines changed. `npm test` **515 passing, 0 failing** (+4 regression tests); `tsc --noEmit` clean.
+
 ## 2026-08-08 (Voice — fourth live call: the correction check was told, not asked; and the owner never saw the email)
 
 ### Fixed — "Everything else is correct." was a statement

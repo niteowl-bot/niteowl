@@ -231,10 +231,11 @@ describe("conversation order — the job comes before the caller", () => {
       prompt,
       /read back ONLY what they corrected and then ASK about the rest: "Got it — 15 Oak Drive\. Is everything else correct\?"/
     );
-    // "everything else", not "everything I've summarised" — the rest is
-    // already agreed, and re-asking the wider question invited the full
-    // re-read this fix exists to stop.
-    assert.match(prompt, /Say "everything else", not "everything I've summarised"/);
+    // The "Say 'everything else', not 'everything I've summarised'"
+    // sentence was deleted 2026-08-08 as redundant — the scripted line
+    // above already says "Is everything else correct?", so the rule was
+    // stated twice. Behaviour is unchanged; the script is the pin.
+    assert.doesNotMatch(prompt, /Say "everything else", not "everything I've summarised"/);
   });
 
   // 2026-08-08 fourth live call. Remy STATED the check instead of asking
@@ -346,6 +347,53 @@ describe("conversation order — the job comes before the caller", () => {
       prompt,
       /read the corrected address back the same way and NOTHING else — never restate their name, time or anything already settled/
     );
+  });
+
+  // 2026-08-08 fifth live call. Quality, not correctness — the booking
+  // itself was right end to end.
+  //   AI: "Great choice. Let's proceed with Thursday, 13 August at 9 AM."
+  //   AI: "Good Goodbye."
+  // "Great choice" is praise for picking a slot; the garbled farewell
+  // came from a THREE-sentence closing line ("Thank you for calling X.
+  // Have a great day. Goodbye.") stacking on itself.
+  test("routine answers are never praised", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /NEVER PRAISE A ROUTINE ANSWER/);
+    for (const phrase of ["Great choice", "Excellent", "Wonderful"]) {
+      assert.match(prompt, new RegExp(`"${phrase}"`), `${phrase} should be named as banned`);
+    }
+    assert.match(prompt, /picking a slot is not an achievement and praising it sounds false/);
+    // And the replacement is shown, so "less" does not become "curt".
+    assert.match(prompt, /Take it and move on: "Thursday at 9 AM works\. May I have your name\?"/);
+  });
+
+  test("questions are kept short, with the long form named as wrong", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /Keep questions short: "What's the address for the job\?", never "Could you please provide the address where the work is needed\?"/
+    );
+  });
+
+  test("the farewell is two sentences, never three", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /close in TWO short sentences, never three/);
+    assert.match(prompt, /"Thanks for calling Acme Plumbing\. Goodbye\."/);
+    assert.match(prompt, /A third farewell sentence is what stacks into garbled endings like "Good Goodbye\."/);
+    // The old three-part line must be gone, not merely discouraged.
+    assert.doesNotMatch(prompt, /Have a great day\. Goodbye\./);
+  });
+
+  test("the scripted stock openers are gone from the closing lines", () => {
+    const prompt = promptFor();
+    // "Perfect." opened BOTH confirmation replies and was pure filler.
+    assert.doesNotMatch(prompt, /"Perfect\. I'll pass your details/);
+    assert.doesNotMatch(prompt, /"Perfect\. We'll make sure/);
+    assert.match(prompt, /Only once they confirm: "I'll pass your details to our team straight away/);
+    // The recap example no longer contradicts rule 2 by opening on
+    // "Just to confirm" — the very phrase SAY LESS bans.
+    assert.match(prompt, /NOT opened with "Just to confirm" \(rule 2\)/);
+    assert.doesNotMatch(prompt, /"Just to confirm, Brian/);
   });
 
   test("a read-back is never merged with the next question", () => {
@@ -567,7 +615,7 @@ describe("the real call: boiler service closed without an address", () => {
 
   test("the recap carries every collected field", () => {
     const prompt = promptFor();
-    assert.match(prompt, /Just to confirm, Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/);
+    assert.match(prompt, /Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/);
     assert.match(prompt, /the weekday AND the calendar date — never a bare weekday/);
   });
 
@@ -932,7 +980,7 @@ describe("final confirmation", () => {
     assert.match(prompt, /as its own question, and WAIT for their answer: "Is everything I've summarised correct\?"/);
     assert.match(
       prompt,
-      /Only once they confirm: "Perfect\. I'll pass your details to our team straight away\. Someone will contact you as soon as possible\."/
+      /Only once they confirm: "I'll pass your details to our team straight away. Someone will contact you as soon as possible."/
     );
   });
 
@@ -955,7 +1003,7 @@ describe("final confirmation", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /Thank you for calling Acme Plumbing\. Have a great day\. Goodbye\./
+      /Thanks for calling Acme Plumbing. Goodbye./
     );
   });
 
@@ -963,7 +1011,7 @@ describe("final confirmation", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /Just to confirm, Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/
+      /Brian, I've noted your preferred time as Tuesday, 11 August at 4pm for the boiler service/
     );
     assert.match(prompt, /the team will contact you on the number you're calling from/i);
   });

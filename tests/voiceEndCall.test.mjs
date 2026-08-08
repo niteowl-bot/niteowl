@@ -122,7 +122,7 @@ describe("the instruction — when the call ends", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /Thank you for calling Acme Plumbing\. Have a great day\. Goodbye\./
+      /Thanks for calling Acme Plumbing. Goodbye./
     );
     assert.match(prompt, /Say that line ONCE, add nothing after it/);
     assert.match(prompt, /END THE CALL with the end-call tool in the same turn/);
