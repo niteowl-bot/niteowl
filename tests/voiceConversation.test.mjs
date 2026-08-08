@@ -229,12 +229,89 @@ describe("conversation order — the job comes before the caller", () => {
     const prompt = promptFor();
     assert.match(
       prompt,
-      /confirm ONLY that one field back and check the remainder in the SAME breath: "Got it — 15 Oak Drive\. Everything else is correct\?"/
+      /read back ONLY what they corrected and then ASK about the rest: "Got it — 15 Oak Drive\. Is everything else correct\?"/
     );
     // "everything else", not "everything I've summarised" — the rest is
     // already agreed, and re-asking the wider question invited the full
     // re-read this fix exists to stop.
     assert.match(prompt, /Say "everything else", not "everything I've summarised"/);
+  });
+
+  // 2026-08-08 fourth live call. Remy STATED the check instead of asking
+  // it, so the caller was told what to think rather than confirming:
+  //   AI: "Got it. 21 Elm Drive. And the number as 052121456.
+  //        Everything else is correct."
+  // The scripted phrase was a bare declarative with a question mark, and
+  // the flat reading is what came out.
+  test("the post-correction check is asked, never stated", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /Is everything else correct\?/);
+    assert.match(
+      prompt,
+      /Ask it as a real question and WAIT — "Is everything else correct\?", never the flat statement "Everything else is correct\."/
+    );
+    assert.match(prompt, /leaves the rest unconfirmed/);
+  });
+
+  // Same call: the caller corrected the address AND the number in one
+  // breath. Both were updated and read back, which is right — but the
+  // instruction said "confirm ONLY that one field", singular.
+  test("two corrections in one breath are both read back, in one turn", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /If they corrected TWO OR MORE things in one breath, update them all and read back each corrected value once, still in a single turn/
+    );
+    assert.match(
+      prompt,
+      /"Got it — 15 Oak Drive, and the number as 086 123 4567\. Is everything else correct\?"/
+    );
+    // Still no full re-read.
+    assert.match(prompt, /Do NOT repeat the recap, and do not restate a single unchanged detail/);
+  });
+
+  // Same call: a corrected email was read back and then folded straight
+  // into "Everything else is correct?" — so the caller's "yes" was about
+  // the other details, and a wrong email went a further round trip.
+  test("every version of an email needs its own yes", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /EVERY VERSION NEEDS ITS OWN YES/);
+    assert.match(
+      prompt,
+      /read it back and ask "is that right\?" about the EMAIL ITSELF, and wait, however many times they change it/
+    );
+    // Including when the correction lands during the closing recap.
+    assert.match(
+      prompt,
+      /there, confirm the new email first, and only once they say yes ask whether everything else is correct/
+    );
+    assert.match(
+      prompt,
+      /Folding an unconfirmed email into "is everything else correct\?" is how a wrong address gets recorded/
+    );
+    // A replaced version never comes back.
+    assert.match(
+      prompt,
+      /never keep, repeat or fall back to a version they have replaced/
+    );
+  });
+
+  // Same call: two restatements before the calendar was ever consulted —
+  //   "I'll note your request for a radiator repair next Wednesday at
+  //    3 PM. Just to confirm, you mean Wednesday, 12 August at 3 PM."
+  test("the request is confirmed once, then checked immediately", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /CONFIRM THE TIME ONCE, THEN CHECK/);
+    assert.match(
+      prompt,
+      /never precede it with "I'll note your request for…" and never follow it with a second version of the same thing/
+    );
+    assert.match(prompt, /One sentence, then the tool/);
+    // And a chosen alternative is not restated back either.
+    assert.match(
+      prompt,
+      /do not restate it back to them either; the rule 11 recap is where they hear it again/
+    );
     assert.match(prompt, /Do NOT repeat the recap, and do not restate a single unchanged detail/);
     // One genuine reason to re-recap survives: the appointment itself.
     assert.match(
@@ -708,13 +785,37 @@ describe("corrections win", () => {
       summaryInstructions,
       /Write "Not provided" ONLY if the caller explicitly refused to give a number AND declined the one they were calling from/
     );
-    // The general "Not provided" rule for the other five labels stands.
-    assert.match(summaryInstructions, /Include all six labels every time/);
-    // Still six labels, and the grounding rules still apply to both.
-    assert.match(summaryInstructions, /Include all six labels every time/);
+    // The general "Not provided" rule for the other labels stands.
+    // Seven since Email joined the list (2026-08-08) — see below.
+    assert.match(summaryInstructions, /Include all seven labels every time/);
     assert.match(
       summaryInstructions,
       /apply exactly the same way when the labels are "Appointment date" and "Appointment time"/
+    );
+  });
+
+  // 2026-08-08 fourth live call: the caller gave an email, corrected it
+  // twice, and the final value was stored correctly on the lead
+  // (jason123@gmail.com) — but the owner's summary listed Name, Callback
+  // number, date, time, Address and Issue and NO email at all. Nothing in
+  // the code or its history treats that omission as deliberate: the
+  // structured schema extracts email, the lead stores it, and the summary
+  // simply never had a label for it.
+  test("the owner summary carries the caller's final email", () => {
+    const { summaryInstructions } = configFor();
+    assert.match(
+      summaryInstructions,
+      /give these seven details in this order, each written as "Label: value" and separated by full stops: Name, Email, Callback number, the date, the time, Address, Issue/
+    );
+    // Written form, not the spoken wording the transcript contains.
+    assert.match(
+      summaryInstructions,
+      /write the address in normal written form \(michaelryan@hotmail\.com\), NEVER the spoken wording/
+    );
+    // Only the final confirmed version — this call had three.
+    assert.match(
+      summaryInstructions,
+      /If the caller changed it during the call, give ONLY the final version they confirmed — never an earlier one, and never both/
     );
   });
 });

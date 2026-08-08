@@ -2,6 +2,44 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Voice — fourth live call: the correction check was told, not asked; and the owner never saw the email)
+
+### Fixed — "Everything else is correct." was a statement
+```
+User: "No. My address is 21 Elm Drive... And can you change my number to 052121456?"
+AI:   "Got it. 21 Elm Drive. And the number as 052121456. Everything else is correct."
+```
+- **Root cause: the scripted phrase was a bare declarative with a question mark on the end** — `"Got it — 15 Oak Drive. Everything else is correct?"` Two of the three instances on this call came out as questions, one as a flat statement and one trailing into a comma. A declarative sentence cannot be relied on to be *heard* as a question.
+- **Fix:** the script is now grammatically interrogative — **"Is everything else correct?"** — with the flat form explicitly banned, because it tells the caller what to think instead of asking, and leaves the rest unconfirmed.
+
+### Fixed — multiple corrections in one breath
+The caller corrected the address **and** the number in one utterance and Remy handled it correctly, but the instruction said *"confirm ONLY that one field"*, singular. Now stated for the plural case: update them all, read back each corrected value once, still in a single turn, still no full re-read.
+
+### Fixed — a corrected email was folded into "everything else"
+```
+AI:   "I've updated your email to jason moon 2 3 at gmail dot com. Everything else is correct?"
+User: "Jason 1 2 3 at gmail dot com."
+```
+The initial email read-back worked. The **corrections** did not get one — each was repeated and then rolled straight into the wider question, so the caller's answer was about the other details, not the email. It took two more round trips to settle.
+- **Fix: EVERY VERSION NEEDS ITS OWN YES.** A corrected email is read back and asked about on its own — *"is that right?"* — however many times it changes, including when the correction lands during the closing recap, where the new email is confirmed **first** and only then "is everything else correct?".
+
+### Fixed — the owner summary never contained the email
+The final email **was stored correctly** (`jason123@gmail.com`, after two corrections), but the owner's summary listed Name, Callback number, date, time, Address and Issue — no email anywhere.
+- **The omission was not deliberate.** Nothing in the code or its history treats it as a design decision: the structured schema extracts email, the lead stores it, the dashboard shows it — the summary simply never had a label for it. There is no privacy rationale either; the same email already carries the caller ID and the full transcript.
+- **Fix:** Email is now the second of **seven** labels, written in normal form (`michaelryan@hotmail.com`, never the spoken wording), and only ever the final confirmed version — this call had three.
+
+### Fixed — two restatements before the calendar was consulted
+```
+AI: "I'll note your request for a radiator repair next Wednesday at 3 PM.
+     Just to confirm, you mean Wednesday, 12 August at 3 PM."
+```
+**CONFIRM THE TIME ONCE, THEN CHECK.** Rule 6's date confirmation is the only restatement permitted before the check — no *"I'll note your request for…"* preamble, no second version after it. One sentence, then the tool. A chosen alternative is likewise not restated back; the recap is where the caller hears it again.
+
+### Preserved and verified by marker
+Availability-first (`THE CALENDAR CHECK`, rule 9's step-4 pointer, callbacks skipping it), alternative-slot handling, appointment-vs-callback labels, `Number calling from`, SAY LESS, read-back-is-a-whole-turn, no-full-recap-after-correction, and the truthful "preferred time" language. Stored data from this call confirms corrected address (`21 Elm Drive`), alternate callback number (`052121456` kept alongside the caller ID) and final email all persisted correctly.
+
+Scope: `src/lib/voice/assistant.ts` only (rule 5 steps 4 and 6, rule 11, summary instructions). `npm test` **511 passing, 0 failing** (+5 regression tests); `tsc --noEmit` clean. Prompt 19,829 → **21,500** characters.
+
 ## 2026-08-08 (Voice — verification pass on the third live call; two tiny changes)
 
 ### Verified working from the stored row, not the transcript
