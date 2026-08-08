@@ -1,6 +1,12 @@
 export interface ParseDatetimeResult {
   iso: string | null;
   failed: boolean;
+  /**
+   * The customer named a date we recognised but could not resolve to a
+   * single instant with confidence. The caller must ASK rather than
+   * assume — additive, so callers that ignore it behave as before.
+   */
+  needsClarification?: boolean;
 }
 
 // ── Weekday correction ───────────────────────────────────────────
@@ -142,11 +148,134 @@ function snapToNamedWeekday(
   );
 }
 
+// ── Explicit numeric dates are arithmetic, not language ──────────
+//
+// "20/08/26 at 2pm" was being sent to the model like any other phrase,
+// and the model read it as a US date — 26 August, or August 2020. The
+// customer had stated the date exactly; we changed it silently, and
+// every later stage (availability, the calendar event, the spoken
+// confirmation) inherited the wrong day.
+//
+// A model is the wrong tool for this. DD/MM/YY → an instant is a total
+// function with no interpretation in it, so it is computed here and the
+// model is never consulted. This runs BEFORE the network call, so an
+// explicit date is also immune to an OpenAI outage.
+//
+// This locale is DD/MM. 05/09/26 is 5 September, never 9 May.
+
+const NUMERIC_DATE = /(\b\d{1,2})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{2}|\d{4})\b/;
+
+/**
+ * Time of day, deliberately strict. Anything that could mean two
+ * different instants is refused rather than guessed:
+ *   2pm, 2:30pm, 2.30 pm   → meridiem given, unambiguous
+ *   14:00, 09:30, 10:00    → HH:MM reads as a 24-hour clock (en-GB)
+ *   "at 2"                 → 2am or 2pm? NOT matched. We ask.
+ */
+const EXPLICIT_TIME =
+  /\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b|\b(\d{1,2})[:.](\d{2})\b/i;
+
+function parseExplicitTime(
+  text: string
+): { hour: number; minute: number } | null {
+  const m = EXPLICIT_TIME.exec(text);
+  if (!m) return null;
+
+  if (m[3]) {
+    // Meridiem form. 12am is 00:xx, 12pm is 12:xx.
+    let hour = Number(m[1]);
+    const minute = m[2] ? Number(m[2]) : 0;
+    if (hour < 1 || hour > 12 || minute > 59) return null;
+    const pm = m[3].toLowerCase() === "pm";
+    if (hour === 12) hour = 0;
+    if (pm) hour += 12;
+    return { hour, minute };
+  }
+
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+/** Rejects 31/02 and friends: Date.UTC would roll them into March. */
+function isRealCalendarDate(
+  year: number,
+  month: number,
+  day: number
+): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  return (
+    probe.getUTCFullYear() === year &&
+    probe.getUTCMonth() === month - 1 &&
+    probe.getUTCDate() === day
+  );
+}
+
+/**
+ * Resolves an explicit DD/MM/YY or DD/MM/YYYY date, with its time, to an
+ * instant — without the model.
+ *
+ * Returns null when the text contains no numeric date, so the caller
+ * falls through to the model for everything conversational ("tomorrow",
+ * "next Monday"), which is unchanged.
+ *
+ * Returns `needsClarification` when a date IS present but the result
+ * would be a guess: an impossible date (32/13/26 — or 13/20/26, which is
+ * only valid if you read it as MM/DD, and we do not), or a date with no
+ * unambiguous time. Guessing here is exactly the bug.
+ */
+export function parseExplicitNumericDatetime(
+  text: string,
+  timezone: string
+): ParseDatetimeResult | null {
+  const m = NUMERIC_DATE.exec(text);
+  if (!m) return null;
+
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const rawYear = m[3];
+  // Two digits are this century: "26" is 2026, never 1926 or 2020.
+  const year = rawYear.length === 2 ? 2000 + Number(rawYear) : Number(rawYear);
+
+  if (!isRealCalendarDate(year, month, day)) {
+    console.warn(
+      "[parseDatetime] refusing to guess an impossible DD/MM date:",
+      JSON.stringify(m[0])
+    );
+    return { iso: null, failed: false, needsClarification: true };
+  }
+
+  // Search everything EXCEPT the date itself: with dot separators
+  // "20.08.26" would otherwise match the HH.MM form and be read as 20:08.
+  const withoutDate =
+    text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
+  const time = parseExplicitTime(withoutDate);
+  if (!time) {
+    return { iso: null, failed: false, needsClarification: true };
+  }
+
+  const instant = zonedWallClockToUtc(
+    year,
+    month,
+    day,
+    time.hour,
+    time.minute,
+    timezone
+  );
+
+  return { iso: instant.toISOString(), failed: false };
+}
+
 /**
  * Uses GPT to convert free-text datetime expressions into ISO timestamps.
  * Called directly from server code (e.g. the chat lead-capture flow) —
  * there is no HTTP route for this, to avoid an unauthenticated endpoint
  * that does nothing but spend OpenAI budget.
+ *
+ * An explicit numeric date short-circuits this entirely: see
+ * parseExplicitNumericDatetime.
  */
 export async function parseDatetimeToIso(
   text: string | null,
@@ -154,6 +283,20 @@ export async function parseDatetimeToIso(
 ): Promise<ParseDatetimeResult> {
   if (!text) {
     return { iso: null, failed: false };
+  }
+
+  // Deterministic first. An explicitly stated date is never handed to
+  // the model, so it cannot be reinterpreted — and this path still
+  // works when OpenAI is down.
+  const explicit = parseExplicitNumericDatetime(text, timezone);
+  if (explicit) {
+    console.log(
+      "[parseDatetime] explicit numeric date resolved in code:",
+      JSON.stringify(text),
+      "→",
+      explicit.iso ?? "(needs clarification)"
+    );
+    return explicit;
   }
 
   const openaiKey = process.env.OPENAI_API_KEY;
