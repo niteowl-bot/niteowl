@@ -370,6 +370,27 @@ export function buildVapiAssistantResponse(
         ? { voice: { provider: "11labs", voiceId: config.voiceId } }
         : {}),
       maxDurationSeconds: config.maxDurationSeconds,
+      // ── Turn-taking ────────────────────────────────────────────
+      // No speaking plan was sent at all, so the provider default
+      // applied: stop talking the moment ANY caller speech is
+      // transcribed. A single-word backchannel therefore cut Remy off
+      // mid-sentence. From the 2026-08-08 live call:
+      //   AI:   "Just to confirm, you mean Wednesday, 12 August at 3 PM for"
+      //   User: "Yeah. Sorry. Can you say that again?"
+      //   AI:   "Of course. Just"
+      //   User: "Sorry?"
+      // The caller's "Yeah." was agreement, not an interruption — but
+      // it stopped the sentence, so they never heard the question and
+      // asked twice for a repeat.
+      //
+      // numWords: 2 is the smallest change that fixes it: one-word
+      // acknowledgements ("yeah", "okay", "sure", "mm-hmm") no longer
+      // stop the sentence, while a real interruption — which is
+      // essentially always two words or more ("sorry, can you", "no
+      // wait", "hang on") — still stops it immediately. Deliberately
+      // NOT raised further: a caller must stay able to cut in
+      // naturally, and every extra word is a longer talk-over.
+      stopSpeakingPlan: { numWords: 2 },
       serverMessages: ["end-of-call-report", "status-update"],
       ...(config.serverUrl ? { server: { url: config.serverUrl } } : {}),
       artifactPlan: { recordingEnabled: false },

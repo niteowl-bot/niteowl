@@ -162,6 +162,35 @@ describe("the instruction — when the call ends", () => {
     assert.ok(anythingElse < endCall, "the call ends only at the very end");
   });
 
+  // 2026-08-08 live call: Remy was cut off mid-sentence twice.
+  //   AI:   "Just to confirm, you mean Wednesday, 12 August at 3 PM for"
+  //   User: "Yeah. Sorry. Can you say that again?"
+  //   AI:   "Of course. Just"
+  //   User: "Sorry?"
+  // No speaking plan was sent, so the provider default applied and ANY
+  // transcribed caller speech stopped the assistant — including a
+  // one-word "Yeah." that was agreement, not an interruption.
+  test("F — a one-word backchannel no longer cuts Remy off mid-sentence", () => {
+    const plan = assistantFor().stopSpeakingPlan;
+    assert.ok(plan, "a stopSpeakingPlan must be sent — the default stops on any speech");
+    assert.equal(plan.numWords, 2);
+  });
+
+  test("F — the caller can still interrupt naturally", () => {
+    // The point of the fix is backchannels, NOT making Remy hard to
+    // interrupt. Anything above a couple of words means the caller
+    // talks over Remy for longer before being heard.
+    const { numWords } = assistantFor().stopSpeakingPlan;
+    assert.ok(numWords > 0, "0 is the default that caused the cut-offs");
+    assert.ok(numWords <= 2, "more than two words makes interrupting feel broken");
+  });
+
+  test("F — the decline assistant is deliberately left alone", () => {
+    // It speaks one sentence and hangs up; there is nothing to interrupt.
+    const declined = buildVapiDeclineResponse("Acme Plumbing").assistant;
+    assert.equal(declined.stopSpeakingPlan, undefined);
+  });
+
   test("E — the earlier voice fixes are untouched by this one", () => {
     const prompt = promptFor();
     // Callback vs appointment (rule 13) and urgency (rule 6) intact.

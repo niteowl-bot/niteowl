@@ -128,7 +128,101 @@ describe("conversation order — the job comes before the caller", () => {
     // 7 since email became a required step of its own — it used to be a
     // sub-clause of the name step, which is how a call reached
     // "anything else?" without one.
-    assert.equal(checklistOrder(promptFor()).length, 7);
+    // 8 since the calendar check became step 4: it used to live only in
+    // rule 9's tail, so the model worked through this whole list first
+    // and checked availability last. Nothing was removed to make room.
+    assert.equal(checklistOrder(promptFor()).length, 8);
+  });
+
+  // From the test call: the caller asked for "next Wednesday at 3 PM"
+  // and was taken through service, name, email, address and callback
+  // number BEFORE anything looked at the calendar — so a slot that was
+  // never free cost the caller the whole interrogation. Rule 9 always
+  // said to call the tool "once you hold an appointment DATE and CLOCK
+  // TIME", but rule 5 is the rule that owns the ORDER and it never
+  // mentioned the check at all.
+  test("availability is checked before any customer detail is collected", () => {
+    const lines = checklistOrder(promptFor());
+    const indexOf = (pattern) => lines.findIndex((line) => pattern.test(line));
+
+    const datetime = indexOf(/The day and time they want/i);
+    const check = indexOf(/THE CALENDAR CHECK/);
+    const name = indexOf(/Their name/);
+    const email = indexOf(/Their email/);
+    const address = indexOf(/The address where the work is needed/);
+    const number = indexOf(/The callback number/);
+
+    assert.notEqual(check, -1, "rule 5 should carry the calendar check as a step");
+    assert.ok(datetime < check, "the date and time are settled before the check");
+    for (const [label, index] of Object.entries({ name, email, address, number })) {
+      assert.ok(check < index, `the calendar check comes before ${label}`);
+    }
+  });
+
+  test("the check is named as the reason not to collect details first", () => {
+    const prompt = promptFor();
+    assert.match(
+      prompt,
+      /name, email, address and number make no difference to whether a slot is free/i
+    );
+    assert.match(prompt, /NEVER collect them first to find out/);
+    // Rule 9 still owns what the tool means; rule 5 now owns when.
+    assert.match(prompt, /Call it THEN, at step 4 of rule 5, not at the end of the call/);
+    // A callback must not start burning calendar lookups.
+    assert.match(prompt, /A callback skips this step entirely \(rule 13\)/);
+  });
+
+  // Also from the test call: Remy confirmed the date, then the email,
+  // then the address, each as its own extra turn, and then read all
+  // three back again in the closing recap.
+  test("high-confidence details are acknowledged, not re-confirmed", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /CONFIRM ONCE, NOT TWICE/);
+    assert.match(
+      prompt,
+      /NEVER ask "is that correct\?", "did I get that right\?" or "I've noted X — is that right\?" about something you are already confident of/
+    );
+    assert.match(prompt, /never re-ask a detail the caller has already confirmed once/);
+    // A clearly-heard address gets an acknowledgement and nothing more.
+    assert.match(
+      prompt,
+      /do NOT read the whole address back or ask whether it is correct \(rule 2\); the rule 11 recap covers it/
+    );
+    // The one final check survives, and is explicitly the only repeat.
+    assert.match(prompt, /it is one check at the end, not a re-reading of the whole call/);
+  });
+
+  // 2026-08-08 live call. The caller said "17 Elm Drive"; Deepgram
+  // transcribed "17 Ellen Drive", and Remy faithfully read back what it
+  // had been given — but in the SAME turn as the next question:
+  //   AI: "I have noted the address as 1 7 Ellen Drive. I can use the
+  //        number you're calling from. Is that the best number...?"
+  //   User: "Yeah. Yeah."
+  // The yes confirmed the number. The wrong address was stored silently.
+  // Remy cannot see the transcriber's confidence, so the guard is the
+  // same one rule 8 already uses for services: name what you think you
+  // heard, once, and nothing else in that turn.
+  test("an uncertain street name is clarified once, on its own", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /A street name is the detail speech-to-text gets wrong most often/);
+    assert.match(
+      prompt,
+      /ask ONCE, naming only the part you are unsure of and nothing else in that turn: "Sorry, was that Birch Drive\?"/
+    );
+    // The correction path is untouched — still read back WHOLE.
+    assert.match(
+      prompt,
+      /change only the wrong part and say the WHOLE corrected address back once — never a part-corrected one/
+    );
+  });
+
+  test("a read-back is never merged with the next question", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /A READ-BACK IS A WHOLE TURN/);
+    assert.match(
+      prompt,
+      /the caller answers the LAST thing you said, so a "yes" there confirms the number and silently lets a wrong address through/
+    );
   });
 
   test("details the caller volunteered are not asked for again", () => {
