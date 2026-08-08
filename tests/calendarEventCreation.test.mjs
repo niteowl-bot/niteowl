@@ -1212,3 +1212,92 @@ describe("the lead engine obeys the allowlist too", () => {
     assert.equal(stubs.calls.freeBusy, 0);
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  The engine reports what it actually did
+// ══════════════════════════════════════════════════════════════════
+//
+// buildBookingOutcomeNote is only as truthful as its inputs. These pin
+// that capturePartialLead's reported outcome matches the row it wrote —
+// the link between the mutation and the customer-facing reply.
+
+import { buildBookingOutcomeNote } from "@/lib/bookingOutcome";
+
+describe("capturePartialLead reports the outcome it actually persisted", () => {
+  test("a successful booking reports booked + the stored instant", async () => {
+    stubs = installStubs();
+    const result = await captureBooking();
+    assert.equal(result.booked, true);
+    assert.equal(result.appointmentIso, START_ISO);
+    assert.equal(
+      stubs.calls.leadUpdates.at(-1)?.status ?? stubs.calls.leadInserts.at(-1)?.status,
+      "booked",
+      "the reported outcome must match the row"
+    );
+    // …and that is enough to state the truth to the customer.
+    const note = buildBookingOutcomeNote({
+      intent: "new_booking",
+      booked: result.booked,
+      appointmentIso: result.appointmentIso,
+      unavailableReason: result.unavailableReason,
+    });
+    assert.ok(note);
+    assert.match(note, /IS NOW BOOKED/);
+  });
+
+  test("a calendar CONFLICT reports NOT booked, so no success is claimed", async () => {
+    stubs = installStubs({
+      busy: [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }],
+    });
+    const result = await captureBooking();
+    assert.equal(result.booked, false);
+    assert.equal(result.unavailableReason, "capacity");
+    assert.equal(
+      buildBookingOutcomeNote({
+        intent: "new_booking",
+        booked: result.booked,
+        appointmentIso: result.appointmentIso,
+        unavailableReason: result.unavailableReason,
+      }),
+      null,
+      "a refused booking must never produce a confirmation"
+    );
+  });
+
+  test("a chat RESCHEDULE reports the new time it stored", async () => {
+    stubs = bookedLeadStubs();
+    const result = await chatReschedule();
+    assert.equal(result.appointmentIso, MOVED_ISO);
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, MOVED_ISO);
+    const note = buildBookingOutcomeNote({
+      intent: "reschedule",
+      booked: result.booked,
+      appointmentIso: result.appointmentIso,
+      unavailableReason: result.unavailableReason,
+    });
+    assert.ok(note, "the live bug: this note was missing entirely");
+    assert.match(note, /HAS BEEN MOVED/);
+    assert.match(note, /13 August 2026/);
+  });
+
+  test("a REFUSED chat reschedule reports the OLD time and claims nothing", async () => {
+    stubs = bookedLeadStubs({ updateStatus: 500 });
+    const result = await chatReschedule();
+    assert.equal(
+      result.appointmentIso,
+      START_ISO,
+      "the appointment did not move, and the report says so"
+    );
+    assert.equal(result.unavailableReason, "lookup_failed");
+    assert.equal(
+      buildBookingOutcomeNote({
+        intent: "reschedule",
+        booked: result.booked,
+        appointmentIso: result.appointmentIso,
+        unavailableReason: result.unavailableReason,
+      }),
+      null,
+      "a refused move must never be announced as moved"
+    );
+  });
+});

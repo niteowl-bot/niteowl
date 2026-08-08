@@ -816,7 +816,7 @@ export async function capturePartialLead(
   leadSource: string = "chat",
   needsReview: boolean = false,
   conversationTranscript: string | null = null
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean; /** The appointment instant actually stored, so a reply can state it rather than guess. */ appointmentIso: string | null; /** Whether the lead genuinely ended up confirmed. */ booked: boolean }> {
 
 
   const safeConversationId =
@@ -1033,6 +1033,7 @@ export async function capturePartialLead(
 
 
 
+    let confirmedBooking = false;
     const { error: updateError } = await supabase
       .from("leads")
       .update(updatePayload)
@@ -1111,7 +1112,7 @@ export async function capturePartialLead(
       // leaves it for review, and the confirmation email below is then
       // never sent — the customer is not told of a booking that does
       // not exist.
-      let confirmedBooking = safeNextStatus === "booked" && existing.status !== "booked";
+      confirmedBooking = safeNextStatus === "booked" && existing.status !== "booked";
       if (backsWithCalendar && updatedAppointmentIso) {
         const settled = await settleCalendarBacking(
           supabase,
@@ -1162,7 +1163,7 @@ export async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured };
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured, appointmentIso: updatedAppointmentIso ?? null, booked: confirmedBooking || safeNextStatus === "booked" };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
@@ -1193,6 +1194,7 @@ export async function capturePartialLead(
 
   const manageToken = crypto.randomUUID();
 
+  let confirmedInsert = false;
   const { data: inserted, error: insertError } = await supabase
     .from("leads")
     .insert({
@@ -1219,7 +1221,7 @@ export async function capturePartialLead(
   } else {
     console.log("[lead capture] inserted new lead:", inserted?.id);
 
-    let confirmedInsert = safeInsertStatus === "booked";
+    confirmedInsert = safeInsertStatus === "booked";
     if (insertBacksWithCalendar && inserted?.id && resolvedIso) {
       const settled = await settleCalendarBacking(
         supabase,
@@ -1259,5 +1261,5 @@ export async function capturePartialLead(
     }
 
   }
-return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: inserted?.id ?? null };
+return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: inserted?.id ?? null, appointmentIso: resolvedIso ?? null, booked: confirmedInsert };
 }

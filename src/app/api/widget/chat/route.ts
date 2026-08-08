@@ -11,6 +11,7 @@ import {
   resolveEscalationQuestion,
 } from "@/lib/leadCapture";
 import type { UnavailableReason } from "@/lib/leadCapture";
+import { buildBookingOutcomeNote } from "@/lib/bookingOutcome";
 import { sendNeedsReviewNotification } from "@/lib/email";
 import { hasActiveAccess } from "@/lib/billing/access";
 import { buildPausedChatResponse } from "@/lib/billing/pausedReply";
@@ -245,7 +246,8 @@ function buildSystemPrompt(
   unavailableReason: UnavailableReason = null,
   handoffAskContact: boolean = false,
   handoffContactCaptured: boolean = false,
-  hoursSummary: BusinessHoursSummary | null = null
+  hoursSummary: BusinessHoursSummary | null = null,
+  bookingOutcomeNote: string | null = null
 ): string {
   const sections: string[] = [];
 
@@ -335,6 +337,13 @@ function buildSystemPrompt(
       "10. If more than one entry in the business knowledge above could answer the same question, use the most specific one — never list or repeat multiple entries at the customer. If two entries genuinely conflict (e.g. different prices for what sounds like the same thing), do not guess which is correct: say a team member will confirm the exact details, then collect their name and best contact method.",
     ].join("\n")
   );
+
+  // Stated BEFORE the availability note so a refusal, if any, still has
+  // the last word — the two are mutually exclusive by construction
+  // (buildBookingOutcomeNote returns null whenever a reason is set).
+  if (bookingOutcomeNote) {
+    sections.push(bookingOutcomeNote);
+  }
 
   if (suggestedAlternativeIso) {
     const formatted = new Intl.DateTimeFormat("en-GB", {
@@ -503,6 +512,7 @@ export async function POST(req: NextRequest) {
   let detectedIntent: LeadIntent = "unknown";
   let suggestedAlternativeIso: string | null = null;
   let unavailableReason: UnavailableReason = null;
+  let bookingOutcomeNote: string | null = null;
   let handoffAskContact = false;
   let handoffContactCaptured = false;
 
@@ -554,6 +564,14 @@ export async function POST(req: NextRequest) {
 
         suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
         unavailableReason = captureResult.unavailableReason;
+        // What was ACTUALLY persisted, so the reply states the outcome
+        // instead of inferring it (see lib/bookingOutcome.ts).
+        bookingOutcomeNote = buildBookingOutcomeNote({
+          intent: extracted.intent,
+          booked: captureResult.booked,
+          appointmentIso: captureResult.appointmentIso,
+          unavailableReason: captureResult.unavailableReason,
+        });
 
         if (captureResult.needsReviewContactCaptured) {
           handoffContactCaptured = true;
@@ -804,7 +822,7 @@ export async function POST(req: NextRequest) {
   // invalidate and no draft/published state of their own.
   const hoursSummary = await getBusinessHoursSummary(orgId);
 
-  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured, hoursSummary);
+  const systemPrompt = buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured, hoursSummary, bookingOutcomeNote);
 
   // ── Streaming response (identical pattern to chat/route.ts) ─────
   const encoder = new TextEncoder();
