@@ -2,6 +2,103 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-08 (Voice — live call after the flow fix: three causes, only one of them the prompt)
+
+### The first and largest cause: the fix was never deployed. Third occurrence.
+The live call ran the **pre-fix prompt**. Verified three ways: `git show origin/main:src/lib/voice/assistant.ts | grep -c "THE CALENDAR CHECK"` → **0**; the same against `HEAD` → **0**; the working tree → 1. Production's READY deployment reports `githubCommitSha` **8b4862e**, which is HEAD, which does not contain the change. So problems 1 and 3 had **no root cause in the code** — the availability step and the confirm-once rule were never in the prompt Vapi was given.
+
+`CHECKLIST.md` already records this exact failure mode as a "deployment lesson, second occurrence". This is the third. The check that catches it is `git show origin/main:<file> | grep <marker>` after pushing; a green local suite never will.
+
+### Verified — the live prompt path has no stale or provider-side copy
+The assistant is **transient**: `assistant-request` → `buildAssistantRequestResponse` → `buildVoiceAssistantConfig` → `buildVapiAssistantResponse`, returned inline in the webhook response and rebuilt from source plus live `business_knowledge` on **every call**. There is no stored Vapi assistant, no generated prompt file, no cached or environment-specific copy, and no database-stored prompt (`voice_settings` carries only greeting, voice id and language). So the deployed `src/lib/voice/assistant.ts` **is** the live prompt — which is exactly why an undeployed change had no effect.
+
+### Fixed — Remy was cut off mid-sentence by one-word agreement
+```
+AI:   "Just to confirm, you mean Wednesday, 12 August at 3 PM for"
+User: "Yeah. Sorry. Can you say that again?"
+AI:   "Of course. Just"
+User: "Sorry?"
+```
+- **Root cause: no speaking plan was ever sent**, so the provider default applied — stop talking the moment ANY caller speech is transcribed. The caller's "Yeah." was agreement, not an interruption, and it truncated the question they were agreeing to; they then asked twice for a repeat and never heard it.
+- **Fix: `stopSpeakingPlan: { numWords: 2 }`** in `buildVapiAssistantResponse` — one line. One-word acknowledgements ("yeah", "okay", "sure") no longer stop the sentence; a real interruption, which is essentially always two words or more ("sorry, can you", "hang on"), still stops it immediately. Deliberately not raised further: every extra word is a longer talk-over. The decline assistant is untouched — it speaks one sentence and hangs up.
+
+### Fixed — "17 Elm Drive" was stored as "17 Ellen Drive"
+- **Root cause: transcription, not prompt, extraction or post-processing.** The stored transcript itself reads `User: 17 Ellen Drive.` — Deepgram `nova-2` misheard it, and Remy faithfully repeated what it was handed. Remy never sees what was said, only what was transcribed.
+- **A second, compounding cause: the read-back was merged into the next question.** Remy said *"I have noted the address as 1 7 Ellen Drive. I can use the number you're calling from. Is that the best number to reach you on?"* — the caller's "Yeah. Yeah." confirmed the **number**. The address check was present and useless.
+- **Fix, both halves.** Rule 2 gains **A READ-BACK IS A WHOLE TURN** — never tack the next question onto a read-back, because the caller answers the last thing they heard. Rule 5's address step now uses the targeted clarification rule 8 already uses for services: if a street name is unusual or could plausibly be a mis-hearing, ask once naming only that part — *"Sorry, was that Birch Drive?"* — and nothing else in the turn. A clearly-heard address still gets a brief "Thanks." and nothing more.
+- **The transcriber was NOT changed.** Swapping the speech-to-text model is a provider-config change affecting every word of every call, and this evidence does not justify it.
+
+### Not reproduced — no false availability claim
+The brief asked to stop Remy implying availability it had not verified. **The transcript shows it did not.** Remy said *"I'll note your preferred time as Wednesday, 12 August at 3 PM"* — the existing rule 9 "preferred time" wording — and never said available, booked, confirmed or reserved. That guard held and was left untouched. Nothing was changed for this item.
+
+### One real bug found by the tests, during this change
+Inserting the speaking plan **dropped `serverMessages: ["end-of-call-report", "status-update"]`** from the assistant payload — which would have stopped every end-of-call report reaching the webhook, silently killing lead capture, call records and owner emails. `voiceEndCall.test.mjs`'s "the rest of the assistant payload is unchanged" assertion caught it immediately. Restored and re-verified: the built payload carries all 10 keys and both tools.
+
+### Scope and tests
+`src/lib/voice/assistant.ts` (rules 2 and 5) and `src/lib/voice/vapi.ts` (one config line plus the restored `serverMessages`). **No change to OAuth, calendar connection, token handling, timezone, date parsing, availability calculation, alternative-slot generation, lead capture, caller ID, email, schema, credentials, routes or deployment config.** `npm test` **501 passing, 0 failing** (+5 tests); `tsc --noEmit` clean. Prompt 17,708 → **18,550** characters. **The acceptance test is another real call — automated tests prove the wording is in the built prompt, never that the model obeys it, and nothing here can prove the barge-in threshold without a live call.**
+
+## 2026-08-08 (Voice — the calendar was checked last, and everything was confirmed twice)
+
+### Fixed — availability is now checked before any customer detail is collected
+Observed on a test call: the caller asked for "next Wednesday at 3 PM" and was taken through service, name, email, address and callback number **before anything looked at the calendar**. If the slot was never free, the caller had answered the whole interrogation for nothing.
+
+- **Root cause: two rules disagreed about when, and the one that owns ORDER never mentioned the check.** Rule 9 has always said to call `check_availability` *"once you hold an appointment DATE and CLOCK TIME"* — but that instruction sits in the tail of a rule about booking language, while **rule 5** is the rule that owns the sequence the call is worked through, and its ordered list went straight from the day and time to the caller's name. The model followed the list.
+- **Fix: the calendar check is now step 4 of rule 5**, immediately after the date and time are agreed and before name (5), email (6), address (7) and number (8) — with the reason stated, since a model needs to know *why* the order matters: *"name, email, address and number make no difference to whether a slot is free, so NEVER collect them first to find out."* Rule 9 gained one sentence pointing at the same step so the two can no longer drift.
+- **The minimum-information exception is already satisfied by the existing order**: the service is settled at step 2, before the check, and `checkBookingSlot` takes only org, instant and duration. Nothing new is asked for in order to check.
+- **A callback still skips the check entirely** (rule 13), so a callback request starts no calendar lookups.
+
+### Fixed — Remy confirmed everything twice
+The same call confirmed the date, then the email, then the address, each as its own turn, then read all three back again in the closing recap.
+
+- **Root cause: confirmation was mandated per item in five separate places** (rule 5 steps for name, email and address; rule 6 for the date; rule 7 for the number) **and again wholesale in rule 11's recap.** Every scripted read-back was individually justified; nothing ever counted them together, so each item was confirmed twice by construction.
+- **Fix: one CONFIRM ONCE, NOT TWICE clause in rule 2** (which already owns turn discipline) naming exactly where a read-back earns its turn — service, calendar date, email, name, and any number spoken aloud — and banning *"is that correct?"* on anything already understood confidently. **The address's inline read-back is removed**; it is now acknowledged and passed, with the recap covering it. Correction handling is untouched: a corrected address is still repeated back **whole**, never part-corrected.
+- **The single final confirmation is kept** and now says so explicitly — *"it is one check at the end, not a re-reading of the whole call"* — plus a two-to-three-sentence ceiling.
+
+### Deliberately NOT changed — booking language
+The brief described a third state, *"BOOKED — say so only after the calendar create succeeds."* **That state is unreachable today**: `createOrgEvent` still has zero call sites, so the voice path never writes to a calendar. The prompt's existing ban on "booked"/"confirmed"/"reserved" wording, and its *"a time it reports as available is still only a REQUEST"* rule, are therefore correct as they stand and were **left exactly as they were**. Adding "you're booked" would have made Remy claim something no code performs.
+
+### Scope
+Four prompt strings in `src/lib/voice/assistant.ts` (rules 2, 5, 9, 11). **No code logic, no availability calculation, no alternative-slot generation, no date parsing, no timezone handling, no OAuth, no token storage, no calendar API config, no schema, no env var, no route.** Prompt grew 15,985 → **17,708 characters** (+1,723) for a bare org — see the standing note that the 11,399 "budget" has no documented origin. `npm test` **496 passing, 0 failing** (493 + 3 new); one existing assertion updated from 7 to 8 checklist steps, which is the count the new step changes. `tsc --noEmit` clean.
+
+## 2026-08-08 (Provider independence & resilience review — documentation only, no code changed)
+
+### Added — `docs/ARCHITECTURE.md` Part II
+Extends the same-day guardrail review (Part I) with provider risk, failure isolation, truthful degradation, idempotency, source of truth, portability and recovery. **Nothing implemented, no provider migrated, no vendor added, no working integration touched.** `npm test` 493 passing, 0 failing, unchanged.
+
+The headline: **the weak points are not abstraction gaps.** `CalendarCapability` is a real domain contract, `IntegrationError` is a provider-neutral taxonomy, `integrationFetch` gives every provider one timeout and one retry classification, and Google's client-supplied event id makes creation idempotent at the provider. Portability is good — **no `@vercel/*` import anywhere**, no `vercel.json`, no KV/Blob/Edge Config/Cron, no Supabase Realtime/Edge Functions/RPC. Idempotency is genuinely strong: eight independent guards, **no current duplicate-business-action vulnerability found**. Observability is correctly non-blocking (`tracesSampleRate: 0`, async buffered transport, no business path awaits Sentry).
+
+### Found, not fixed — a database blip makes chat and the widget confirm a booking nothing checked
+`getBusinessHoursForOrg` returns `[]` for **both** "no hours configured" and "the query failed" — it holds the `error` object and discards the distinction. `isWithinBusinessHours` reads the empty list as `no_hours_configured` and returns available; `isSlotAvailable` fails open on a query error by the same reasoning. So a transient Supabase error on the booking path does not degrade — it produces a **confirmed, emailed booking** for a time that may be outside business hours or over capacity.
+
+The codebase already knows. `voice/availabilityTool.ts:391` guards against exactly this and states that doing otherwise *"is exactly what the engine's own 'could not check is never it is free' rule forbids"* — but that guard was deliberately scoped to voice so shared behaviour would not change. The consequence is that the rule the whole calendar design rests on is enforced against Google, enforced on the phone, and not enforced against the database on the website path. Deliberately left alone: the fail-open is load-bearing for the genuine no-hours-configured case, and changing it changes what happens to real bookings during a blip.
+
+### Flagged before milestone 5 — the idempotency key is a trap for reschedules
+`toGoogleEventId(idempotencyKey)` turns the key into the **permanent Google event id**, and a 409 correctly returns `alreadyExisted: true`. If the key is derived from the lead id, a rescheduled appointment re-derives the same key, hits the existing event, and reports success **carrying the old time**. The key must identify this *version* of the appointment, and `alreadyExisted: true` must never be read as "the calendar now matches" without an update or a verification read. Pairs with the appointment-identity decision from Part I.
+
+### Before scale, recorded not built
+A broken calendar connection is **invisible** — `needs_reauth` surfaces only on Settings → Integrations, no email or banner, while the phone correctly refuses to confirm anything; this will fire, because an unverified Google app in Testing mode issues refresh tokens that expire after 7 days. Email delivery state is neither tracked nor retried. `integration_jobs` — the durable retry queue with dedupe key, backoff and payload snapshot — is built, migrated, live, and has **zero consumers**; it is the right home for both. Plus: every `console.error` becomes a Sentry event (quota, not correctness), per-instance rate limiting, unproven restore, and no provider-health model. Also noted: `INTEGRATION_TOKEN_ENCRYPTION_KEY` is not part of the database backup, so a restore without the matching key holds credentials nobody can decrypt.
+
+### Verified rather than assumed
+Middleware matches nearly every request including `/api/*`, but `getUser()` short-circuits locally with `AuthSessionMissingError` when there is no session cookie — confirmed by reading the installed `@supabase/auth-js` source, not from memory. So the widget and voice webhook paths pay **no** auth round trip, and a Supabase Auth outage logs dashboard users out while leaving public routes untouched.
+
+## 2026-08-08 (Architecture review — documentation only, no code changed)
+
+### Added — `docs/ARCHITECTURE.md`
+A future-infrastructure guardrail review against `8b4862e`. **No production code, schema, route, RLS policy, environment variable or feature flag was changed**, and no future roadmap feature was built. The architecture decisions in this repo were real and well-reasoned but scattered across `SESSION_SUMMARY.md` §20, SQL file headers and code comments — none of them a map. The document records the current architecture, the multi-tenant and calendar picture, deferred future-compatibility notes each with a stated trigger, and a compatibility map. `npm test` **493 passing, 0 failing** before and after (nothing executable was touched).
+
+### Verified against production, read-only — credential tables are not readable via the anon key
+Checked by **exposure rather than by reading `pg_policies`**, which PostgREST cannot reach: the same probe run with the service-role key and the anon key, printing counts only — no row contents, no keys, no PII. `integration_connections` returns **1 row to service-role and 0 to anon**, which is direct proof that RLS denies the public key on the table holding encrypted Google tokens; `leads` behaves the same (5 vs 0). This closes the outstanding `CHECKLIST.md` item that the 2026-08-07 verification never re-checked. ⚠️ `integration_jobs` and `integration_links` returned 0/0 because they are **empty** — their deny-all is inferred from the migration, not proven, and should be re-probed once the job queue has run.
+
+### Found, not fixed — three booking-correctness findings, all pre-existing, all needing an owner decision
+Recorded in `CHECKLIST.md` and `docs/ARCHITECTURE.md`; deliberately left alone because each changes core booking behaviour for every existing org.
+
+- **Overlapping appointments are not prevented.** `isSlotAvailable` counts booked leads with `.eq("appointment_datetime", isoDatetime)` — exact timestamp equality, not overlap. With production's 60-minute appointments and `max_concurrent_bookings=1`, a 10:00 and a 10:30 booking both see a count of zero and both pass. `overlapsBusy()` sits in the same file with correct half-open interval logic, but is applied only to *external* busy windows, never to the org's own bookings. "Double Booking Prevention" is therefore identical-timestamp prevention. Every channel is affected.
+- **Chat and the widget book without consulting the calendar, while the phone refuses on the same calendar.** `capturePartialLead` calls the internal engine directly and never `checkBookingSlot`; `voice/availabilityTool.ts` does. With `CALENDAR_AVAILABILITY_BLOCKING` live in production, the channels now disagree — and since no write path is wired, a website booking never reaches Google either. `/api/bookings/manage` has the same gap plus one more: a self-service reschedule will silently desync the external event once writes land.
+- **A returning customer's second booking overwrites their first.** Lead-resolution layer 2 matches email/phone across conversations with no time bound, and `booked` is in `MERGEABLE_STATUSES`, so a chat/widget customer booking again a month later has the existing row mutated — first appointment gone from the calendar, and no confirmation email, because the send is guarded by `existing.status !== "booked"`. Voice is unaffected (layer 2 is skipped for `source='voice'`).
+
+### Decision flagged before milestone 5 — appointment identity
+`integration_links` carries `unique (subject_type, subject_id, connection_id, capability)`, so whatever `createOrgEvent` is eventually passed as `subject_id` becomes the permanent stored identity of the thing that owns a calendar event. Choosing the lead id means one lead can hold exactly one event forever, and un-baking it later means a data migration over live rows plus reconciliation against Google. Recommendation: write `subject_type = 'appointment'` from the very first event, with the lead's id as the value for now — no new table, no migration, no behaviour change, and the rows already say what they mean if appointments are ever separated from leads.
+
 ## 2026-08-07 (Integrations — choosing a Google Calendar could never save)
 
 ### Fixed — "Could not save your selection." on every calendar choice
