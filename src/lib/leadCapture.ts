@@ -1,12 +1,8 @@
 import type { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseDatetimeToIso } from "@/lib/parseDatetime";
-import {
-  isWithinBusinessHours,
-  findNextAvailableSlot,
-  checkSlotCapacity,
-  getOrgSettings,
-} from "@/lib/availability";
+import { parseDatetimeToIso, type ParseDatetimeResult } from "@/lib/parseDatetime";
+import { getOrgSettings, getOrgTimezone } from "@/lib/availability";
+import { checkBookingSlot } from "@/lib/bookingAvailability";
 import {
   confirmAppointmentOnCalendar,
   mayConfirmBooking,
@@ -592,10 +588,34 @@ function isBookingCompletedByContactUpdate(
 
 // ── Parse free-text datetime into ISO timestamp ──────────────────
 
+/**
+ * Resolves the customer's stated time in the BUSINESS'S OWN timezone.
+ *
+ * This passed a hardcoded "Europe/London" regardless of where the
+ * business actually is, so "2pm" was read as 2pm London and stored as
+ * an instant that is a different hour locally for every org outside the
+ * UK. The org's zone is the canonical source — organisations.timezone,
+ * read through getOrgTimezone, which validates it and falls back to
+ * Europe/London for a row that predates the column or carries an
+ * unusable value. No second timezone source is introduced.
+ *
+ * The lookup is skipped when there is nothing to parse, so the common
+ * message that mentions no time costs no extra query.
+ */
 async function resolveAppointmentDatetime(
+  orgId: string,
   preferredDatetime: string | null
-): Promise<{ iso: string | null; failed: boolean }> {
-  return parseDatetimeToIso(preferredDatetime, "Europe/London");
+  // ParseDatetimeResult, not a narrowed { iso, failed }: the narrower
+  // type structurally HID needsClarification, which the parser has been
+  // setting all along. That is why "20/08/26" silently captured no
+  // appointment instead of asking what time.
+): Promise<ParseDatetimeResult> {
+  // parseDatetimeToIso already returns this for empty input; returning
+  // it here too keeps the behaviour identical while avoiding the query.
+  if (!preferredDatetime) return { iso: null, failed: false };
+
+  const timezone = await getOrgTimezone(orgId);
+  return parseDatetimeToIso(preferredDatetime, timezone);
 }
 
 export async function getOrgOwnerEmail(
@@ -816,7 +836,7 @@ export async function capturePartialLead(
   leadSource: string = "chat",
   needsReview: boolean = false,
   conversationTranscript: string | null = null
-): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean; /** The appointment instant actually stored, so a reply can state it rather than guess. */ appointmentIso: string | null; /** Whether the lead genuinely ended up confirmed. */ booked: boolean }> {
+): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean; /** The appointment instant actually stored, so a reply can state it rather than guess. */ appointmentIso: string | null; /** Whether the lead genuinely ended up confirmed. */ booked: boolean; /** The customer named a date we will not guess at — the reply must ASK. Never set by an availability, calendar or lookup outcome; only by the datetime parser. */ needsClarification: boolean; /** The date we understood, when only the time is missing. Null when the date itself is what needs clarifying. */ clarificationDate: string | null }> {
 
 
   const safeConversationId =
@@ -825,14 +845,51 @@ export async function capturePartialLead(
       : null;
 
   console.log("[lead capture] intent:", extracted.intent, "| conversationId:", safeConversationId);
-  const { iso: resolvedIso, failed: datetimeParseFailed } =
-    await resolveAppointmentDatetime(extracted.preferred_datetime);
+  const {
+    iso: resolvedIso,
+    failed: datetimeParseFailed,
+    needsClarification: datetimeNeedsClarification,
+    clarificationDate,
+  } = await resolveAppointmentDatetime(orgId, extracted.preferred_datetime);
 
   if (datetimeParseFailed) {
     console.error("[lead capture] datetime parsing failed for:", extracted.preferred_datetime);
   }
+
+  // A stated date we will not guess at. No instant exists, so the
+  // availability block below is skipped exactly as it is for any
+  // unparsed time, and nothing can be booked — isBookingConfirmed
+  // requires an appointment instant. The raw text the customer typed is
+  // still written to preferred_datetime, so the date is not lost.
+  if (datetimeNeedsClarification) {
+    console.log(
+      "[lead capture] datetime needs clarification:",
+      JSON.stringify(extracted.preferred_datetime),
+      clarificationDate ? `| date understood as ${clarificationDate}` : "| date itself unreadable"
+    );
+  }
   let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
+  // ── Preserving the status an EXTERNAL refusal has always produced ──
+  //
+  // Until this change nothing on this path consulted the calendar, so an
+  // external conflict (or an unreadable calendar) could only ever be
+  // discovered LATE — by settleCalendarBacking, at write time, which
+  // parks the lead as needs_review for the owner.
+  //
+  // Finding it EARLIER must not move the lead somewhere else. Without
+  // this flag the request instead falls through the
+  // `suggestedAlternativeIso → awaiting_confirmation` branch below,
+  // because the engine now returns a verified alternative where it
+  // previously returned nothing — and a phone request that used to land
+  // in the owner's Needs Review queue would quietly stop appearing
+  // there. The phone's post-call behaviour is the known-good baseline
+  // and is held invariant here.
+  //
+  // INTERNAL refusals (hours, capacity, a failed internal lookup) are
+  // untouched: they always set suggestedAlternativeIso and always took
+  // the awaiting_confirmation branch.
+  let externalRefusal = false;
   let unavailableReason:
     | "hours"
     | "capacity"
@@ -856,40 +913,86 @@ export async function capturePartialLead(
   );
 
     if (resolvedIso) {
-    const availability = await isWithinBusinessHours(orgId, resolvedIso);
-    const capacity = availability.isAvailable
-      ? await checkSlotCapacity(orgId, resolvedIso, { excludeLeadId: existing?.id })
-      : { available: true, failed: false };
-    const slotAvailable = capacity.available;
+    // ── One authoritative availability decision ───────────────────
+    //
+    // This used to call isWithinBusinessHours + checkSlotCapacity
+    // directly, which are INTERNAL checks only. A slot already taken on
+    // the business's connected Google Calendar was reported free, and
+    // chat confirmed it — the invariant "an unavailable slot must never
+    // be presented as available" held on the phone (which has gone
+    // through checkBookingSlot since milestone 3) and was silently
+    // broken on chat and the widget.
+    //
+    // checkBookingSlot composes the SAME two internal calls, in the
+    // same order, and only then consults the calendar — so with no
+    // calendar connected this is exactly what ran before. No second
+    // free/busy implementation exists here; this file never speaks to
+    // a provider.
+    const { appointmentDurationMinutes } = await getOrgSettings(
+      createAdminClient(),
+      orgId
+    );
 
-    if (!availability.isAvailable || !slotAvailable) {
+    const decision = await checkBookingSlot(
+      orgId,
+      resolvedIso,
+      appointmentDurationMinutes,
+      // Preserved verbatim from the checkSlotCapacity call this
+      // replaces: a lead moving its own appointment must not collide
+      // with itself. Undefined for a new enquiry, which is a no-op.
+      { excludeLeadId: existing?.id }
+    );
+
+    if (!decision.available) {
       outsideBusinessHours = true;
-      unavailableReason = !availability.isAvailable
-        ? availability.reason === "ends_after_close"
-          ? "ends_after_close"
-          : availability.reason === "lookup_failed"
+      // "We could not check" is never "it is unavailable", and never a
+      // specific excuse. A failed hours read, a failed capacity count
+      // and an unreadable calendar all become lookup_failed, which the
+      // Availability Note renders as "I can't confirm that time right
+      // now" rather than the untrue "you're outside opening hours" or
+      // "that slot is fully booked".
+      unavailableReason =
+        decision.internalCheckFailed || decision.externalCheckFailed
           ? "lookup_failed"
-          : "hours"
-        // A failed count is not a full diary. Saying "fully booked"
-        // here would be inventing a fact from a database error.
-        : capacity.failed
-        ? "lookup_failed"
-        : "capacity";
-      suggestedAlternativeIso = await findNextAvailableSlot(orgId, resolvedIso);
+          : decision.reason === "ends_after_close"
+          ? "ends_after_close"
+          : decision.reason === "hours"
+          ? "hours"
+          // capacity (internal double-booking) and external_conflict (the
+          // slot is taken on the real calendar) are the same fact to a
+          // customer: that time has gone. Chat has always called this
+          // "capacity", and the wording already exists.
+          : "capacity";
+      // Whatever the engine verified. Null on a failed lookup — nothing
+      // was checked, so no alternative may be offered as if it had been.
+      suggestedAlternativeIso = decision.suggestedIso;
+      // Both external causes: the calendar said busy, or the calendar
+      // could not be read. Each used to surface only at write time.
+      externalRefusal =
+        decision.reason === "external_conflict" || decision.externalCheckFailed;
       console.log(
         "[lead capture] requested time unavailable:",
         resolvedIso,
-        "| withinHours:",
-        availability.isAvailable,
         "| reason:",
-        availability.reason,
-        availability.reason === "ends_after_close"
-          ? `(duration ${availability.appointmentDurationMinutes}min, only ${availability.minutesUntilClose}min until close)`
-          : "",
-        "| slotAvailable:",
-        slotAvailable,
+        decision.reason,
+        "| internalCheckFailed:",
+        decision.internalCheckFailed,
+        "| externalChecked:",
+        decision.externalChecked,
+        "| externalCheckFailed:",
+        decision.externalCheckFailed,
+        "| mapped:",
+        unavailableReason,
         "| suggested:",
         suggestedAlternativeIso
+      );
+    } else if (decision.externalConflictObserved) {
+      // Log-only mode: the calendar says busy but blocking is off, so
+      // the booking proceeds. Recorded so the log can be compared with
+      // reality before this is allowed to turn a customer away.
+      console.log(
+        "[lead capture] LOG-ONLY external conflict — booking allowed at",
+        resolvedIso
       );
     }
   }
@@ -968,25 +1071,34 @@ export async function capturePartialLead(
       }
     }
 
+    // The request is complete enough to be a booking — the only case an
+    // external refusal used to reach settleCalendarBacking from.
+    const bookingComplete =
+      isBookingConfirmed(
+        extracted.intent,
+        updatedAppointmentIso,
+        mergedPhone,
+        mergedEmail
+      ) ||
+      isBookingCompletedByContactUpdate(
+        extracted.intent,
+        Boolean(existing.appointment_datetime),
+        updatedAppointmentIso,
+        mergedPhone,
+        mergedEmail
+      );
+
     const nextStatus: LeadStatus =
       PROTECTED_STATUSES.includes(existing.status as LeadStatus) ||
       existing.status === "booked"
         ? (existing.status as LeadStatus)
-        : (isBookingConfirmed(
-            extracted.intent,
-            updatedAppointmentIso,
-            mergedPhone,
-            mergedEmail
-          ) ||
-            isBookingCompletedByContactUpdate(
-              extracted.intent,
-              Boolean(existing.appointment_datetime),
-              updatedAppointmentIso,
-              mergedPhone,
-              mergedEmail
-            )) && !outsideBusinessHours
-
+        : bookingComplete && !outsideBusinessHours
         ? "booked"
+        // Previously: written "booked", then demoted to needs_review by
+        // settleCalendarBacking when Google refused it. Same destination,
+        // reached without the pointless write.
+        : bookingComplete && externalRefusal
+        ? "needs_review"
         : needsReview
         ? "needs_review"
         : existing.status === "needs_review"
@@ -1163,18 +1275,31 @@ export async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured, appointmentIso: updatedAppointmentIso ?? null, booked: confirmedBooking || safeNextStatus === "booked" };
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured, appointmentIso: updatedAppointmentIso ?? null, booked: confirmedBooking || safeNextStatus === "booked", needsClarification: datetimeNeedsClarification === true, clarificationDate: clarificationDate ?? null };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
-  const insertStatus: LeadStatus = isBookingConfirmed(
-  extracted.intent,
-  resolvedIso,
-  extracted.phone,
-  extracted.email
-) && !outsideBusinessHours
+  const insertBookingComplete = isBookingConfirmed(
+    extracted.intent,
+    resolvedIso,
+    extracted.phone,
+    extracted.email
+  );
+
+  const insertStatus: LeadStatus = insertBookingComplete && !outsideBusinessHours
   ? "booked"
-  : suggestedAlternativeIso
+  // Previously written "booked" and then demoted by
+  // settleCalendarBacking when Google refused it.
+  : insertBookingComplete && externalRefusal
+  ? "needs_review"
+  // An EXTERNAL refusal never used to reach this branch: nothing here
+  // consulted the calendar, so suggestedAlternativeIso was null and the
+  // lead fell through to needs_review/new. The engine now returns a
+  // verified alternative, and letting that reach this branch is exactly
+  // what moved conflicted PHONE requests out of the Needs Review queue.
+  // The alternative is still returned to the caller and still offered to
+  // the customer — it just no longer decides the status.
+  : suggestedAlternativeIso && !externalRefusal
   ? "awaiting_confirmation"
   : needsReview
   ? "needs_review"
@@ -1261,5 +1386,5 @@ export async function capturePartialLead(
     }
 
   }
-return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: inserted?.id ?? null, appointmentIso: resolvedIso ?? null, booked: confirmedInsert };
+return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: inserted?.id ?? null, appointmentIso: resolvedIso ?? null, booked: confirmedInsert, needsClarification: datetimeNeedsClarification === true, clarificationDate: clarificationDate ?? null };
 }

@@ -1,7 +1,7 @@
 import {
+  checkSlotCapacity,
   findNextAvailableSlot,
   getOrgTimezone,
-  isSlotAvailable,
   isWithinBusinessHours,
   overlapsBusy,
 } from "@/lib/availability";
@@ -18,11 +18,12 @@ import type { BusyInterval } from "@/lib/integrations/types";
 // API — is intended to call this one function, so a rule can never be
 // enforced on one channel and missed on another.
 //
-// WIRED, and so far only from the phone call. voice/availabilityTool.ts
-// calls this for every mid-call "is that time free?" question, so a
-// change here is felt on live calls immediately. Website chat, the
-// embedded widget and post-call lead capture do NOT call it yet —
-// wiring those remains a separate step.
+// WIRED FROM EVERY CHANNEL. voice/availabilityTool.ts calls this for
+// each mid-call "is that time free?" question, calendarSync re-checks
+// through it immediately before writing an event, and leadCapture —
+// website chat, the embedded widget and post-call voice capture — asks
+// it before deciding whether a requested time can be taken. A change
+// here is felt on live calls immediately.
 //
 // The external branch is gated by CALENDAR_SYNC_ENABLED, checked inside
 // resolveOrgCalendar. With that flag off the lookup short-circuits to
@@ -60,6 +61,23 @@ export interface BookingSlotDecision {
    * review and notifies the owner.
    */
   externalCheckFailed: boolean;
+  /**
+   * True when an INTERNAL check could not be made at all — the business
+   * hours read failed, or the capacity count failed. `available` is
+   * false either way, so nothing is confirmed; the distinction exists
+   * so a caller can say "we could not check" instead of the untrue
+   * "you are outside opening hours" or "that slot is fully booked".
+   *
+   * The engine has always known this (AvailabilityResult.reason
+   * "lookup_failed" and SlotCapacityResult.failed) and this function
+   * was discarding it, collapsing a database error into an ordinary
+   * refusal. Chat and the widget carried the distinction themselves
+   * before they were routed through here, and must not lose it.
+   *
+   * Additive: existing callers ignore it and are unaffected. `reason`
+   * keeps exactly the values it has always returned.
+   */
+  internalCheckFailed: boolean;
   /** True when an external calendar actually answered. */
   externalChecked: boolean;
   /**
@@ -92,6 +110,25 @@ export interface BookingSlotDecision {
 /** How far ahead to fetch busy windows, matching the slot search window. */
 const BUSY_WINDOW_DAYS = 14;
 
+export interface BookingSlotOptions {
+  /**
+   * A lead whose own booking must not count against it, forwarded
+   * unchanged to the capacity check (see SlotCapacityOptions).
+   *
+   * Required by RESCHEDULES. Capacity is an OVERLAP test, so a lead
+   * moving 10:00 → 10:30 meets its own existing row and every short
+   * reschedule would otherwise be refused as a clash with itself.
+   * Chat and the widget already passed this to checkSlotCapacity
+   * directly; it exists here so routing them through this function
+   * keeps that exemption rather than silently dropping it.
+   *
+   * Optional, and absent for every caller that existed before it: with
+   * no id supplied the capacity query is byte-identical to what it has
+   * always run.
+   */
+  excludeLeadId?: string | null;
+}
+
 function internalDecision(
   hours: Awaited<ReturnType<typeof isWithinBusinessHours>>,
   slotFree: boolean
@@ -116,12 +153,23 @@ function internalDecision(
 export async function checkBookingSlot(
   orgId: string,
   isoDatetime: string,
-  appointmentDurationMinutes: number
+  appointmentDurationMinutes: number,
+  options: BookingSlotOptions = {}
 ): Promise<BookingSlotDecision> {
   const hours = await isWithinBusinessHours(orgId, isoDatetime);
-  const slotFree = hours.isAvailable ? await isSlotAvailable(orgId, isoDatetime) : true;
+  // checkSlotCapacity rather than isSlotAvailable: the boolean form is
+  // literally `(await checkSlotCapacity(...)).available`, so the query
+  // and the decision are unchanged — this only keeps the `failed` flag
+  // that the boolean form throws away.
+  const capacity = hours.isAvailable
+    ? await checkSlotCapacity(orgId, isoDatetime, {
+        excludeLeadId: options.excludeLeadId,
+      })
+    : { available: true, failed: false };
 
-  const internal = internalDecision(hours, slotFree);
+  const internal = internalDecision(hours, capacity.available);
+  const internalCheckFailed =
+    hours.reason === "lookup_failed" || capacity.failed;
 
   if (!internal.available) {
     return {
@@ -129,6 +177,7 @@ export async function checkBookingSlot(
       reason: internal.reason,
       suggestedIso: await findNextAvailableSlot(orgId, isoDatetime),
       externalCheckFailed: false,
+      internalCheckFailed,
       externalChecked: false,
       externalConflictObserved: false,
       externalBusy: [],
@@ -151,6 +200,7 @@ export async function checkBookingSlot(
         reason: null,
         suggestedIso: null,
         externalCheckFailed: false,
+        internalCheckFailed: false,
         externalChecked: false,
         externalConflictObserved: false,
         externalBusy: [],
@@ -168,6 +218,7 @@ export async function checkBookingSlot(
       reason: null,
       suggestedIso: null,
       externalCheckFailed: true,
+      internalCheckFailed: false,
       externalChecked: false,
       externalConflictObserved: false,
       // Nothing was verified, so nothing may be reused as if it had been.
@@ -184,6 +235,7 @@ export async function checkBookingSlot(
       reason: null,
       suggestedIso: null,
       externalCheckFailed: false,
+      internalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: false,
       externalBusy: lookup.busy,
@@ -203,6 +255,7 @@ export async function checkBookingSlot(
       reason: null,
       suggestedIso: null,
       externalCheckFailed: false,
+      internalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: true,
       externalBusy: lookup.busy,
@@ -220,6 +273,7 @@ export async function checkBookingSlot(
       lookup.busy
     ),
     externalCheckFailed: false,
+    internalCheckFailed: false,
     externalChecked: true,
     externalConflictObserved: true,
     externalBusy: lookup.busy,

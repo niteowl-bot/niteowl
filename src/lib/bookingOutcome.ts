@@ -103,3 +103,58 @@ export function buildBookingOutcomeNote(
     "State this time exactly as written above. Do not restate it in another timezone, and do not offer a different time.",
   ].join("\n");
 }
+
+// ── Asking for the one detail that is missing ─────────────────────
+//
+// The deterministic parser refuses to guess: "20/08/26" with no time,
+// or an impossible date like 32/08, resolves to no instant at all and
+// raises needsClarification. That flag was produced and then dropped on
+// the floor, so the customer got whatever the reply model improvised —
+// usually a generic question, sometimes a confirmation of a booking
+// that did not exist.
+//
+// This states the gap precisely. It is deliberately NOT built from an
+// availability, calendar or lookup outcome: those are refusals of a
+// time we did understand, and the Availability Note above speaks for
+// them. This one means we never had a time at all.
+
+export interface DatetimeClarification {
+  /** Set by the datetime parser alone. */
+  needsClarification: boolean;
+  /** The date we understood, when only the time is missing. */
+  clarificationDate: string | null;
+}
+
+/**
+ * The prompt section asking for the missing piece, or null when nothing
+ * needs asking.
+ *
+ * The date is stated as the PARSER resolved it, never left to the reply
+ * model to restate: "20/08/26" is exactly the string a model re-reads as
+ * 26 August or 2020, and having refused to guess it in code we must not
+ * hand it back for guessing in prose.
+ */
+export function buildDatetimeClarificationNote(
+  clarification: DatetimeClarification
+): string | null {
+  if (!clarification.needsClarification) return null;
+
+  if (clarification.clarificationDate) {
+    return [
+      "## Missing appointment detail",
+      `The customer named a date — ${clarification.clarificationDate} — but no time of day. Nothing has been booked and no availability has been checked, because there is no time to check.`,
+      `In your reply, ask ONLY which time on ${clarification.clarificationDate} they would like.`,
+      `State that date exactly as written here. Do not re-read, re-format or recalculate it from anything earlier in the conversation, and do not state a year, weekday or month that differs from it.`,
+      "Do not suggest, assume or default to a time. Do not say the appointment is booked, confirmed or held.",
+      "Do not ask for their name, phone number, email or address in this reply — the time comes first, and those details make no difference to whether a slot is free.",
+    ].join("\n");
+  }
+
+  return [
+    "## Missing appointment detail",
+    "The customer gave a date that could not be read as a real calendar date, so nothing has been booked and no availability has been checked.",
+    "In your reply, ask them politely to confirm the date they meant, and the time of day, as one short question.",
+    "Do not guess which date they meant, and do not offer one. Do not say the appointment is booked, confirmed or held.",
+    "Do not ask for their name, phone number, email or address in this reply.",
+  ].join("\n");
+}

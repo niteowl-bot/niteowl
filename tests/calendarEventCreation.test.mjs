@@ -64,6 +64,8 @@ function installStubs({
   connected = true,
   linkInsertFails = false,
   hoursFail = false,
+  /** organisations.timezone — the org's own IANA zone. */
+  orgTimezone = "Europe/London",
 } = {}) {
   process.env.INTEGRATIONS_ENABLED = "true";
   process.env.CALENDAR_SYNC_ENABLED = "true";
@@ -98,6 +100,9 @@ function installStubs({
   const calls = {
     freeBusy: 0, creates: [], updates: [], deletes: [],
     linkInserts: [], linkUpdates: [], orgIds: [], leadInserts: [], leadUpdates: [],
+    // Counted so a test can prove an explicit date was resolved in code
+    // and never handed to the model.
+    openai: 0,
   };
 
   const json = (body, status = 200) =>
@@ -228,7 +233,7 @@ function installStubs({
         appointment_duration_minutes: 60,
         emergency_mode_enabled: false,
         max_concurrent_bookings: 1,
-        timezone: "Europe/London",
+        timezone: orgTimezone,
       };
       return wantsObject ? json(row) : json([row]);
     }
@@ -255,6 +260,7 @@ function installStubs({
 
     // parseDatetimeToIso asks the model to resolve the spoken time.
     if (url.includes("api.openai.com")) {
+      calls.openai++;
       return json({ choices: [{ message: { content: START_ISO } }] });
     }
 
@@ -684,7 +690,20 @@ describe("end to end — the customer is only told what is true", () => {
     assert.equal(stubs.calls.leadUpdates.length, 0, "no second write for an unconnected org");
     assert.equal(result.unavailableReason, null);
     assert.equal(stubs.calls.creates.length, 0);
-    assert.equal(stubs.calls.freeBusy, 0);
+    // ONE free/busy read, where this once expected none.
+    //
+    // The allowlist gates WRITES. Reads are gated by
+    // CALENDAR_SYNC_ENABLED plus a connected calendar with availability
+    // enabled — and this org has one. The old expectation of zero was an
+    // artifact of chat never consulting the calendar at all: the only
+    // free/busy request on this path came from calendarSync's pre-write
+    // re-check, which never ran with writes disabled.
+    //
+    // Chat now asks before it answers, on every org with a calendar
+    // connected, whether or not we may write to it. The BOOKING
+    // behaviour asserted above is unchanged: still booked in one write,
+    // still no event created.
+    assert.equal(stubs.calls.freeBusy, 1);
   });
 });
 
@@ -977,7 +996,10 @@ describe("BLOCKER 1 — a chat reschedule moves the real event", () => {
     await chatReschedule();
     assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, MOVED_ISO);
     assert.equal(stubs.calls.updates.length, 0);
-    assert.equal(stubs.calls.freeBusy, 0);
+    // One availability read on the destination slot (see the note on the
+    // milestone-5 flag-off test). The time still moves, and still no
+    // Google event is touched — which is what this test is about.
+    assert.equal(stubs.calls.freeBusy, 1);
   });
 });
 
@@ -1204,12 +1226,15 @@ describe("the lead engine obeys the allowlist too", () => {
       BOOKING_LEAD,
       "web_widget"
     );
-    // Straight to booked in one write — no pending phase, no provider call.
+    // Straight to booked in one write — no pending phase, no event
+    // written. An org off the WRITE allowlist is still asked about
+    // availability, because its calendar is connected (see the note on
+    // the milestone-5 flag-off test); the booking outcome is unchanged.
     assert.equal(stubs.calls.leadInserts[0].status, "booked");
     assert.equal(stubs.calls.leadUpdates.length, 0);
     assert.equal(result.unavailableReason, null);
     assert.equal(stubs.calls.creates.length, 0);
-    assert.equal(stubs.calls.freeBusy, 0);
+    assert.equal(stubs.calls.freeBusy, 1);
   });
 });
 
@@ -1299,5 +1324,475 @@ describe("capturePartialLead reports the outcome it actually persisted", () => {
       null,
       "a refused move must never be announced as moved"
     );
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  The calendar is authoritative for chat/widget — without moving
+//  the phone's post-call baseline
+// ══════════════════════════════════════════════════════════════════
+//
+// capturePartialLead consults checkBookingSlot for EVERY channel, so a
+// slot taken on the real Google Calendar can no longer be reported free
+// on chat or the widget. That is the fix.
+//
+// The risk it created is the reason these tests exist. Discovering the
+// conflict EARLIER changes which branch of the status chain a lead
+// takes: the engine now returns a verified alternative where it used to
+// return nothing, and `suggestedAlternativeIso → awaiting_confirmation`
+// would have swallowed phone requests that have always landed in the
+// owner's Needs Review queue. The phone's post-call behaviour is the
+// known-good production baseline and is pinned here.
+
+const CONFLICTING_BUSY = [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }];
+
+describe("PHONE post-call capture keeps its needs_review baseline", () => {
+  // Exactly what voice/calls.ts hands the shared engine at end of call:
+  // the appointment intent is DOWNGRADED to "question" first (a phone
+  // appointment is a request, never a confirmed booking — see
+  // voiceAppointmentRequest.test.mjs), the source is "voice", and
+  // needsReview is true because the call carried real substance.
+  const VOICE_CALL_LEAD = { ...BOOKING_LEAD, intent: "question" };
+
+  async function captureVoiceCall() {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      "vapi-call-1",
+      "Caller asked for a boiler service Tuesday at 10am",
+      VOICE_CALL_LEAD,
+      "voice",
+      true
+    );
+  }
+
+  test("a connected calendar IS consulted for a phone lead", async () => {
+    // Uniform path, deliberately — the lookup is not gated by channel.
+    stubs = installStubs({ busy: CONFLICTING_BUSY });
+    await captureVoiceCall();
+    assert.equal(stubs.calls.freeBusy, 1);
+  });
+
+  test("an external conflict still parks the call as needs_review", async () => {
+    stubs = installStubs({ busy: CONFLICTING_BUSY });
+    await captureVoiceCall();
+    assert.equal(finalStatus(stubs.calls), "needs_review");
+  });
+
+  test("it must NOT become awaiting_confirmation", async () => {
+    // The exact regression: awaiting_confirmation would drop the request
+    // out of the owner's Needs Review queue with nobody noticing.
+    stubs = installStubs({ busy: CONFLICTING_BUSY });
+    await captureVoiceCall();
+    assert.notEqual(finalStatus(stubs.calls), "awaiting_confirmation");
+  });
+
+  test("a phone lead is never booked by this path, conflict or not", async () => {
+    for (const busy of [CONFLICTING_BUSY, []]) {
+      stubs = installStubs({ busy });
+      await captureVoiceCall();
+      assert.notEqual(finalStatus(stubs.calls), "booked");
+      stubs.restore();
+    }
+  });
+
+  test("with the calendar clear, the call lands exactly where it always did", async () => {
+    // The no-conflict case must be untouched by this work.
+    stubs = installStubs();
+    await captureVoiceCall();
+    assert.equal(finalStatus(stubs.calls), "needs_review");
+    assert.equal(stubs.calls.creates.length, 0, "no event for a phone request");
+  });
+});
+
+describe("CHAT/WIDGET — a Google conflict makes the slot unavailable", () => {
+  async function captureFrom(source) {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      `conv-${source}`,
+      "I'd like a boiler service Tuesday at 10am",
+      BOOKING_LEAD,
+      source
+    );
+  }
+
+  for (const source of ["chat", "web_widget"]) {
+    test(`${source}: a slot busy on Google is reported unavailable`, async () => {
+      stubs = installStubs({ busy: CONFLICTING_BUSY });
+      const result = await captureFrom(source);
+
+      // The whole defect: this used to come back available, because
+      // nothing on this path had ever asked Google.
+      assert.equal(stubs.calls.freeBusy, 1, "the calendar was consulted");
+      assert.equal(result.outsideBusinessHours, true);
+      assert.equal(result.unavailableReason, "capacity");
+      assert.equal(result.booked, false);
+    });
+
+    test(`${source}: no booking and no calendar event for a taken slot`, async () => {
+      stubs = installStubs({ busy: CONFLICTING_BUSY });
+      await captureFrom(source);
+      assert.notEqual(finalStatus(stubs.calls), "booked");
+      assert.equal(stubs.calls.creates.length, 0);
+    });
+
+    test(`${source}: the alternative offered is verified against the calendar`, async () => {
+      // Offering a time that is ALSO busy would just move the problem.
+      stubs = installStubs({ busy: CONFLICTING_BUSY });
+      const result = await captureFrom(source);
+      if (result.suggestedAlternativeIso) {
+        const clashes = CONFLICTING_BUSY.some(
+          (w) =>
+            Date.parse(result.suggestedAlternativeIso) < Date.parse(w.end) &&
+            Date.parse(result.suggestedAlternativeIso) >= Date.parse(w.start)
+        );
+        assert.equal(clashes, false);
+      }
+    });
+
+    test(`${source}: an unconflicted slot still books normally`, async () => {
+      // The fix must not make every booking fail.
+      stubs = installStubs({ busy: [] });
+      const result = await captureFrom(source);
+      assert.equal(result.unavailableReason, null);
+      assert.equal(finalStatus(stubs.calls), "booked");
+    });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  The appointment is resolved in the BUSINESS'S timezone
+// ══════════════════════════════════════════════════════════════════
+//
+// resolveAppointmentDatetime passed a hardcoded "Europe/London" no
+// matter where the business was, so a customer in New York asking for
+// 2pm had it stored as 2pm LONDON — 18:00 their time. The org's own
+// zone (organisations.timezone, via getOrgTimezone) is now used.
+//
+// Each case states an EXPLICIT numeric date, so the parser resolves it
+// in code and the model is never consulted — asserted here, because a
+// model round trip would make the timezone claim meaningless.
+//
+// NOTE, deliberately: business HOURS are still evaluated in London
+// (availability.ts getLondonParts), which is separately parked work.
+// These tests therefore assert the resolved INSTANT, not availability.
+
+describe("explicit appointment times resolve in the org's timezone", () => {
+  // A half-hour-offset zone is included on purpose — an implementation
+  // that quietly rounds to whole hours passes every other case.
+  //
+  // Which SPELLING is canonical depends on the runtime's ICU data: this
+  // build lists "Asia/Calcutta" and rejects "Asia/Kolkata", newer builds
+  // do the reverse. getOrgTimezone validates against that list and falls
+  // back to London for anything absent, so the test asks the runtime
+  // rather than hardcoding a name. (Worth knowing separately: an owner
+  // whose settings hold the spelling this runtime does NOT list has
+  // their zone silently ignored. Pre-existing, not introduced here.)
+  const INDIA_ZONE = ["Asia/Kolkata", "Asia/Calcutta"].find((zone) =>
+    Intl.supportedValuesOf("timeZone").includes(zone)
+  );
+
+  // 14:00 local on Thursday 20 August 2026, per zone.
+  const CASES = [
+    ["Europe/London", "2026-08-20T13:00:00.000Z"],
+    ["America/New_York", "2026-08-20T18:00:00.000Z"],
+    ["Australia/Sydney", "2026-08-20T04:00:00.000Z"],
+    [INDIA_ZONE, "2026-08-20T08:30:00.000Z"],
+  ];
+
+  async function captureExplicit(orgTimezone, phrase = "20/08/26 at 2pm") {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      `conv-tz-${orgTimezone}`,
+      `Can I book a boiler service on ${phrase}?`,
+      { ...BOOKING_LEAD, preferred_datetime: phrase },
+      "web_widget"
+    );
+  }
+
+  for (const [orgTimezone, expectedIso] of CASES) {
+    test(`${orgTimezone}: 2pm is 2pm THERE, not in London`, async () => {
+      stubs = installStubs({ orgTimezone });
+      const result = await captureExplicit(orgTimezone);
+      assert.equal(result.appointmentIso, expectedIso);
+    });
+
+    test(`${orgTimezone}: the stored instant reads back as 14:00 locally`, async () => {
+      // The assertion a business actually cares about: whatever the
+      // offset, the customer's 2pm is 2pm on their own clock.
+      stubs = installStubs({ orgTimezone });
+      const result = await captureExplicit(orgTimezone);
+      const local = new Intl.DateTimeFormat("en-GB", {
+        timeZone: orgTimezone,
+        dateStyle: "short",
+        timeStyle: "short",
+        hourCycle: "h23",
+      }).format(new Date(result.appointmentIso));
+      assert.match(local, /20\/08\/2026, 14:00/);
+    });
+
+    test(`${orgTimezone}: the model is never asked`, async () => {
+      stubs = installStubs({ orgTimezone });
+      await captureExplicit(orgTimezone);
+      assert.equal(
+        stubs.calls.openai,
+        0,
+        "an explicit numeric date must stay deterministic"
+      );
+    });
+  }
+
+  test("a London org is byte-identical to the old hardcoded behaviour", async () => {
+    // The regression guard for every business live today.
+    stubs = installStubs({ orgTimezone: "Europe/London" });
+    const result = await captureExplicit("Europe/London");
+    assert.equal(result.appointmentIso, "2026-08-20T13:00:00.000Z");
+  });
+
+  test("an org with no timezone set falls back to Europe/London", async () => {
+    // Rows predating the column must keep working unchanged.
+    stubs = installStubs({ orgTimezone: null });
+    const result = await captureExplicit("unset");
+    assert.equal(result.appointmentIso, "2026-08-20T13:00:00.000Z");
+  });
+
+  test("an unusable timezone falls back rather than throwing mid-booking", async () => {
+    // "BST" is an abbreviation Intl resolves to Asia/Dhaka; getOrgTimezone
+    // rejects it. A bad settings value must not lose the booking.
+    stubs = installStubs({ orgTimezone: "Not/AZone" });
+    const result = await captureExplicit("bad");
+    assert.equal(result.appointmentIso, "2026-08-20T13:00:00.000Z");
+  });
+
+  test("DD/MM is still never read as MM/DD, in any zone", async () => {
+    // 05/09/26 is 5 September, never 9 May — the parser's core claim,
+    // re-checked here because it now runs under a non-London zone.
+    stubs = installStubs({ orgTimezone: "America/New_York" });
+    const result = await captureExplicit("nyc", "05/09/26 at 2pm");
+    const local = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/New_York",
+      dateStyle: "short",
+      timeStyle: "short",
+      hourCycle: "h23",
+    }).format(new Date(result.appointmentIso));
+    assert.match(local, /05\/09\/2026, 14:00/);
+    assert.equal(stubs.calls.openai, 0);
+  });
+});
+
+describe("an org set to an IANA link name is honoured, not reverted", () => {
+  // The end-to-end consequence of the validation fix. Before it,
+  // getOrgTimezone rejected "Asia/Kolkata" on any runtime whose ICU
+  // lists only "Asia/Calcutta", fell back to Europe/London, and stored
+  // 2pm India as 2pm London — 5½ hours out, silently.
+  async function captureAt(orgTimezone) {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      `conv-link-${orgTimezone}`,
+      "Can I book a boiler service on 20/08/26 at 2pm?",
+      { ...BOOKING_LEAD, preferred_datetime: "20/08/26 at 2pm" },
+      "web_widget"
+    );
+  }
+
+  for (const zone of ["Asia/Kolkata", "Asia/Calcutta"]) {
+    test(`${zone}: 2pm is stored as 08:30Z, not London's 13:00Z`, async () => {
+      stubs = installStubs({ orgTimezone: zone });
+      const result = await captureAt(zone);
+      assert.equal(result.appointmentIso, "2026-08-20T08:30:00.000Z");
+      assert.notEqual(
+        result.appointmentIso,
+        "2026-08-20T13:00:00.000Z",
+        "a silent revert to Europe/London is the bug"
+      );
+    });
+  }
+
+  test("a genuinely invalid zone still falls back to Europe/London", async () => {
+    stubs = installStubs({ orgTimezone: "Europe/Atlantis" });
+    const result = await captureAt("Europe/Atlantis");
+    assert.equal(result.appointmentIso, "2026-08-20T13:00:00.000Z");
+  });
+
+  test("an abbreviation still falls back rather than resolving to Dhaka", async () => {
+    // "BST" would be UTC+6 if Intl were trusted — 08:00Z, not 13:00Z.
+    stubs = installStubs({ orgTimezone: "BST" });
+    const result = await captureAt("BST");
+    assert.equal(result.appointmentIso, "2026-08-20T13:00:00.000Z");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  needsClarification reaches the caller — and only from the parser
+// ══════════════════════════════════════════════════════════════════
+//
+// "20/08/26" with no time used to capture no appointment and say
+// nothing about why. The flag existed the whole time; the narrowed
+// return type of resolveAppointmentDatetime hid it and the destructure
+// dropped it.
+//
+// The half that matters as much: this flag must mean ONE thing. If an
+// availability refusal, an external conflict or a failed lookup could
+// also raise it, Remy would ask "what time?" about a time it had
+// perfectly well understood and merely could not give them.
+
+describe("a stated date with no time is asked about, not guessed", () => {
+  async function captureText(preferred, opts = {}) {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      `conv-clar-${preferred}`,
+      `Can I book a boiler service ${preferred}?`,
+      { ...BOOKING_LEAD, preferred_datetime: preferred, ...opts },
+      "web_widget"
+    );
+  }
+
+  test("the flag and the resolved date reach the caller", async () => {
+    stubs = installStubs();
+    const result = await captureText("20/08/26");
+    assert.equal(result.needsClarification, true);
+    assert.equal(result.clarificationDate, "20 August 2026");
+  });
+
+  test("no appointment instant is invented", async () => {
+    stubs = installStubs();
+    const result = await captureText("20/08/26");
+    assert.equal(result.appointmentIso, null);
+    assert.equal(result.booked, false);
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+  });
+
+  test("availability is NOT checked — there is nothing to check", async () => {
+    // The explicit ordering rule: parse, then check. With no instant
+    // there is no second step, and no provider call to make.
+    stubs = installStubs();
+    await captureText("20/08/26");
+    assert.equal(stubs.calls.freeBusy, 0);
+    assert.equal(stubs.calls.creates.length, 0);
+  });
+
+  test("no availability EXCUSE is manufactured either", async () => {
+    // Saying "that time is unavailable" would be as false as booking it.
+    stubs = installStubs();
+    const result = await captureText("20/08/26");
+    assert.equal(result.unavailableReason, null);
+    assert.equal(result.outsideBusinessHours, false);
+    assert.equal(result.suggestedAlternativeIso, null);
+  });
+
+  test("the date the customer gave is preserved on the lead", async () => {
+    stubs = installStubs();
+    await captureText("20/08/26");
+    assert.equal(stubs.calls.leadInserts[0].preferred_datetime, "20/08/26");
+    assert.equal(stubs.calls.leadInserts[0].appointment_datetime, null);
+  });
+
+  test("an impossible date asks too, but names no date", async () => {
+    stubs = installStubs();
+    const result = await captureText("32/08/26 at 2pm");
+    assert.equal(result.needsClarification, true);
+    assert.equal(result.clarificationDate, null);
+    assert.equal(result.appointmentIso, null);
+  });
+});
+
+describe("needsClarification is raised by the parser and nothing else", () => {
+  async function capture(preferred) {
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    return capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      `conv-noclar-${Math.random()}`,
+      "I'd like a boiler service",
+      { ...BOOKING_LEAD, preferred_datetime: preferred },
+      "web_widget"
+    );
+  }
+
+  test("a fully resolved explicit datetime does not ask", async () => {
+    stubs = installStubs();
+    const result = await capture("20/08/26 at 2pm");
+    assert.equal(result.needsClarification, false);
+    assert.equal(result.clarificationDate, null);
+    assert.ok(result.appointmentIso);
+  });
+
+  test("an EXTERNAL CALENDAR CONFLICT does not ask", async () => {
+    stubs = installStubs({ busy: CONFLICTING_BUSY });
+    const result = await capture("Tuesday at 10am");
+    assert.equal(result.unavailableReason, "capacity", "precondition: it was refused");
+    assert.equal(result.needsClarification, false);
+    assert.equal(result.clarificationDate, null);
+  });
+
+  test("a LOOKUP FAILURE does not ask", async () => {
+    stubs = installStubs({ hoursFail: true });
+    const result = await capture("Tuesday at 10am");
+    assert.equal(result.unavailableReason, "lookup_failed", "precondition: it failed closed");
+    assert.equal(result.needsClarification, false);
+  });
+
+  test("a BUSINESS HOURS refusal does not ask", async () => {
+    // A time the engine understood perfectly and simply cannot give.
+    // 8pm is explicit and deterministic, and the fixture closes at 17:00
+    // — so this is a genuine refusal of a fully resolved instant, which
+    // is exactly the case that must NOT be confused with "no time given".
+    stubs = installStubs();
+    const result = await capture("20/08/26 at 8pm");
+    assert.equal(result.unavailableReason, "hours", "precondition: it was refused");
+    assert.equal(result.needsClarification, false);
+    assert.equal(result.clarificationDate, null);
+  });
+
+  test("a CONVERSATIONAL date resolved by the model does not ask", async () => {
+    stubs = installStubs();
+    const result = await capture("Tuesday at 10am");
+    assert.equal(result.needsClarification, false);
+    assert.ok(result.appointmentIso);
+  });
+
+  test("no datetime at all does not ask", async () => {
+    // Nothing was stated, so there is no stated date to clarify — this
+    // is an ordinary enquiry, not a half-given appointment.
+    stubs = installStubs();
+    const result = await capture(null);
+    assert.equal(result.needsClarification, false);
+    assert.equal(result.clarificationDate, null);
+    assert.equal(result.appointmentIso, null);
+  });
+
+  test("a PHONE post-call capture is unaffected", async () => {
+    // capturePartialLead is shared; voice/calls.ts reads only leadId, so
+    // the added fields are inert there. Pinned so it stays that way.
+    const { capturePartialLead } = await import("@/lib/leadCapture");
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    stubs = installStubs();
+    const result = await capturePartialLead(
+      createAdminClient(),
+      ORG_ID,
+      "vapi-call-clar",
+      "Caller asked for a boiler service Tuesday at 10am",
+      { ...BOOKING_LEAD, intent: "question" },
+      "voice",
+      true
+    );
+    assert.equal(result.needsClarification, false);
+    assert.ok(result.leadId, "the lead is still created");
+    assert.equal(finalStatus(stubs.calls), "needs_review");
   });
 });

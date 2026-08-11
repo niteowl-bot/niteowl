@@ -99,3 +99,4 @@ order by o.business_name, bk.category, bk.status;
 --     "Monday to Friday, 7am - 7pm. Saturday, 9am - 2pm. Closed Sundays."
 -- all for org 5b7fbecc-2eb0-464d-8ec3-2ef5cfccf3a5 ("Plumbing Co 3"),
 -- whose configured hours are Mon-Sat 09:00-17:00, Sun closed.
+Automated tests pass. Do not commit or push yet. Tell me exactly how I can perform a live phone-call test of the new availability behaviour in the current local/uncommitted state, if possible. If a live phone test requires deployment, state that clearly and do not make any changes.

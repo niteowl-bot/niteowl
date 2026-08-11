@@ -20,7 +20,10 @@ import {
   resolveEscalationQuestion,
 } from "@/lib/leadCapture";
 import type { UnavailableReason } from "@/lib/leadCapture";
-import { buildBookingOutcomeNote } from "@/lib/bookingOutcome";
+import {
+  buildBookingOutcomeNote,
+  buildDatetimeClarificationNote,
+} from "@/lib/bookingOutcome";
 
 export const runtime = "nodejs";
 
@@ -268,7 +271,8 @@ function buildSystemPrompt(
   handoffAskContact: boolean = false,
   handoffContactCaptured: boolean = false,
   hoursSummary: BusinessHoursSummary | null = null,
-  bookingOutcomeNote: string | null = null
+  bookingOutcomeNote: string | null = null,
+  datetimeClarificationNote: string | null = null
 ): string {
 
   const sections: string[] = [];
@@ -392,6 +396,14 @@ function buildSystemPrompt(
   // (buildBookingOutcomeNote returns null whenever a reason is set).
   if (bookingOutcomeNote) {
     sections.push(bookingOutcomeNote);
+  }
+
+  // Stated last of the three booking sections, so the specific question
+  // is the final instruction the model reads. Mutually exclusive with
+  // the other two by construction: no instant was resolved, so nothing
+  // was booked and no availability was checked.
+  if (datetimeClarificationNote) {
+    sections.push(datetimeClarificationNote);
   }
 
   if (suggestedAlternativeIso) {
@@ -520,6 +532,7 @@ let outsideBusinessHours = false;
   let suggestedAlternativeIso: string | null = null;
   let unavailableReason: UnavailableReason = null;
   let bookingOutcomeNote: string | null = null;
+  let datetimeClarificationNote: string | null = null;
   let handoffAskContact = false;
   let handoffContactCaptured = false;
 
@@ -566,14 +579,26 @@ let outsideBusinessHours = false;
         outsideBusinessHours = captureResult.outsideBusinessHours;
         suggestedAlternativeIso = captureResult.suggestedAlternativeIso;
         unavailableReason = captureResult.unavailableReason;
+        // The customer named a date we refused to guess at. Asked FIRST,
+        // because it suppresses the outcome note below: with no instant
+        // resolved there is nothing truthful to confirm, and on a
+        // reschedule the note would otherwise announce the appointment
+        // as "moved" to the time it already had.
+        datetimeClarificationNote = buildDatetimeClarificationNote({
+          needsClarification: captureResult.needsClarification,
+          clarificationDate: captureResult.clarificationDate,
+        });
+
         // What was ACTUALLY persisted, so the reply states the outcome
         // instead of inferring it (see lib/bookingOutcome.ts).
-        bookingOutcomeNote = buildBookingOutcomeNote({
-          intent: extracted.intent,
-          booked: captureResult.booked,
-          appointmentIso: captureResult.appointmentIso,
-          unavailableReason: captureResult.unavailableReason,
-        });
+        bookingOutcomeNote = datetimeClarificationNote
+          ? null
+          : buildBookingOutcomeNote({
+              intent: extracted.intent,
+              booked: captureResult.booked,
+              appointmentIso: captureResult.appointmentIso,
+              unavailableReason: captureResult.unavailableReason,
+            });
 
         if (captureResult.needsReviewContactCaptured) {
           handoffContactCaptured = true;
@@ -854,7 +879,7 @@ let outsideBusinessHours = false;
   const hoursSummary = org ? await getBusinessHoursSummary(orgId) : null;
 
   const systemPrompt = org
-    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured, hoursSummary, bookingOutcomeNote)
+    ? buildSystemPrompt(org, knowledge, detectedIntent, suggestedAlternativeIso, unavailableReason, handoffAskContact, handoffContactCaptured, hoursSummary, bookingOutcomeNote, datetimeClarificationNote)
     : "You are Remy, a helpful AI business assistant. Be concise and professional.";
 
   // ── Streaming response ───────────────────────────────────────────

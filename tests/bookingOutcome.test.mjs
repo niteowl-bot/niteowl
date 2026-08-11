@@ -28,7 +28,10 @@ import assert from "node:assert/strict";
 
 import "./stubs/env.mjs"; // must precede any "@/lib" import
 
-import { buildBookingOutcomeNote } from "@/lib/bookingOutcome";
+import {
+  buildBookingOutcomeNote,
+  buildDatetimeClarificationNote,
+} from "@/lib/bookingOutcome";
 import { ACTIONABLE_INTENTS } from "@/lib/leadCapture";
 
 // Wednesday 19 August 2026, 15:00 Europe/London (BST) = 14:00Z — the
@@ -206,5 +209,82 @@ describe("no unrelated intent gains a claim — or mutation capability", () => {
         `${intent} must never reach capturePartialLead`
       );
     }
+  });
+});
+
+// ── The clarification note ────────────────────────────────────────
+//
+// needsClarification was produced by the parser and dropped: the
+// declared return type of resolveAppointmentDatetime narrowed it away,
+// and capturePartialLead destructured only { iso, failed }. So
+// "20/08/26" captured no appointment and said nothing about why, and
+// the reply model improvised.
+//
+// The rule this note keeps: ask for the ONE missing piece, name the
+// date as WE resolved it, and claim nothing.
+
+describe("asking for the missing appointment detail", () => {
+  const asking = (clarificationDate) =>
+    buildDatetimeClarificationNote({ needsClarification: true, clarificationDate });
+
+  test("nothing is asked when nothing is missing", () => {
+    assert.equal(
+      buildDatetimeClarificationNote({
+        needsClarification: false,
+        clarificationDate: null,
+      }),
+      null
+    );
+  });
+
+  test("a resolved date is named, so the question is specific", () => {
+    const note = asking("20 August 2026");
+    assert.match(note, /20 August 2026/);
+    assert.match(note, /ask ONLY which time/i);
+  });
+
+  test("the model is forbidden from re-reading the date", () => {
+    // "20/08/26" is precisely the string a model re-reads as 26 August.
+    const note = asking("20 August 2026");
+    assert.match(note, /exactly as written here/i);
+    assert.match(note, /do not re-read, re-format or recalculate/i);
+  });
+
+  test("no time may be guessed, offered or defaulted", () => {
+    assert.match(asking("20 August 2026"), /Do not suggest, assume or default to a time/i);
+  });
+
+  test("nothing is claimed as booked", () => {
+    for (const date of ["20 August 2026", null]) {
+      assert.match(asking(date), /not.*booked, confirmed or held/i);
+      assert.match(asking(date), /[Nn]othing has been booked/);
+    }
+  });
+
+  test("details are not collected before a time exists", () => {
+    // The same rule the phone has kept since the 2026-08 call fix: a
+    // name and number make no difference to whether a slot is free.
+    for (const date of ["20 August 2026", null]) {
+      assert.match(asking(date), /Do not ask for their name, phone number, email/i);
+    }
+  });
+
+  test("an unreadable date asks about the DATE, and invents none", () => {
+    const note = asking(null);
+    assert.match(note, /could not be read as a real calendar date/i);
+    assert.match(note, /Do not guess which date they meant/i);
+    // No formatted date anywhere — there is none to state.
+    assert.ok(!/\d{1,2} (January|February|March|April|May|June|July|August|September|October|November|December) \d{4}/.test(note));
+  });
+
+  test("availability, calendar and lookup outcomes never produce this note", () => {
+    // The note means "we never had a time". A refused time is a
+    // different thing entirely and the Availability Note speaks for it.
+    // needsClarification is set by the datetime parser alone.
+    assert.equal(
+      buildDatetimeClarificationNote({ needsClarification: false, clarificationDate: "20 August 2026" }),
+      null,
+      "a stale date must not resurrect the note"
+    );
   });
 });

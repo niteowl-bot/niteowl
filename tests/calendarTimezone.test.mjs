@@ -45,7 +45,9 @@ describe("timezone validation", () => {
     // to Asia/Dhaka (UTC+6), and "EST" to America/Panama. An owner
     // picking "BST" for British Summer Time would have every appointment
     // six hours out, with no error raised anywhere. Validity is therefore
-    // membership of Intl's canonical list, not "Intl accepted it".
+    // never "Intl accepted it" alone: a zone must either be on Intl's
+    // canonical list or carry a real Area/Location id. Not one of these
+    // abbreviations contains a slash, which is what excludes them.
     for (const abbreviation of ["BST", "EST", "PST", "CET", "GMT", "EST5EDT"]) {
       assert.equal(isValidTimezone(abbreviation), false, abbreviation);
     }
@@ -222,5 +224,86 @@ describe("duration arithmetic", () => {
   test("invalid input is refused", () => {
     assert.throws(() => addMinutesIso("nope", 30), RangeError);
     assert.throws(() => addMinutesIso("2026-08-06T13:00:00Z", Number.NaN), RangeError);
+  });
+});
+
+// ── IANA link names, across ICU builds ────────────────────────────
+//
+// Intl.supportedValuesOf("timeZone") lists canonical zones but omits
+// LINK names, and which name is the link varies by ICU build: the build
+// this was written on lists "Asia/Calcutta" and rejects "Asia/Kolkata";
+// newer builds do the reverse. Validating on the list alone meant an
+// owner picking the spelling their runtime happened not to list had it
+// silently replaced with Europe/London — every appointment 5½ hours
+// out, no error anywhere.
+//
+// These tests must hold on EITHER kind of build, so they assert the
+// property rather than the list.
+
+describe("zone names absent from this runtime's list", () => {
+  const LIST = new Set(Intl.supportedValuesOf("timeZone"));
+
+  test("BOTH spellings of the India zone are accepted", () => {
+    // Whichever one this build omits is exactly the case that used to
+    // fail. Asserting both makes the test build-independent.
+    assert.equal(isValidTimezone("Asia/Kolkata"), true);
+    assert.equal(isValidTimezone("Asia/Calcutta"), true);
+  });
+
+  test("at least one of them really is missing from the list here", () => {
+    // Proof this suite is exercising the gap rather than passing
+    // vacuously. If a future runtime lists both, this is worth knowing.
+    const missing = ["Asia/Kolkata", "Asia/Calcutta"].filter((z) => !LIST.has(z));
+    assert.ok(
+      missing.length > 0,
+      "this runtime lists both spellings — the link-name gap is not being exercised"
+    );
+  });
+
+  test("both spellings compute the same instant", () => {
+    // The reason accepting the link name is safe: it is the same zone.
+    const both = ["Asia/Kolkata", "Asia/Calcutta"].map((zone) =>
+      toProviderLocalTime("2026-08-20T08:30:00.000Z", zone)
+    );
+    assert.equal(both[0], both[1]);
+    assert.equal(both[0], "2026-08-20T14:00:00");
+  });
+
+  test("other link names are accepted too", () => {
+    for (const zone of ["US/Eastern", "Asia/Saigon", "Europe/Kiev"]) {
+      if (LIST.has(zone)) continue; // already covered by the list
+      assert.equal(isValidTimezone(zone), true, zone);
+    }
+  });
+
+  test("a shaped-but-unreal zone is STILL rejected", () => {
+    // The widening must not become "anything with a slash".
+    for (const bad of [
+      "Europe/Atlantis",
+      "Foo/Bar",
+      "Etc/Unknown",
+      "Asia/Kolkatta", // plausible misspelling
+      "//",
+      "/London",
+      "Europe/",
+    ]) {
+      assert.equal(isValidTimezone(bad), false, bad);
+    }
+  });
+
+  test("the abbreviations are still rejected", () => {
+    // Re-asserted here because the widening is where they could slip in.
+    for (const bad of ["BST", "EST", "PST", "CET", "GMT", "EST5EDT", "PST8PDT"]) {
+      assert.equal(isValidTimezone(bad), false, bad);
+    }
+  });
+
+  test("an accepted link name canonicalises rather than returning null", () => {
+    const canonical = canonicaliseTimezone("Asia/Kolkata");
+    assert.ok(canonical, "must not be null");
+    assert.equal(
+      toProviderLocalTime("2026-08-20T08:30:00.000Z", canonical),
+      "2026-08-20T14:00:00"
+    );
   });
 });

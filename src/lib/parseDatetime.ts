@@ -7,6 +7,22 @@ export interface ParseDatetimeResult {
    * assume — additive, so callers that ignore it behave as before.
    */
   needsClarification?: boolean;
+  /**
+   * The date we DID resolve, written out for the customer ("20 August
+   * 2026") — set only when the date was valid and the TIME is what is
+   * missing.
+   *
+   * Exists so the question can name the day: "what time on 20 August?"
+   * rather than a bare "what time?". It is formatted HERE, from the
+   * numerals the customer typed, because the whole point of the
+   * deterministic parser is that the model never gets to re-read
+   * "20/08/26" — and it would be re-read if the reply model were left
+   * to restate the date itself.
+   *
+   * Absent when the date itself is the problem (32/08, 13/20): there is
+   * no valid date to name, and the question has to be about the date.
+   */
+  clarificationDate?: string;
 }
 
 // ── Weekday correction ───────────────────────────────────────────
@@ -198,6 +214,22 @@ function parseExplicitTime(
   return { hour, minute };
 }
 
+/**
+ * The stated date, written for a customer to read back.
+ *
+ * Built and formatted entirely in UTC from the numerals as typed, so it
+ * carries no timezone meaning and cannot shift a day either way — this
+ * is a label for a date the customer already named, not an instant.
+ */
+function formatStatedDate(year: number, month: number, day: number): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
 /** Rejects 31/02 and friends: Date.UTC would roll them into March. */
 function isRealCalendarDate(
   year: number,
@@ -253,7 +285,14 @@ export function parseExplicitNumericDatetime(
     text.slice(0, m.index) + " " + text.slice(m.index + m[0].length);
   const time = parseExplicitTime(withoutDate);
   if (!time) {
-    return { iso: null, failed: false, needsClarification: true };
+    // The DATE is settled; only the time is missing. Naming it lets the
+    // question be specific, and pins it so the reply cannot re-read it.
+    return {
+      iso: null,
+      failed: false,
+      needsClarification: true,
+      clarificationDate: formatStatedDate(year, month, day),
+    };
   }
 
   const instant = zonedWallClockToUtc(

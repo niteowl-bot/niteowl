@@ -72,12 +72,36 @@ export async function storeVoiceEvent(
   return { id: data.id, duplicate: false };
 }
 
+export interface MarkProcessedOptions {
+  /**
+   * Only write the outcome if this claim is still the one on the row.
+   *
+   * For the replay worker, which can be beaten to the finish by the
+   * original webhook or by another worker that reclaimed a stale claim.
+   * Without it a late-waking worker overwrites an outcome it no longer
+   * owns — and on its FAILURE path that writes processed_at back to
+   * NULL, resurrecting an event somebody else already completed.
+   *
+   * Omitted by the webhook, which has no claim and is the first actor:
+   * with no id supplied the update is exactly what it has always run.
+   */
+  onlyIfClaimedAt?: string;
+}
+
+/**
+ * Records the outcome of processing an event.
+ *
+ * Returns whether the write actually applied — false means another
+ * actor owns this event now, which is information the replay worker
+ * acts on and the webhook ignores.
+ */
 export async function markVoiceEventProcessed(
   admin: AdminClient,
   eventRowId: string,
-  processingError: string | null = null
-): Promise<void> {
-  const { error } = await admin
+  processingError: string | null = null,
+  options: MarkProcessedOptions = {}
+): Promise<boolean> {
+  let query = admin
     .from("voice_events")
     .update({
       processed_at: processingError ? null : new Date().toISOString(),
@@ -85,9 +109,24 @@ export async function markVoiceEventProcessed(
     })
     .eq("id", eventRowId);
 
+  if (options.onlyIfClaimedAt) {
+    query = query.eq("processing_started_at", options.onlyIfClaimedAt);
+
+    // A FAILURE must never un-process a completed event. Success has no
+    // such guard: setting processed_at is the point, and doing it twice
+    // is harmless.
+    if (processingError) {
+      query = query.is("processed_at", null);
+    }
+  }
+
+  const { data, error } = await query.select("id");
+
   if (error) {
     console.error("[voice] failed to mark event processed:", error.message);
+    return false;
   }
+  return (data ?? []).length > 0;
 }
 
 // ── Tenant resolution ──────────────────────────────────────────────
@@ -378,6 +417,74 @@ export function callNeverConnected(
 // checks the KB before the lead ever reaches that shared engine, so a
 // confirmed-service request is completely unaffected.
 
+// ── Owner-summary idempotency ──────────────────────────────────────
+//
+// Everything else in processCallEnded already survives a second run:
+// the voice_calls upsert is keyed on (provider, provider_call_id),
+// ensureVoiceConversation keys the conversation on the provider call id
+// and returns the existing one, and capturePartialLead's first
+// resolution layer matches this call's conversation_id against
+// MERGEABLE_STATUSES — which includes both statuses a phone lead can
+// hold — so a replay UPDATES that lead instead of inserting another.
+//
+// The summary email is the exception: nothing about sending it is
+// repeatable, and a replay would put a second copy of the same call in
+// the owner's inbox. The marker lives in the existing
+// voice_calls.metadata JSONB, mirroring how leads.metadata already
+// carries needs_review_notification_sent — read-merged, so it cannot
+// clobber a key another writer set.
+
+async function hasCallSummaryBeenSent(
+  admin: AdminClient,
+  callRowId: string
+): Promise<boolean> {
+  try {
+    const { data } = await admin
+      .from("voice_calls")
+      .select("metadata")
+      .eq("id", callRowId)
+      .maybeSingle();
+
+    const metadata = (data?.metadata ?? {}) as Record<string, unknown>;
+    return metadata.summary_email_sent === true;
+  } catch (err) {
+    // Fall back to SENDING rather than skipping: a duplicate summary is
+    // an annoyance, a missing one loses the enquiry.
+    console.error("[voice] could not read call summary flag:", err);
+    return false;
+  }
+}
+
+async function markCallSummarySent(
+  admin: AdminClient,
+  callRowId: string
+): Promise<void> {
+  try {
+    const { data } = await admin
+      .from("voice_calls")
+      .select("metadata")
+      .eq("id", callRowId)
+      .maybeSingle();
+
+    const metadata = {
+      ...((data?.metadata as Record<string, unknown>) ?? {}),
+      summary_email_sent: true,
+      summary_email_sent_at: new Date().toISOString(),
+    };
+
+    const { error } = await admin
+      .from("voice_calls")
+      .update({ metadata })
+      .eq("id", callRowId);
+
+    if (error) {
+      console.error("[voice] failed to set call summary flag:", error.message);
+    }
+  } catch (err) {
+    console.error("[voice] failed to set call summary flag:", err);
+  }
+}
+
 export async function processCallEnded(
   admin: AdminClient,
   orgId: string,
@@ -610,10 +717,37 @@ export async function processCallEnded(
     return;
   }
 
+  // Already sent on an earlier attempt that failed later, or by the
+  // original webhook before a replay picked this up. The lead work
+  // above has run again harmlessly; this must not.
+  if (await hasCallSummaryBeenSent(admin, callRow.id)) {
+    console.log(
+      "[voice] call summary already sent — not sending again:",
+      event.providerCallId
+    );
+    return;
+  }
+
   const ownerInfo = await getOrgOwnerEmail(orgId);
-  await sendCallSummaryEmail({
-    businessOwnerEmail: ownerInfo?.email ?? null,
-    businessName: ownerInfo?.businessName ?? "the business",
+
+  // No recipient is a CONFIGURATION problem, not a transient one:
+  // retrying cannot fix it, and retrying forever would keep the event
+  // unprocessed indefinitely. Reported loudly and left processed — the
+  // enquiry itself is safe, because the lead was written above and the
+  // call is in the dashboard either way.
+  if (!ownerInfo?.email) {
+    console.error(
+      "[voice] no owner email configured — call summary cannot be sent for:",
+      event.providerCallId,
+      "| org:",
+      orgId
+    );
+    return;
+  }
+
+  const sent = await sendCallSummaryEmail({
+    businessOwnerEmail: ownerInfo.email,
+    businessName: ownerInfo.businessName ?? "the business",
     callerPhone: event.callerPhone,
     alternatePhone,
     callerName: details?.name ?? null,
@@ -623,6 +757,18 @@ export async function processCallEnded(
     transcript: event.transcript,
     leadCreated: Boolean(leadId),
   });
+
+  // A send failure used to be swallowed: sendCallSummaryEmail returns
+  // false rather than throwing, so the event was marked processed and
+  // the owner was never told about the call. Throwing leaves the event
+  // unprocessed and therefore replayable — the whole point of this work.
+  if (!sent) {
+    throw new Error(
+      `call summary email failed for ${event.providerCallId} — event left for replay`
+    );
+  }
+
+  await markCallSummarySent(admin, callRow.id);
 }
 
 // ── Status update processing ───────────────────────────────────────

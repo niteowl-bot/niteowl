@@ -39,16 +39,58 @@ const CANONICAL_ZONES: Set<string> = new Set(
 CANONICAL_ZONES.add("utc");
 
 /**
- * Whether a string is a canonical IANA zone. Used to validate what an
- * owner picks in Settings before it is stored — a wrong-but-accepted
- * zone silently corrupts every subsequent date calculation for that org.
+ * The Area/Location shape of a real IANA zone id — "Europe/London",
+ * "America/Argentina/Buenos_Aires". At least one "/" is required, and
+ * that single requirement is what keeps the legacy abbreviations out:
+ * "BST", "EST", "PST", "CET", "GMT", "EST5EDT" and "PST8PDT" are all
+ * accepted by Intl and all resolve somewhere else, and not one of them
+ * contains a slash.
+ */
+const IANA_ID_SHAPE = /^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)+$/;
+
+/** Whether this runtime can actually compute with the zone. */
+function isIntlComputable(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Whether a string is a real IANA zone. Used to validate what an owner
+ * picks in Settings before it is stored — a wrong-but-accepted zone
+ * silently corrupts every subsequent date calculation for that org.
+ *
+ * Two ways to qualify, checked in that order:
+ *
+ *   1. Membership of this runtime's canonical list.
+ *   2. Failing that, an Area/Location id this runtime can compute with.
+ *
+ * Rule 2 exists because `Intl.supportedValuesOf("timeZone")` omits IANA
+ * LINK names, and WHICH names are links varies by ICU build: this one
+ * lists "Asia/Calcutta" and not "Asia/Kolkata", newer builds do the
+ * reverse. On the list alone, an owner in India picking the spelling
+ * their runtime happens not to list had their zone rejected and
+ * silently replaced with Europe/London — every appointment then 5½
+ * hours out, with no error raised anywhere. That is the same class of
+ * failure the list was introduced to prevent, arriving from the other
+ * direction.
+ *
+ * It is a WIDENING, never a weakening: everything the list accepts is
+ * still accepted, the abbreviations are still rejected (no slash), and
+ * a zone this runtime cannot compute with is still rejected —
+ * "Europe/Atlantis" and "Foo/Bar" have the right shape and both throw.
  *
  * Case-insensitive: "europe/london" is the same zone as "Europe/London".
  * Use canonicaliseTimezone before storing.
  */
 export function isValidTimezone(timezone: string): boolean {
   if (typeof timezone !== "string" || !timezone.trim()) return false;
-  return CANONICAL_ZONES.has(timezone.trim().toLowerCase());
+  const candidate = timezone.trim();
+  if (CANONICAL_ZONES.has(candidate.toLowerCase())) return true;
+  return IANA_ID_SHAPE.test(candidate) && isIntlComputable(candidate);
 }
 
 /**

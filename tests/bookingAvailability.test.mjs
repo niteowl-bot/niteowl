@@ -10,7 +10,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { overlapsBusy } from "@/lib/availability";
+import { checkBookingSlot } from "@/lib/bookingAvailability";
 import { isCalendarAvailabilityBlocking } from "@/lib/integrations/flags";
+import { installStubs, ORG_ID, MONDAY_1600 } from "./support.mjs";
 
 const busy = (startIso, endIso) => ({ startIso, endIso });
 
@@ -128,6 +130,124 @@ describe("availability blocking flag", () => {
         false,
         String(value)
       );
+    }
+  });
+});
+
+// ── excludeLeadId, forwarded to the capacity check ────────────────────
+//
+// checkBookingSlot is shared: the live phone call, the pre-write
+// re-check in calendarSync, and (from this work on) chat and the
+// widget all go through it. Chat and the widget need the reschedule
+// self-exemption that checkSlotCapacity has always had; the phone must
+// not notice that the option now exists.
+//
+// No calendar is connected in these tests (the integration flags are
+// unset), so the external branch short-circuits to not_connected and
+// what is pinned here is exactly the internal decision.
+
+describe("checkBookingSlot — reschedule self-exemption", () => {
+  const RESCHEDULING_LEAD = "11111111-1111-4111-8111-111111111111";
+  const SOMEONE_ELSE = "22222222-2222-4222-8222-222222222222";
+
+  // The lead's own confirmed booking, at the very instant it is asking
+  // to be moved to. Under the overlap rule this collides with itself.
+  const ownBooking = (id) => [
+    {
+      id,
+      org_id: ORG_ID,
+      status: "booked",
+      appointment_datetime: new Date(MONDAY_1600).toISOString(),
+    },
+  ];
+
+  test("without the option, an overlapping booking still refuses the slot", async () => {
+    // The pre-existing behaviour every current caller relies on.
+    const stubs = installStubs({ bookedLeads: ownBooking(RESCHEDULING_LEAD) });
+    try {
+      const decision = await checkBookingSlot(ORG_ID, MONDAY_1600, 60);
+      assert.equal(decision.available, false);
+      assert.equal(decision.reason, "capacity");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test("a lead moving its own appointment is not a clash with itself", async () => {
+    const stubs = installStubs({ bookedLeads: ownBooking(RESCHEDULING_LEAD) });
+    try {
+      const decision = await checkBookingSlot(ORG_ID, MONDAY_1600, 60, {
+        excludeLeadId: RESCHEDULING_LEAD,
+      });
+      assert.equal(decision.available, true);
+      assert.equal(decision.reason, null);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test("it exempts ONLY that lead — someone else's booking still blocks", async () => {
+    // The exemption must not become a way to book over other customers.
+    const stubs = installStubs({ bookedLeads: ownBooking(SOMEONE_ELSE) });
+    try {
+      const decision = await checkBookingSlot(ORG_ID, MONDAY_1600, 60, {
+        excludeLeadId: RESCHEDULING_LEAD,
+      });
+      assert.equal(decision.available, false);
+      assert.equal(decision.reason, "capacity");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test("null and undefined behave exactly as omitting the option", async () => {
+    // capturePartialLead passes `existing?.id`, which is undefined for a
+    // new enquiry. That must not accidentally disable the capacity rule.
+    for (const excludeLeadId of [null, undefined]) {
+      const stubs = installStubs({ bookedLeads: ownBooking(RESCHEDULING_LEAD) });
+      try {
+        const decision = await checkBookingSlot(ORG_ID, MONDAY_1600, 60, {
+          excludeLeadId,
+        });
+        assert.equal(decision.available, false, String(excludeLeadId));
+        assert.equal(decision.reason, "capacity", String(excludeLeadId));
+      } finally {
+        stubs.restore();
+      }
+    }
+  });
+
+  test("the phone's three-argument call is unchanged on a free slot", async () => {
+    // voice/availabilityTool.ts and calendarSync.ts both call with three
+    // arguments. This is that exact shape, against an empty diary.
+    const stubs = installStubs({ bookedLeads: [] });
+    try {
+      const decision = await checkBookingSlot(ORG_ID, MONDAY_1600, 60);
+      assert.equal(decision.available, true);
+      assert.equal(decision.reason, null);
+      assert.equal(decision.externalChecked, false);
+      assert.equal(decision.externalCheckFailed, false);
+      assert.equal(decision.externalBusyWindowEndIso, null);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  test("business hours are still decided before capacity is ever counted", async () => {
+    // Sunday is closed in the fixture. The exemption must not smuggle a
+    // booking past the hours check, which runs first and independently.
+    const stubs = installStubs({ bookedLeads: [] });
+    try {
+      const decision = await checkBookingSlot(
+        ORG_ID,
+        "2026-08-02T14:00:00+01:00",
+        60,
+        { excludeLeadId: RESCHEDULING_LEAD }
+      );
+      assert.equal(decision.available, false);
+      assert.equal(decision.reason, "hours");
+    } finally {
+      stubs.restore();
     }
   });
 });

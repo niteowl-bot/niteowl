@@ -189,3 +189,60 @@ describe("the model is not consulted for an explicit date", () => {
     }
   });
 });
+
+// ── The date we understood, for the question we have to ask ───────
+//
+// Refusing to guess is only half the behaviour: Remy then has to ask
+// for the missing piece, and to ask it SPECIFICALLY — "what time on
+// 20 August?" rather than a bare "what time?". That needs the date we
+// resolved, formatted here rather than left to the reply model, which
+// is exactly the component that reads "20/08/26" as 26 August.
+
+describe("the resolved date is named when only the time is missing", () => {
+  test("a date with no time carries the date it understood", () => {
+    const r = parseExplicitNumericDatetime("can you do 20/08/26", TZ);
+    assert.equal(r.iso, null);
+    assert.equal(r.needsClarification, true);
+    assert.equal(r.clarificationDate, "20 August 2026");
+  });
+
+  test("a bare hour carries it too", () => {
+    const r = parseExplicitNumericDatetime("20/08/26 at 2", TZ);
+    assert.equal(r.needsClarification, true);
+    assert.equal(r.clarificationDate, "20 August 2026");
+  });
+
+  test("it is DD/MM here as well — never 8 August", () => {
+    // The whole point: if this ever says "8 August 2026" the parser has
+    // started reading MM/DD and the question would name the wrong day.
+    const r = parseExplicitNumericDatetime("05/09/26", TZ);
+    assert.equal(r.clarificationDate, "5 September 2026");
+  });
+
+  test("an IMPOSSIBLE date names nothing — there is no date to name", () => {
+    // The question then has to be about the date itself, so offering a
+    // formatted one would be inventing the very thing we refused.
+    for (const text of ["32/08/26 at 2pm", "31/02/26 at 2pm", "13/20/26 at 2pm"]) {
+      const r = parseExplicitNumericDatetime(text, TZ);
+      assert.equal(r.needsClarification, true, text);
+      assert.equal(r.clarificationDate, undefined, text);
+    }
+  });
+
+  test("a RESOLVED datetime carries neither flag", () => {
+    const r = parseExplicitNumericDatetime("20/08/26 at 2pm", TZ);
+    assert.ok(r.iso);
+    assert.equal(r.needsClarification, undefined);
+    assert.equal(r.clarificationDate, undefined);
+  });
+
+  test("the date label does not move with the timezone", () => {
+    // It labels a date the customer typed, not an instant, so it must
+    // read the same everywhere — a label that shifted by zone would
+    // reintroduce the off-by-one-day bug in the question itself.
+    for (const zone of ["Europe/London", "America/New_York", "Australia/Sydney"]) {
+      const r = parseExplicitNumericDatetime("20/08/26", zone);
+      assert.equal(r.clarificationDate, "20 August 2026", zone);
+    }
+  });
+});
