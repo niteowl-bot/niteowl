@@ -572,4 +572,96 @@ describe("uncertainty is never available", () => {
     assert.match(outcome.result, /AVAILABILITY UNKNOWN/);
     assert.deepEqual(outcome.alternativeIsos, []);
   });
+
+  // ── REGRESSION: a 200 that never mentions our calendar ────────────
+  //
+  // The dangerous shape, because nothing about it looks like a failure:
+  // HTTP 200, valid JSON, no `errors` block — just no entry for the
+  // calendar we asked about. parseFreeBusyResponse used to hand back an
+  // empty busy list, which is indistinguishable from "completely free",
+  // and the slot would be offered over whatever is really in the diary.
+  //
+  // Driven through checkVoiceAvailability rather than asserted on the
+  // parser alone, so this pins the whole chain: parse → getBusyIntervals
+  // → getOrgBusyIntervals → checkBookingSlot → the caller's answer.
+
+  /** Replace only the freeBusy response; everything else keeps stubbing. */
+  function withFreeBusyBody(body, status = 200) {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("freeBusy")) {
+        return new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return realFetch(input, init);
+    };
+  }
+
+  test("a 200 with NO entry for our calendar is UNKNOWN, not available", async () => {
+    withFreeBusyBody({ calendars: {} });
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "unknown", "silence about our calendar is not a free slot");
+    assert.match(outcome.result, /AVAILABILITY UNKNOWN/);
+    assert.deepEqual(outcome.alternativeIsos, [], "nothing unverified may be offered");
+  });
+
+  test("a 200 describing only ANOTHER calendar is UNKNOWN too", async () => {
+    withFreeBusyBody({ calendars: { "someone-else@example.com": { busy: [] } } });
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "unknown");
+    assert.deepEqual(outcome.alternativeIsos, []);
+  });
+
+  test("a 200 with no calendars key at all is UNKNOWN", async () => {
+    withFreeBusyBody({});
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "unknown");
+  });
+
+  test("CONTROL: an answered, EMPTY calendar is still available", async () => {
+    // Proves the fix refuses only silence, not free time — without this
+    // the three tests above would pass on a blanket refusal that had
+    // broken availability entirely.
+    withFreeBusyBody({ calendars: { [CALENDAR_ID]: { busy: [] } } });
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "available", "a genuinely free calendar must stay bookable");
+  });
+
+  test("CONTROL: a real busy window is still a conflict, not UNKNOWN", async () => {
+    withFreeBusyBody({
+      calendars: {
+        [CALENDAR_ID]: { busy: [{ start: REQUESTED_ISO, end: "2026-08-11T10:00:00.000Z" }] },
+      },
+    });
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "unavailable", "a genuine clash must stay a clash");
+  });
+
+  test("CONTROL: half-open boundaries survive — a window ending at the start is free", async () => {
+    // Busy 09:00-10:00 UTC; the request starts exactly at 10:00 UTC.
+    withFreeBusyBody({
+      calendars: {
+        [CALENDAR_ID]: {
+          busy: [{ start: "2026-08-11T08:00:00.000Z", end: REQUESTED_ISO }],
+        },
+      },
+    });
+    const outcome = await checkVoiceAvailability(ORG_ID, REQUESTED);
+    assert.equal(outcome.status, "available", "back-to-back must remain bookable");
+  });
+
+  test("the connection is NOT parked as needs_reauth by an incomplete response", async () => {
+    // An incomplete payload says nothing about the credentials. Marking
+    // the connection needs_reauth would force a pointless reconnect and
+    // disable the calendar until the owner noticed.
+    withFreeBusyBody({ calendars: {} });
+    await checkVoiceAvailability(ORG_ID, REQUESTED);
+    const parked = stubs.calls.writes.filter(
+      (w) => w.url.includes("integration_connections") && w.method === "PATCH"
+    );
+    assert.equal(parked.length, 0, "a healthy connection must not be disabled");
+  });
 });
