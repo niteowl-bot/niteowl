@@ -521,12 +521,34 @@ describe("duplicate protection", () => {
   });
 });
 
+// "no_calendar" means NO EVENT EXISTS. It is not a success, and these
+// tests no longer pretend it is.
+//
+// The two assertions below used to read `assert.ok(mayConfirmBooking(…))`
+// with the justification "booking must proceed as before". That
+// justification described a call production never makes. In the real
+// engine `settleCalendarBacking` — the ONLY caller of mayConfirmBooking —
+// is reached exclusively via `requiresCalendarBacking()`, which gates on
+// the same `isCalendarEventCreationEnabled(orgId)` this function checks
+// first. With the flag off the engine never consults the calendar at all:
+// it writes "booked" in one pass and returns. That path is what actually
+// guarantees "booking proceeds as before", and it is asserted directly by
+// "with the flag OFF the engine behaves exactly as it did before" below.
+//
+// So the only way `no_calendar` can reach a confirmation decision is an
+// ALLOWLISTED org whose calendar is disconnected or has sync switched
+// off — and confirming a booking there is the false confirmation this
+// module exists to prevent.
 describe("no calendar connected — the ordinary case, unchanged", () => {
   test("the flag off means no queries and no write", async () => {
     stubs = installStubs({ eventCreation: "false" });
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
     assert.equal(result.outcome, "no_calendar");
-    assert.ok(mayConfirmBooking(result.outcome), "booking must proceed as before");
+    assert.equal(
+      mayConfirmBooking(result.outcome),
+      false,
+      "no event was created, so nothing may be confirmed from this outcome"
+    );
     assert.equal(stubs.calls.creates.length, 0);
     assert.equal(stubs.calls.freeBusy, 0, "not one provider call for an unconnected org");
   });
@@ -538,11 +560,15 @@ describe("no calendar connected — the ordinary case, unchanged", () => {
     assert.equal(result.outcome, "no_calendar");
   });
 
-  test("nothing connected still books", async () => {
+  test("nothing connected writes nothing, and confirms nothing", async () => {
     stubs = installStubs({ connected: false });
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
     assert.equal(result.outcome, "no_calendar");
-    assert.ok(mayConfirmBooking(result.outcome));
+    assert.equal(
+      mayConfirmBooking(result.outcome),
+      false,
+      "an allowlisted org with no connection has no event to confirm"
+    );
     assert.equal(stubs.calls.creates.length, 0);
   });
 
@@ -551,6 +577,80 @@ describe("no calendar connected — the ordinary case, unchanged", () => {
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
     assert.equal(result.outcome, "no_calendar");
     assert.equal(stubs.calls.creates.length, 0, "the owner said do not write here");
+  });
+});
+
+// ── REGRESSION: availability is not a booking ─────────────────────
+//
+// The bug: mayConfirmBooking() returned true for "no_calendar", so an
+// allowlisted org whose calendar was disconnected (or had sync switched
+// off) produced status "booked", a null unavailableReason, a "your
+// appointment IS NOW BOOKED" instruction to the reply model and a
+// confirmation email — with no event in anybody's Google Calendar.
+//
+// Pinned exhaustively over the union rather than by example, so a new
+// outcome added later cannot default into "confirmable" unnoticed.
+
+/** Every member of CalendarConfirmOutcome, and whether an event exists. */
+const OUTCOMES_WITH_A_REAL_EVENT = ["created", "already_linked", "realigned"];
+const OUTCOMES_WITH_NO_EVENT = ["no_calendar", "conflict", "unverified", "failed"];
+
+describe("REGRESSION — only a real calendar event may be called booked", () => {
+  test("no_calendar is NEVER confirmable", () => {
+    assert.equal(
+      mayConfirmBooking("no_calendar"),
+      false,
+      "no_calendar means no event was written — it must never confirm a booking"
+    );
+    assert.equal(isCalendarConfirmed("no_calendar"), false);
+  });
+
+  test("every outcome that wrote a real event is confirmable", () => {
+    for (const outcome of OUTCOMES_WITH_A_REAL_EVENT) {
+      assert.equal(mayConfirmBooking(outcome), true, `${outcome} holds a real event`);
+    }
+  });
+
+  test("every outcome without a real event is refused", () => {
+    for (const outcome of OUTCOMES_WITH_NO_EVENT) {
+      assert.equal(
+        mayConfirmBooking(outcome),
+        false,
+        `${outcome} has no event behind it and must not be confirmed`
+      );
+    }
+  });
+
+  test("mayConfirmBooking has no confirmable case isCalendarConfirmed lacks", () => {
+    // The two diverged once — that divergence WAS the bug. Any future
+    // exception has to be added here deliberately, not slipped in.
+    for (const outcome of [...OUTCOMES_WITH_A_REAL_EVENT, ...OUTCOMES_WITH_NO_EVENT]) {
+      assert.equal(
+        mayConfirmBooking(outcome),
+        isCalendarConfirmed(outcome),
+        `${outcome}: confirmability must track whether an event actually exists`
+      );
+    }
+  });
+
+  test("a disconnected calendar on an ALLOWLISTED org confirms nothing", async () => {
+    // The exact production shape of the bug: the org may be written to,
+    // so the engine takes the calendar-backed path — but there is no
+    // calendar there to write to.
+    stubs = installStubs({ allowedOrgIds: ORG_ID, connected: false });
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(result.externalEventId, null, "there is no event id to point at");
+    assert.equal(mayConfirmBooking(result.outcome), false);
+    assert.equal(stubs.calls.creates.length, 0);
+  });
+
+  test("sync switched off on an ALLOWLISTED org confirms nothing either", async () => {
+    stubs = installStubs({ allowedOrgIds: ORG_ID, syncEnabled: false });
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(mayConfirmBooking(result.outcome), false);
+    assert.equal(stubs.calls.creates.length, 0);
   });
 });
 
@@ -704,6 +804,129 @@ describe("end to end — the customer is only told what is true", () => {
     // behaviour asserted above is unchanged: still booked in one write,
     // still no event created.
     assert.equal(stubs.calls.freeBusy, 1);
+  });
+});
+
+// ── REGRESSION: the chat reply may not claim a booking that isn't ──
+//
+// The outcome-level tests above prove mayConfirmBooking refuses
+// "no_calendar". This proves the refusal survives all the way to the
+// only thing the customer actually experiences: the instruction handed
+// to the model that writes the reply.
+//
+// Composed exactly as the chat and widget routes compose it — see
+// src/app/api/chat/route.ts and src/app/api/widget/chat/route.ts, which
+// both build this note from the same three capturePartialLead fields.
+
+/** The "what has just happened" section the reply model is given. */
+async function replyNoteFor(result, intent = "new_booking") {
+  const { buildBookingOutcomeNote, buildDatetimeClarificationNote } = await import(
+    "@/lib/bookingOutcome"
+  );
+  const clarification = buildDatetimeClarificationNote({
+    needsClarification: result.needsClarification,
+    clarificationDate: result.clarificationDate,
+  });
+  return clarification
+    ? null
+    : buildBookingOutcomeNote({
+        intent,
+        booked: result.booked,
+        appointmentIso: result.appointmentIso,
+        unavailableReason: result.unavailableReason,
+      });
+}
+
+/** Nothing the model is told may read as a confirmed appointment. */
+function assertMakesNoBookingClaim(note, context) {
+  if (note === null) return; // the model is told nothing — the safe state
+  assert.doesNotMatch(
+    note,
+    /\b(booked|scheduled|confirmed|is now booked|has been moved)\b/i,
+    `${context}: the reply model was told a booking happened when none did — ${note}`
+  );
+}
+
+describe("REGRESSION — chat/widget never claims a booking without an event", () => {
+  test("CONTROL: a real Google write DOES produce the confirmation note", async () => {
+    // Without this, every assertion below would pass on a note builder
+    // that had simply been broken to return null forever.
+    stubs = installStubs({ allowedOrgIds: ORG_ID });
+    const result = await captureBooking();
+    const note = await replyNoteFor(result);
+    assert.equal(stubs.calls.creates.length, 1, "the event really was created");
+    assert.equal(finalStatus(stubs.calls), "booked");
+    assert.ok(note, "a genuine booking must still be confirmed to the customer");
+    assert.match(note, /IS NOW BOOKED/);
+  });
+
+  test("allowlisted org, calendar DISCONNECTED — the bug, end to end", async () => {
+    stubs = installStubs({ allowedOrgIds: ORG_ID, connected: false });
+    const result = await captureBooking();
+
+    assert.equal(stubs.calls.creates.length, 0, "no event was created");
+    assert.notEqual(finalStatus(stubs.calls), "booked", "the lead must not be left booked");
+    assert.equal(finalStatus(stubs.calls), "needs_review", "the owner must see it instead");
+    assert.equal(
+      result.unavailableReason,
+      "lookup_failed",
+      "never dressed up as 'that slot is taken' — nothing about the slot is known"
+    );
+    assertMakesNoBookingClaim(await replyNoteFor(result), "disconnected calendar");
+  });
+
+  test("allowlisted org, sync SWITCHED OFF — same refusal", async () => {
+    stubs = installStubs({ allowedOrgIds: ORG_ID, syncEnabled: false });
+    const result = await captureBooking();
+
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+    assertMakesNoBookingClaim(await replyNoteFor(result), "sync disabled");
+  });
+
+  test("a Google CONFLICT claims nothing either", async () => {
+    stubs = installStubs({
+      allowedOrgIds: ORG_ID,
+      busy: [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }],
+    });
+    const result = await captureBooking();
+    assert.equal(stubs.calls.creates.length, 0);
+    assertMakesNoBookingClaim(await replyNoteFor(result), "google conflict");
+  });
+
+  test("a FAILED Google write claims nothing either", async () => {
+    stubs = installStubs({ allowedOrgIds: ORG_ID, createStatus: 500 });
+    const result = await captureBooking();
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+    assertMakesNoBookingClaim(await replyNoteFor(result), "google write failed");
+  });
+
+  test("no confirmation EMAIL is sent when no event exists", async () => {
+    // The same false confirmation, in the customer's inbox rather than
+    // the chat window. sendBookingConfirmationEmails is gated on the
+    // settled status, so a Resend call here would mean the gate leaked.
+    stubs = installStubs({ allowedOrgIds: ORG_ID, connected: false });
+    await captureBooking();
+    assert.equal(
+      stubs.calls.creates.length,
+      0,
+      "no event, and therefore nothing to confirm by email"
+    );
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+  });
+
+  test("the flag-off majority still books, and is still told so", async () => {
+    // The behaviour the old `no_calendar → confirmable` rule claimed to
+    // protect. It is protected by requiresCalendarBacking(), not by
+    // mayConfirmBooking(), and this proves the change did not touch it.
+    stubs = installStubs({ eventCreation: "false" });
+    const result = await captureBooking();
+    const note = await replyNoteFor(result);
+    assert.equal(stubs.calls.leadInserts[0].status, "booked", "straight to booked, one write");
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.equal(result.unavailableReason, null);
+    assert.ok(note, "an org with no calendar integration still confirms as it always has");
+    assert.match(note, /IS NOW BOOKED/);
   });
 });
 
@@ -1159,7 +1382,7 @@ describe("create, reschedule and cancel all obey the same org gate", () => {
     stubs = installStubs({ allowedOrgIds: OTHER_ORG });
     const result = await confirmAppointmentOnCalendar(APPOINTMENT);
     assert.equal(result.outcome, "no_calendar");
-    assert.ok(mayConfirmBooking(result.outcome), "booking still proceeds as today");
+    assert.equal(mayConfirmBooking(result.outcome), false, "booking must not be confirmed without a calendar event");
     assert.equal(stubs.calls.creates.length, 0);
     assert.equal(stubs.calls.freeBusy, 0, "not one provider call for an unlisted org");
   });

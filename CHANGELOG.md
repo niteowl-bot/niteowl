@@ -2,6 +2,37 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-12 (Calendar — `no_calendar` could confirm a booking that did not exist)
+
+**NOT DEPLOYED, NOT PUSHED.** Committed as `7f3b136` on branch `fix/no-calendar-false-booking-confirmation`. One-line production change plus tests; no flag, schema, prompt or route change.
+
+`mayConfirmBooking()` returned true for `no_calendar`, so an **allowlisted** org whose calendar is disconnected — or has sync switched off — was told its appointment was booked with no event in anyone's Google Calendar: status `booked`, a null `unavailableReason`, *"your appointment IS NOW BOOKED"* handed to the reply model, and a confirmation email. Availability had passed, and the code read "nothing contradicted us" as "Google said yes".
+
+### Why the old reasoning was wrong, not merely outdated
+The comment justified the exclusion as protecting orgs with no connection: *"refusing to book it would break every business using Remy today."* That described a call production never makes. The only caller — `settleCalendarBacking` in `lib/leadCapture` — is reached exclusively through `requiresCalendarBacking()`, which gates on the same `isCalendarEventCreationEnabled(orgId)` checked at the top of `confirmAppointmentOnCalendar`. An org with no calendar integration never reaches the function at all: it books in a single write and returns. **That path, not this exclusion, is what preserved the legacy behaviour** — and it is asserted directly by the untouched flag-off end-to-end test.
+
+So the only outcome the exclusion ever changed was the one it must not. This **supersedes the `no_calendar` → `booked` row** in the milestone-5 outcome table below, which is left as written because it records what was true then: that row's parenthetical ("every org today, byte-identical to before") was the assumption that made the exclusion look harmless, and it stopped holding the moment an org was allowlisted without a working calendar.
+
+### Tests
+`npm test` **803 passing, 0 failing** (790 → 803, +13). `tsc --noEmit` clean.
+
+Three obsolete expectations corrected. All three asserted `mayConfirmBooking("no_calendar") === true` under the stale justification, and all three did it by calling `confirmAppointmentOnCalendar` directly with the flag off — a call the engine never makes.
+
+Thirteen regression tests added, in two groups: an **exhaustive sweep over the `CalendarConfirmOutcome` union**, so a future outcome cannot default into confirmable unnoticed and `mayConfirmBooking` cannot silently re-diverge from `isCalendarConfirmed`; and **end-to-end coverage through the real `capturePartialLead` and the real `buildBookingOutcomeNote`**, composed exactly as the chat and widget routes compose them, proving the refusal survives to the only thing a customer experiences — the instruction handed to the model that writes the reply. Includes a **control test** asserting a genuine write still produces the confirmation note, so the group cannot pass on a note builder broken to return null.
+
+**Mutation-verified:** restoring the old one-liner fails 11 of them, including the end-to-end *"the lead must not be left booked"*.
+
+### Production configuration check
+Verified read-only against prod before committing. Two orgs exist; applying the code's exact predicate (`getPrimaryResourceWithConnection` plus the `syncEnabled` gate), only `Niteowl Test` resolves to a writable calendar, and `Verification Plumbing Co` has no calendar resource at all. All three `integration_links` ever written belong to the test org.
+
+**The allowlist value itself could not be read.** `CALENDAR_EVENT_CREATION_ORG_IDS` is typed *Sensitive* in Vercel: `env ls` shows `Hidden` and `env pull` returns the literal placeholder `[SENSITIVE]`. `CHECKLIST.md` records it as the test org alone, which the creation date and the link data corroborate but do not prove.
+
+That uncertainty does not gate the deploy, because the outcome is the same either way: if the allowlist is the test org alone, its calendar is writable, `no_calendar` is unreachable and **the change is a no-op in production today** — a safety net for the day a calendar is disconnected or a second org is added. If another org is on the list, that org is *currently getting the bug*, and the change stops it. There is no configuration in which this makes production worse.
+
+### Two findings this surfaced, neither fixed here
+- **The Google token has not refreshed since 2026-08-08.** `last_verified_at`, `updated_at` and `token_expires_at` all sit at that date, and a successful refresh writes all three back — with `status=connected` and `last_error` null, that reads as *not exercised*, not broken. It does not interact with this change: `resolveOrgCalendar` reads the database only and never filters on connection status, so a dead token yields `unverified` or `failed` — never `no_calendar` — and both were already non-confirmable.
+- **`leadCapture.ts` returns `booked: confirmedBooking || safeNextStatus === "booked"` on the update path.** When `backsWithCalendar` is true, `safeNextStatus === "booked"` holds by construction, so the settled calendar result is computed and then discarded. No false confirmation reaches a customer today — `settleCalendarBacking` also sets `unavailableReason`, and `buildBookingOutcomeNote` bails on that first — but the field's documented contract ("whether the lead genuinely ended up confirmed") is untrue, and the insert path returns the honest value. The `||` is not removable outright: it exists so an already-`booked` lead still reports `booked` on reschedule. Left for an owner decision.
+
 ## 2026-08-08 (Google Calendar sync — LIVE-VERIFIED end to end on the test org)
 
 **Documentation of a verification, not a code change.** Production runs `7fb7b0414df0d621dbb0a6f860fb38d071ec200e`; `CALENDAR_EVENT_CREATION_ORG_IDS` is set in **Production only** to the `Niteowl Test` org and nothing else.

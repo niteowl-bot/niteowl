@@ -75,13 +75,29 @@ export function isCalendarConfirmed(outcome: CalendarConfirmOutcome): boolean {
 /**
  * Whether the booking may be confirmed to the customer.
  *
- * "no_calendar" is deliberately included: an org with no connection has
- * nothing to contradict, and refusing to book it would break every
- * business using Remy today. Everything else that is not a confirmed
- * write must NOT be called booked.
+ * Identical to isCalendarConfirmed, and kept as a separate name because
+ * it answers a different question: not "does an event exist" but "may we
+ * SAY so". Nothing that failed to write an event may be called booked.
+ *
+ * "no_calendar" used to be included here, on the reasoning that an org
+ * with no connection has nothing to contradict. That reasoning described
+ * a call this code never makes. The only caller — settleCalendarBacking
+ * in lib/leadCapture — is reached exclusively through
+ * requiresCalendarBacking(), which gates on the same
+ * isCalendarEventCreationEnabled(orgId) checked at the top of
+ * confirmAppointmentOnCalendar. An org with no calendar integration
+ * therefore never reaches this function at all: it books in a single
+ * write, exactly as it always has, and that path is what preserves the
+ * existing behaviour.
+ *
+ * So the only outcome this exclusion ever changed was the one case it
+ * must not: an ALLOWLISTED org whose calendar is disconnected or has
+ * sync switched off. That produced status "booked", a confirmation email
+ * and "your appointment IS NOW BOOKED" in the chat reply, with no event
+ * in anyone's calendar — the precise lie this module exists to prevent.
  */
 export function mayConfirmBooking(outcome: CalendarConfirmOutcome): boolean {
-  return outcome === "no_calendar" || isCalendarConfirmed(outcome);
+  return isCalendarConfirmed(outcome);
 }
 
 export interface AppointmentDetails {
