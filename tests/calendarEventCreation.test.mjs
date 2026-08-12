@@ -1551,6 +1551,197 @@ describe("capturePartialLead reports the outcome it actually persisted", () => {
 });
 
 // ══════════════════════════════════════════════════════════════════
+//  REGRESSION — the UPDATE path reports the calendar's verdict
+// ══════════════════════════════════════════════════════════════════
+//
+// The tests above drive the INSERT path, which returns the honest
+// `confirmedInsert`. The UPDATE path — an existing open lead that
+// becomes a booking on a later turn — returned
+//
+//   booked: confirmedBooking || safeNextStatus === "booked"
+//
+// and `backsWithCalendar` implies `safeNextStatus === "booked"` by
+// construction (requiresCalendarBacking demands it). So the OR could
+// never be false when the calendar was consulted: settleCalendarBacking's
+// verdict was computed, assigned, and then discarded. The engine reported
+// `booked: true` while the row it had just written said `needs_review`.
+//
+// Not customer-visible today — settleCalendarBacking also sets
+// `unavailableReason`, and buildBookingOutcomeNote checks that FIRST —
+// but the reported value contradicted the persisted one, which is the
+// coupling `bookingOutcome.ts` exists to keep honest.
+//
+// The OR is NOT removable: for a lead that is already `booked`,
+// `confirmedBooking` is false by design (it tests
+// `existing.status !== "booked"`), and a chat reschedule still has to
+// report its booking. That case is pinned by "a chat RESCHEDULE reports
+// the new time it stored" above, and again below.
+
+/**
+ * An existing OPEN lead (status "new", no appointment yet) on the same
+ * conversation, so the next booking message takes the UPDATE path
+ * rather than inserting.
+ *
+ * Only the conversation_id lookup is answered from here — every other
+ * lead read (capacity, overlap) falls through to installStubs, so this
+ * lead can never be mistaken for a competing booking.
+ */
+function openLeadStubs(opts = {}) {
+  const s = installStubs({ allowedOrgIds: ORG_ID, ...opts });
+  const inner = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(typeof input === "string" ? input : input.url);
+    const method = (init.method ?? "GET").toUpperCase();
+    if (
+      url.includes("/rest/v1/leads") &&
+      method === "GET" &&
+      url.includes("conversation_id=eq.")
+    ) {
+      const wantsObject = (new Headers(init.headers ?? {}).get("accept") ?? "").includes(
+        "pgrst.object"
+      );
+      const row = {
+        id: LEAD_ID,
+        org_id: ORG_ID,
+        name: "Brian Murphy",
+        email: null,
+        phone: null,
+        service_needed: "Boiler service",
+        preferred_datetime: null,
+        appointment_datetime: null,
+        message: "hi",
+        status: "new",
+        conversation_id: "conv-1",
+        manage_token: "mt",
+        metadata: {},
+      };
+      return new Response(JSON.stringify(wantsObject ? row : [row]), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return inner(input, init);
+  };
+  return s;
+}
+
+describe("REGRESSION — a lead updated into booked reports the calendar's verdict", () => {
+  test("the UPDATE path is genuinely being exercised", async () => {
+    // Guards every assertion below: if the lookup stub stopped matching,
+    // these would silently become insert-path tests and prove nothing.
+    stubs = openLeadStubs();
+    await captureBooking();
+    assert.equal(stubs.calls.leadInserts.length, 0, "no insert — this must be an update");
+    assert.ok(stubs.calls.leadUpdates.length > 0, "the existing lead was updated");
+  });
+
+  test("CONTROL: a successful write still reports booked", async () => {
+    stubs = openLeadStubs();
+    const result = await captureBooking();
+    assert.equal(stubs.calls.creates.length, 1, "the event really was created");
+    assert.equal(finalStatus(stubs.calls), "booked");
+    assert.equal(result.booked, true, "a genuine booking must still report booked");
+  });
+
+  test("no_calendar must NOT report booked", async () => {
+    stubs = openLeadStubs({ connected: false });
+    const result = await captureBooking();
+    assert.equal(stubs.calls.creates.length, 0, "no event was created");
+    assert.equal(finalStatus(stubs.calls), "needs_review");
+    assert.equal(
+      result.booked,
+      false,
+      "the row says needs_review — the reported outcome must agree"
+    );
+  });
+
+  test("a FAILED Google write must NOT report booked", async () => {
+    stubs = openLeadStubs({ createStatus: 500 });
+    const result = await captureBooking();
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+    assert.equal(result.booked, false);
+    assert.equal(result.unavailableReason, "lookup_failed");
+  });
+
+  test("a CONFLICT must NOT report booked", async () => {
+    stubs = openLeadStubs({
+      busy: [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }],
+    });
+    const result = await captureBooking();
+    assert.equal(stubs.calls.creates.length, 0);
+    assert.equal(result.booked, false);
+    assert.equal(result.unavailableReason, "capacity");
+  });
+
+  test("the reported outcome and the persisted row can never disagree", async () => {
+    // The invariant itself, swept across every calendar outcome this
+    // path can produce, rather than asserted case by case.
+    const cases = [
+      ["success", {}],
+      ["no_calendar", { connected: false }],
+      ["sync off", { syncEnabled: false }],
+      ["failed", { createStatus: 500 }],
+      ["conflict", { busy: [{ start: START_ISO, end: "2026-08-11T10:00:00.000Z" }] }],
+    ];
+    for (const [label, opts] of cases) {
+      stubs = openLeadStubs(opts);
+      const result = await captureBooking();
+      assert.equal(
+        result.booked,
+        finalStatus(stubs.calls) === "booked",
+        `${label}: reported booked=${result.booked} but the row says ${finalStatus(stubs.calls)}`
+      );
+      stubs.restore();
+      stubs = null;
+    }
+  });
+
+  test("no confirmation note is produced for a calendar-less update", async () => {
+    // The customer-facing end of the same invariant.
+    stubs = openLeadStubs({ connected: false });
+    const result = await captureBooking();
+    assert.equal(
+      buildBookingOutcomeNote({
+        intent: "new_booking",
+        booked: result.booked,
+        appointmentIso: result.appointmentIso,
+        unavailableReason: result.unavailableReason,
+      }),
+      null,
+      "nothing was booked, so nothing may be claimed"
+    );
+  });
+
+  test("an ALREADY-booked lead is not downgraded by an ordinary update", async () => {
+    // The case the OR exists for. `confirmedBooking` is false here by
+    // design, `backsWithCalendar` is false, and the reschedule must
+    // still report its booking — removing the OR outright breaks this.
+    stubs = bookedLeadStubs();
+    const result = await chatReschedule();
+    assert.equal(result.booked, true, "an existing booking must survive an update");
+    assert.equal(stubs.calls.leadUpdates.at(-1).status, "booked");
+    assert.equal(result.appointmentIso, MOVED_ISO);
+  });
+
+  test("an already-booked lead keeps its event — no second one is created", async () => {
+    stubs = bookedLeadStubs();
+    await chatReschedule();
+    assert.equal(stubs.calls.creates.length, 0, "a move is never a new event");
+    assert.equal(stubs.calls.updates.length, 1, "the existing event moved");
+    assert.equal(stubs.calls.linkInserts.length, 0, "the existing link is reused");
+  });
+
+  test("a REFUSED move on an already-booked lead keeps the booking", async () => {
+    stubs = bookedLeadStubs({ updateStatus: 500 });
+    const result = await chatReschedule();
+    const written = stubs.calls.leadUpdates.at(-1);
+    assert.equal(written.status, "booked", "the original booking still stands");
+    assert.equal(written.appointment_datetime, START_ISO, "and keeps its original time");
+    assert.equal(result.unavailableReason, "lookup_failed");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
 //  The calendar is authoritative for chat/widget — without moving
 //  the phone's post-call baseline
 // ══════════════════════════════════════════════════════════════════
