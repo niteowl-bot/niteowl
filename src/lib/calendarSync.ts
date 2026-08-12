@@ -249,9 +249,47 @@ export async function rescheduleAppointmentOnCalendar(
       details.leadId,
       calendar.connectionId
     );
-    // Nothing was ever written for this appointment, so there is nothing
-    // to move. Creation is confirmAppointmentOnCalendar's job.
-    if (!link) return { outcome: "no_calendar", suggestedIso: null };
+    // ── A MISSING LINK IS NOT "NO CALENDAR" ──────────────────────────
+    //
+    // Execution only reaches here with the write flag on, a calendar
+    // connected, and sync enabled — so this org demonstrably HAS a
+    // calendar. What is missing is our record of THIS appointment's
+    // event, and that has two possible causes we cannot tell apart from
+    // here:
+    //
+    //   1. no event was ever written (the booking predates the
+    //      connection), so there is genuinely nothing to move; or
+    //   2. the event WAS created and recordAppointmentLink failed —
+    //      confirmAppointmentOnCalendar logs that and still confirms the
+    //      booking, correctly, because the event really exists.
+    //
+    // Returning "no_calendar" collapsed both into "nothing to move", and
+    // the callers then moved the LOCAL time and told the customer their
+    // appointment had moved — while the Google event sat at the old
+    // time. That is the exact silent desync milestone 6 closed, reached
+    // through lost data rather than a missing code path.
+    //
+    // "failed" is returned rather than a new outcome deliberately: it
+    // already carries precisely the contract this case needs — do not
+    // move, keep the original time, say so honestly, invite a retry —
+    // and BOTH callers (leadCapture's chat/widget reschedule and
+    // /api/bookings/manage) already implement it correctly. A new member
+    // would have required changing them to handle it, for identical
+    // behaviour. The log line below is what keeps the two causes
+    // distinguishable in diagnosis.
+    //
+    // The cost is honest: a booking made before the calendar was
+    // connected can no longer be rescheduled automatically for an
+    // allowlisted org — it is refused rather than risked. Removing that
+    // cost needs a read-back of the deterministic event id to establish
+    // which case this is (and to repair the link), which is deliberately
+    // NOT in this change.
+    if (!link) {
+      console.error(
+        `[calendar-sync] no appointment link for lead ${details.leadId} on a connected calendar — refusing to move a time we cannot verify`
+      );
+      return { outcome: "failed", suggestedIso: null };
+    }
 
     const movingWithinItself =
       previousStartIso !== null &&

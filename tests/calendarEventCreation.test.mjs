@@ -63,6 +63,16 @@ function installStubs({
   syncEnabled = true,
   connected = true,
   linkInsertFails = false,
+  /**
+   * Make the integration_links insert fail for REAL.
+   *
+   * Distinct from `linkInsertFails`, which returns 23505 — a concurrent
+   * writer having got there first, which recordAppointmentLink treats as
+   * SUCCESS because the row it wanted now exists. This one returns a
+   * genuine error, so the link is never recorded at all: the event is in
+   * Google and nothing points at it.
+   */
+  linkRecordFails = false,
   hoursFail = false,
   /** organisations.timezone — the org's own IANA zone. */
   orgTimezone = "Europe/London",
@@ -207,6 +217,10 @@ function installStubs({
         calls.linkInserts.push(init.body ? JSON.parse(init.body) : {});
         if (linkInsertFails) {
           return json({ message: "boom", code: "23505" }, 409);
+        }
+        if (linkRecordFails) {
+          // NOT 23505 — a real failure, so the row genuinely is not there.
+          return json({ message: "boom", code: "XX000" }, 500);
         }
         return json([], 201);
       }
@@ -1026,11 +1040,22 @@ describe("milestone 6 — reschedule moves the event", () => {
     assert.equal(stubs.calls.updates.length, 1);
   });
 
-  test("an appointment with no event is left alone", async () => {
+  test("a missing link on a CONNECTED calendar refuses the move", async () => {
+    // This asserted "no_calendar" — i.e. "nothing to move, carry on" —
+    // and that was the bug. Reaching here means the flag is on, a
+    // calendar IS connected and sync IS enabled; only our record of THIS
+    // appointment's event is missing. It may be missing because the
+    // event was created and recordAppointmentLink failed, in which case
+    // the event is sitting at the OLD time and moving the local record
+    // would resurrect the milestone-6 desync.
+    //
+    // "failed" is the honest answer: nothing moved, the caller keeps the
+    // original time and says so.
     stubs = installStubs({ existingLinks: [] });
     const result = await reschedule(MOVED_ISO);
-    assert.equal(result.outcome, "no_calendar");
-    assert.equal(stubs.calls.updates.length, 0);
+    assert.equal(result.outcome, "failed");
+    assert.equal(stubs.calls.updates.length, 0, "nothing may be moved");
+    assert.equal(stubs.calls.creates.length, 0, "and nothing may be created");
   });
 
   test("the flag off does nothing at all", async () => {
@@ -2208,5 +2233,170 @@ describe("needsClarification is raised by the parser and nothing else", () => {
     assert.equal(result.needsClarification, false);
     assert.ok(result.leadId, "the lead is still created");
     assert.equal(finalStatus(stubs.calls), "needs_review");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  REGRESSION — a LOST LINK is not "no calendar"
+// ══════════════════════════════════════════════════════════════════
+//
+// The failure this closes, end to end:
+//
+//   1. Google CREATE succeeds — the event is real.
+//   2. recordAppointmentLink fails. confirmAppointmentOnCalendar logs it
+//      and still confirms the booking, which is CORRECT: the event
+//      exists, and saying otherwise would be the lie that module exists
+//      to prevent.
+//   3. Later the customer reschedules. findAppointmentLink returns null.
+//   4. rescheduleAppointmentOnCalendar used to answer "no_calendar" —
+//      i.e. "nothing to move, carry on" — and both callers then moved
+//      the LOCAL time and told the customer their appointment had moved,
+//      while the Google event sat at the old time.
+//
+// That is the milestone-6 desync, reached through lost data rather than
+// a missing code path. The fix answers "failed" instead: nothing moved,
+// keep the original time, say so honestly.
+
+describe("REGRESSION — a created event whose link was lost", () => {
+  test("the booking is still confirmed — the event genuinely exists", async () => {
+    // Unchanged behaviour, asserted so the fix below cannot be mistaken
+    // for "refuse the booking too".
+    stubs = installStubs({ linkRecordFails: true });
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+    assert.equal(result.outcome, "created");
+    assert.equal(mayConfirmBooking(result.outcome), true);
+    assert.equal(stubs.calls.creates.length, 1, "the event was really created");
+    assert.equal(result.externalEventId, toGoogleEventId(
+      buildAppointmentIdempotencyKey(LEAD_ID, START_ISO)
+    ), "and its id is the derived one, not invented");
+  });
+
+  test("a later reschedule REFUSES rather than moving a time it cannot verify", async () => {
+    // The link is absent exactly as step 2 above leaves it, while the
+    // org still has a connected, sync-enabled calendar.
+    stubs = installStubs({ existingLinks: [] });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "failed", "not no_calendar");
+    assert.equal(stubs.calls.updates.length, 0, "nothing was moved");
+    assert.equal(stubs.calls.creates.length, 0, "and nothing was created to paper over it");
+  });
+
+  test("END TO END — a chat reschedule keeps the original time", async () => {
+    // Through the real engine, which is where the customer-visible harm
+    // was: the stored appointment_datetime must NOT move.
+    stubs = bookedLeadStubs({ existingLinks: [] });
+    const result = await chatReschedule();
+
+    const written = stubs.calls.leadUpdates.at(-1);
+    assert.equal(
+      written.appointment_datetime,
+      START_ISO,
+      "the stored time must NOT move when the event cannot be located"
+    );
+    assert.equal(written.status, "booked", "the original booking still stands");
+    assert.equal(
+      result.unavailableReason,
+      "lookup_failed",
+      "and it is reported as 'could not check', never as a successful move"
+    );
+    assert.equal(stubs.calls.updates.length, 0, "no provider write attempted");
+  });
+
+  test("a business with genuinely NO calendar is unaffected", async () => {
+    // The case the old behaviour was written for, and which must keep
+    // working: flag off means there is no event anywhere, so moving the
+    // local time is right.
+    stubs = bookedLeadStubs({ eventCreation: "false" });
+    await chatReschedule();
+    assert.equal(
+      stubs.calls.leadUpdates.at(-1).appointment_datetime,
+      MOVED_ISO,
+      "with no calendar integration the time still moves, exactly as before"
+    );
+    assert.equal(stubs.calls.updates.length, 0);
+  });
+
+  test("a linked appointment still moves normally", async () => {
+    // The control: the fix must refuse only the unverifiable case.
+    stubs = installStubs({ existingLinks: LINKED });
+    const result = await reschedule(MOVED_ISO);
+    assert.equal(result.outcome, "synced");
+    assert.equal(stubs.calls.updates.length, 1);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  REGRESSION — a TIMED-OUT or ambiguous create is never a booking
+// ══════════════════════════════════════════════════════════════════
+//
+// There is no retry layer: integrationFetch makes ONE attempt and aborts
+// at its deadline. So when a create times out, Google may or may not
+// have committed the event and we genuinely cannot tell. The only safe
+// reading is "not booked" — and, critically, no event id may be
+// reported, because inventing one would make a later reschedule or
+// cancel act on an event we never confirmed exists.
+
+describe("REGRESSION — an unresolved create never becomes a booking", () => {
+  /** Abort the events POST the way a deadline does, without waiting for one. */
+  function abortTheCreate() {
+    const inner = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = String(typeof input === "string" ? input : input.url);
+      const method = (init.method ?? "GET").toUpperCase();
+      if (url.includes("/calendar/v3/calendars/") && url.includes("/events") && method === "POST") {
+        throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+      }
+      return inner(input, init);
+    };
+  }
+
+  test("a TIMED-OUT create is not confirmable, and invents no event id", async () => {
+    stubs = installStubs();
+    abortTheCreate();
+    const result = await confirmAppointmentOnCalendar(APPOINTMENT);
+
+    assert.equal(mayConfirmBooking(result.outcome), false, "a timeout is not a booking");
+    assert.equal(
+      result.externalEventId,
+      null,
+      "no event id may be reported for an event we cannot confirm exists"
+    );
+    assert.equal(stubs.calls.linkInserts.length, 0, "and no link may be recorded");
+  });
+
+  test("END TO END — a timed-out create leaves the lead in needs_review", async () => {
+    stubs = installStubs();
+    abortTheCreate();
+    const result = await captureBooking();
+
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+    assert.equal(finalStatus(stubs.calls), "needs_review", "the owner must see it");
+    assert.equal(
+      result.unavailableReason,
+      "lookup_failed",
+      "never dressed up as 'that slot is taken' — nothing about the slot is known"
+    );
+    assertMakesNoBookingClaim(await replyNoteFor(result), "timed-out create");
+  });
+
+  test("an AMBIGUOUS provider failure lands in the same safe state", async () => {
+    // A 5xx after the request was accepted is indistinguishable from one
+    // before, so it must resolve the same way as a timeout.
+    stubs = installStubs({ createStatus: 500 });
+    const result = await captureBooking();
+
+    assert.notEqual(finalStatus(stubs.calls), "booked");
+    assert.equal(result.unavailableReason, "lookup_failed");
+    assertMakesNoBookingClaim(await replyNoteFor(result), "ambiguous create failure");
+  });
+
+  test("CONTROL — a create that genuinely succeeds is still booked", async () => {
+    // Without this, the three above would pass on a create path broken
+    // to fail for everybody.
+    stubs = installStubs();
+    const result = await captureBooking();
+    assert.equal(finalStatus(stubs.calls), "booked");
+    assert.equal(stubs.calls.creates.length, 1);
+    assert.match(await replyNoteFor(result), /IS NOW BOOKED/);
   });
 });
