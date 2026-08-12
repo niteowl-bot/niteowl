@@ -1275,7 +1275,30 @@ export async function capturePartialLead(
 
     }
 
-    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured, appointmentIso: updatedAppointmentIso ?? null, booked: confirmedBooking || safeNextStatus === "booked", needsClarification: datetimeNeedsClarification === true, clarificationDate: clarificationDate ?? null };
+    // ── What we REPORT booked must be what the calendar settled ──
+    //
+    // `safeNextStatus === "booked"` is the status this turn INTENDED, and
+    // it is the right answer whenever the calendar was never consulted —
+    // notably for a lead that is ALREADY booked, where `confirmedBooking`
+    // is false by design (it tests `existing.status !== "booked"`) and a
+    // reschedule still has to report its booking to the reply model.
+    //
+    // But it is the wrong answer when the calendar DID have the final
+    // say. `backsWithCalendar` implies `safeNextStatus === "booked"` by
+    // construction — requiresCalendarBacking() demands it — so the plain
+    // OR could never be false there, and settleCalendarBacking's verdict,
+    // assigned to `confirmedBooking` above, was computed and discarded.
+    // A conflicted, unverified, failed or calendar-less write reported
+    // itself as booked while the row it had just written said
+    // needs_review.
+    //
+    // No second source of truth is introduced: when the calendar spoke,
+    // its settled result is the answer, and nothing else is consulted.
+    const reportedBooked = backsWithCalendar
+      ? confirmedBooking
+      : confirmedBooking || safeNextStatus === "booked";
+
+    return { outsideBusinessHours, suggestedAlternativeIso, unavailableReason, leadId: existing.id, needsReviewContactCaptured, appointmentIso: updatedAppointmentIso ?? null, booked: reportedBooked, needsClarification: datetimeNeedsClarification === true, clarificationDate: clarificationDate ?? null };
   }
 
   // ── Insert path — genuinely new enquiry ──────────────────────────
