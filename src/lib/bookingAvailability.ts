@@ -2,6 +2,7 @@ import {
   checkSlotCapacity,
   findNextAvailableSlot,
   getOrgTimezone,
+  resolveOrgTimezone,
   isWithinBusinessHours,
   overlapsBusy,
 } from "@/lib/availability";
@@ -127,6 +128,16 @@ export interface BookingSlotOptions {
    * always run.
    */
   excludeLeadId?: string | null;
+  /**
+   * The org's already-resolved IANA zone, when the caller has one.
+   *
+   * The voice tool resolves it before it can even build the requested
+   * instant, so passing it here costs nothing and saves a duplicate
+   * read on the one path with a measured latency budget. Omitted, this
+   * function resolves it ONCE below and threads it into both the
+   * business-hours check and the slot search — never one query each.
+   */
+  timezone?: string;
 }
 
 function internalDecision(
@@ -156,7 +167,42 @@ export async function checkBookingSlot(
   appointmentDurationMinutes: number,
   options: BookingSlotOptions = {}
 ): Promise<BookingSlotDecision> {
-  const hours = await isWithinBusinessHours(orgId, isoDatetime);
+  // ── The org's clock, resolved ONCE for the whole decision ────────
+  //
+  // Business hours are stored as wall-clock strings ("09:00"), so they
+  // mean nothing until we know whose clock they are on. Resolving here
+  // and threading downward is what keeps this to a single organisations
+  // read rather than one per sub-check.
+  //
+  // FAIL CLOSED when it cannot be established. Falling back to
+  // Europe/London would not be a neutral default — it is precisely what
+  // let a New York business accept 06:00, three hours before it opened.
+  // internalCheckFailed is the existing "we could not check" channel, so
+  // the customer hears "we cannot confirm that time right now" rather
+  // than the untrue "you are outside our opening hours".
+  let timezone = options.timezone;
+  if (!timezone) {
+    const resolution = await resolveOrgTimezone(orgId);
+    if (!resolution.resolved) {
+      console.error(
+        `[booking] org ${orgId} has no trustworthy timezone — slot not confirmed`
+      );
+      return {
+        available: false,
+        reason: null,
+        suggestedIso: null,
+        externalCheckFailed: false,
+        internalCheckFailed: true,
+        externalChecked: false,
+        externalConflictObserved: false,
+        externalBusy: [],
+        externalBusyWindowEndIso: null,
+      };
+    }
+    timezone = resolution.timezone;
+  }
+
+  const hours = await isWithinBusinessHours(orgId, isoDatetime, timezone);
   // checkSlotCapacity rather than isSlotAvailable: the boolean form is
   // literally `(await checkSlotCapacity(...)).available`, so the query
   // and the decision are unchanged — this only keeps the `failed` flag
@@ -175,7 +221,7 @@ export async function checkBookingSlot(
     return {
       available: false,
       reason: internal.reason,
-      suggestedIso: await findNextAvailableSlot(orgId, isoDatetime),
+      suggestedIso: await findNextAvailableSlot(orgId, isoDatetime, { timezone }),
       externalCheckFailed: false,
       internalCheckFailed,
       externalChecked: false,
@@ -270,7 +316,8 @@ export async function checkBookingSlot(
       orgId,
       isoDatetime,
       appointmentDurationMinutes,
-      lookup.busy
+      lookup.busy,
+      timezone
     ),
     externalCheckFailed: false,
     internalCheckFailed: false,
@@ -291,11 +338,14 @@ export async function findNextExternallyFreeSlot(
   orgId: string,
   fromIso: string,
   appointmentDurationMinutes: number,
-  busy: BusyInterval[]
+  busy: BusyInterval[],
+  /** The org's resolved zone, forwarded so the walk costs no extra read. */
+  timezone?: string
 ): Promise<string | null> {
   return findNextAvailableSlot(orgId, fromIso, {
     isAcceptable: (candidateIso: string) =>
       !overlapsBusy(candidateIso, appointmentDurationMinutes, busy),
+    timezone,
   });
 }
 

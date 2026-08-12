@@ -111,6 +111,16 @@ export function installStubs({
   hoursFail = false,
   /** Make the leads read fail, for fail-closed tests. */
   leadsFail = false,
+  /**
+   * organisations.timezone — the org's own IANA zone.
+   *
+   * Defaults to Europe/London because the real column is defaulted to it,
+   * so every existing test keeps the exact behaviour it was written for.
+   * Set it to another zone to prove business hours are judged on the
+   * BUSINESS's clock, or to null/"" to model an org whose zone cannot be
+   * established, which availability must now refuse rather than guess at.
+   */
+  orgTimezone = "Europe/London",
   modelIso = null,
   modelStatus = 200,
 } = {}) {
@@ -158,6 +168,10 @@ export function installStubs({
           appointment_duration_minutes: appointmentDurationMinutes,
           emergency_mode_enabled: emergencyModeEnabled,
           max_concurrent_bookings: maxConcurrentBookings,
+          // Mirrors the real column, which is defaulted to Europe/London.
+          // Availability now REFUSES to decide without it, so a stub that
+          // omitted it would fail closed and look like a code bug.
+          ...(orgTimezone ? { timezone: orgTimezone } : {}),
         },
       ]);
     }
