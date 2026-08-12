@@ -18,7 +18,7 @@
 // voiceAbortedCall, so these drive the real handler and the real
 // lookup and assert on what actually leaves the process.
 
-import { test, describe, beforeEach, afterEach } from "node:test";
+import { test, describe, beforeEach, afterEach, mock } from "node:test";
 import assert from "node:assert/strict";
 
 import "./stubs/env.mjs"; // must precede any "@/lib" import — see the file
@@ -35,7 +35,39 @@ const BUSINESS = "+353212345678";
 const SECRET = "test-voice-secret";
 const SERVER_URL = "https://app.example.com/api/voice/webhook";
 
-// Wednesday 12 August 2026, 15:00 Europe/London (BST, +01:00).
+// ── A controlled clock, so this file cannot rot ───────────────────
+//
+// `isHeldByPendingRequest` opens with "a slot that has already passed
+// cannot be held by anything" (availabilityTool.ts). That production
+// rule is correct and is NOT under test here — but it made this file a
+// time bomb, because the fixture below is a fixed calendar date. Every
+// assertion that a slot IS held expired the moment the real clock
+// passed it: on 2026-08-12 they began failing one by one through the
+// afternoon, 14:30 first, then 15:00, then 15:30.
+//
+// Worse than the failures were the silent passes. "A different time on
+// the same day stays available" and both back-to-back cases assert
+// AVAILABLE, so once their slot fell into the past they kept passing —
+// for the wrong reason, proving nothing about overlap at all.
+//
+// Pinning "now" is what actually fixes that. Moving the fixture further
+// into the future only postpones the same rot, because production still
+// compares against Date.now(). node:test's built-in mock.timers gives a
+// deterministic clock with no new dependency: only `Date` is faked, so
+// timers stay real for the async stubs, `new Date(iso)` still parses
+// normally, and Intl still resolves Europe/London — the three things
+// this fixture's timezone semantics depend on.
+//
+// 09:00 London on the fixture's own morning: before every slot the file
+// exercises (11:00–16:00), on the same day, and inside business hours.
+const NOW = Date.UTC(2026, 7, 12, 8, 0, 0); // 2026-08-12T08:00:00Z = 09:00 BST
+
+beforeEach(() => mock.timers.enable({ apis: ["Date"], now: NOW }));
+afterEach(() => mock.timers.reset());
+
+// Wednesday 12 August 2026, 15:00 Europe/London (BST, +01:00) — seven
+// hours after NOW above, so it is unambiguously in the future whatever
+// the machine's real date happens to be.
 const WEDNESDAY = { date: "2026-08-12", time: "15:00" };
 
 function assistantFor(serverUrl = SERVER_URL) {
