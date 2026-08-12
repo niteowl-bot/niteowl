@@ -2,6 +2,48 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-12 (Availability — business hours are judged on the business's own clock)
+
+**PR #9. MERGED AND LIVE** as `b18354e5050dedbb13e0f5324350980f096794a2`, deployed and production-verified. Closes the timezone defect parked since PR #5. No migration, no new dependency.
+
+### The defect
+Business hours are stored as wall-clock strings (`"09:00"`), so they mean nothing until you know whose clock they are on. `getLondonParts` took a timezone parameter defaulting to `Europe/London`, and **neither call site ever passed one** — the requested instant was parsed in the org's real zone, correctly, then judged in London.
+
+For a London business the wrong zone is the right answer, which is exactly why this survived: production has only London orgs, and every existing test was a London org. Measured, against 09:00–17:00 local hours:
+
+| Org | Local time | Before | Correct |
+|---|---|---|---|
+| London | every case | matches | matches |
+| New York | **06:00** | **ACCEPTED** | REFUSED — three hours before opening |
+| New York | 12:00 | REFUSED | ACCEPTED |
+| New York | 16:30 | refused as "outside hours" | refused as "ends after close" |
+
+### Organisation-specific evaluation
+`getZonedParts` (renamed from `getLondonParts`) now **requires** the zone — the default *was* the defect, and removing it makes the mistake unrepresentable rather than fixed once. The zone is resolved **once** per availability decision and threaded downward: one `organisations` read per decision, none when the caller supplies it, and none per slot (`findNextAvailableSlot` resolves before its loop, not inside it).
+
+### Strict resolution, and failing closed
+New `resolveOrgTimezone` reports whether the organisation's own valid zone was actually read. A failed query, a missing value, or a zone `Intl` cannot use all mean the same thing: we do not know what `"09:00"` means for this business. Availability **refuses** rather than substituting `Europe/London` — which would not be a neutral default, since it is precisely what accepted 06:00 in New York. The refusal uses the existing `internalCheckFailed` / `lookup_failed` channel, so the customer hears *"we cannot confirm that time right now"* rather than the untrue *"you are outside our opening hours"*, and no alternative is offered rather than a fabricated one.
+
+`getOrgTimezone` keeps its soft-fallback contract for everything that merely **speaks** a time back. It delegates to `resolveOrgTimezone` and flattens the result — one query, one column, one validation, the same read with the outcome no longer discarded. Not a second source of truth.
+
+### The voice trust-boundary correction
+Because a supplied zone is *trusted*, passing one is a trust boundary — and a pre-push forensic review caught the voice tool crossing it **before this shipped**. It called the soft `getOrgTimezone`, which answers `"Europe/London"` on failure, and handed that fallback downstream as though resolved; a truthy value bypassed all three guards. Same org, no resolvable timezone: chat answered `available=false` while voice answered `available=true`. Voice now uses strict resolution and bails, returning the existing unknown-availability outcome, which already refuses to call a time free or offer an alternative.
+
+### Multi-tenancy and DST
+The zone is read per call from `organisations.timezone`, scoped by org id, with no global mutable state — one organisation's zone cannot reach another's. Every conversion passes an explicit `timeZone` to `Intl`, so server and browser timezone are irrelevant, and IANA rules (BST/GMT, US DST, half-hour offsets such as `Asia/Kolkata`) are applied by the platform. **No manual UTC-offset arithmetic was introduced.**
+
+### Regression coverage
+**+16 tests.** Business hours: London unchanged; New York accepting its own midday; the 06:00 bug refused; ends-after-close still distinguishable; **the same UTC instant judged differently for two orgs** — the defect and tenant isolation in one assertion; DST either side of the US transition, where the London gap is 4 hours not 5; a half-hour zone; three unresolvable-zone cases.
+
+Voice coverage is driven through the real webhook → tool → lookup path rather than the helpers underneath it — the helpers were never the problem, the caller above them was, and testing them directly is exactly why the first round missed it.
+
+Test stubs now model `organisations.timezone`, which the real column carries with a `Europe/London` default. No assertion was weakened. **Mutation-verified three ways:** judging hours in London again fails 5 tests including the 06:00 case; restoring the soft fallback in the engine fails 2; reverting voice to `getOrgTimezone` fails 3.
+
+Full suite **841 pass / 0 fail**; `tsc --noEmit` clean. PR #3–#8 protections verified intact.
+
+### Follow-up hardening — recorded, not implemented
+Before wider multi-timezone onboarding: prevent empty-string `organisations.timezone` values at the database/application boundary (the column is `NOT NULL DEFAULT 'Europe/London'` but carries no `CHECK`, so `''` is storable and would trip the new fail-closed path); route any future timezone picker or write through `canonicaliseTimezone()`; and validate future writes against supported IANA values. Neither blocked this merge — a pre-merge invariant review confirmed the sole organisation-creation path omits the column and safely inherits the database default, so no organisation the application can create reaches the fail-closed path.
+
 ## 2026-08-12 (Calendar availability reliability — missing FreeBusy calendar now fails closed)
 
 **PR #5. MERGED AND LIVE** as `3b2fe4721cb63dcbc456eb15be8395d8db0370c8`. One guard in one provider file, plus regression coverage.
