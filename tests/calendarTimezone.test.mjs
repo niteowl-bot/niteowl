@@ -307,3 +307,91 @@ describe("zone names absent from this runtime's list", () => {
     );
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  The database CHECK and the application must agree
+// ══════════════════════════════════════════════════════════════════
+//
+// docs/sql/2026-08-12_organisations_timezone_shape.sql adds:
+//
+//   check (timezone = btrim(timezone)
+//          and btrim(timezone) <> ''
+//          and (timezone = 'UTC' or timezone like '%/%'))
+//
+// It is preventative only — PR #9's runtime rule still fails closed when a
+// stored zone cannot be resolved, and nothing here relaxes that.
+//
+// The constraint deliberately avoids a frozen list of IANA names, because
+// Postgres cannot keep one in step with the runtime's ICU build. The price
+// of that choice is an ASSUMPTION: every zone the application would
+// canonicalise and store must satisfy the SQL predicate. If some future ICU
+// build lists a slashless canonical zone, that assumption breaks and the
+// constraint would start rejecting a legitimate write.
+//
+// This is the test that catches that drift in CI rather than in production.
+
+/** The SQL predicate, expressed exactly, so the two cannot silently diverge. */
+function satisfiesDbConstraint(stored) {
+  return (
+    stored === stored.trim() &&
+    stored.trim() !== "" &&
+    (stored === "UTC" || stored.includes("/"))
+  );
+}
+
+describe("the organisations.timezone CHECK agrees with the application", () => {
+  test("every zone the app can canonicalise satisfies the SQL predicate", () => {
+    // The whole supported set, not a sample — this is the assumption the
+    // constraint rests on, so it is checked exhaustively.
+    const offenders = listSupportedTimezones()
+      .map((zone) => canonicaliseTimezone(zone))
+      .filter((stored) => stored !== null && !satisfiesDbConstraint(stored));
+
+    assert.deepEqual(
+      offenders,
+      [],
+      `these zones would be stored by the app but REJECTED by the DB check: ${offenders.join(", ")}`
+    );
+  });
+
+  test("UTC is storable — the one legitimate slashless zone", () => {
+    // Allowed by hand in the SQL, because CANONICAL_ZONES adds it by hand
+    // too: some ICU builds omit it from supportedValuesOf.
+    const stored = canonicaliseTimezone("utc");
+    assert.equal(stored, "UTC");
+    assert.equal(satisfiesDbConstraint(stored), true);
+  });
+
+  test("what the app rejects outright, the DB rejects too", () => {
+    // Neither layer may be the only one holding the line.
+    for (const bad of ["", "   ", "BST", "EST"]) {
+      assert.equal(canonicaliseTimezone(bad), null, `app must reject ${JSON.stringify(bad)}`);
+      assert.equal(
+        satisfiesDbConstraint(bad),
+        false,
+        `DB check must reject ${JSON.stringify(bad)}`
+      );
+    }
+  });
+
+  test("padding is NORMALISED by the app, and refused by the DB if it survives", () => {
+    // The two layers do different jobs here, and conflating them is a
+    // mistake worth pinning. canonicaliseTimezone does not reject
+    // " Europe/London" — it TRIMS it, which is the desirable behaviour for
+    // a value arriving from a picker or an API payload.
+    assert.equal(canonicaliseTimezone(" Europe/London"), "Europe/London");
+    // So what the app would actually STORE passes the constraint...
+    assert.equal(satisfiesDbConstraint("Europe/London"), true);
+    // ...while the raw padded string does not. That asymmetry is the whole
+    // point of the `timezone = btrim(timezone)` clause: it catches a write
+    // that reached the database WITHOUT going through canonicalisation.
+    assert.equal(satisfiesDbConstraint(" Europe/London"), false);
+  });
+
+  test("the default the column carries is itself valid", () => {
+    // A default that violated its own constraint would break every
+    // organisation created without the column — the only creation path.
+    assert.equal(satisfiesDbConstraint(DEFAULT_ORG_TIMEZONE), true);
+    assert.equal(canonicaliseTimezone(DEFAULT_ORG_TIMEZONE), "Europe/London");
+  });
+});
