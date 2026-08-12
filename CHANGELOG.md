@@ -2,6 +2,40 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-12 (Database — `organisations.timezone` now rejects clearly-invalid values)
+
+**PR #11. MERGED** as `2a2a008017c78634fc493c56d569417b73b33c89`. The SQL was **executed manually against production on 2026-08-12, via the Supabase SQL Editor**, and verified there. The database half of the timezone follow-up hardening; the application half remains deferred.
+
+### Why
+PR #9 made availability fail closed when an organisation's timezone cannot be resolved. This is preventative, one layer earlier: stop a malformed value being **stored**, so that fail-closed path stays a genuine safety net rather than a routine occurrence.
+
+The column was `timezone text not null default 'Europe/London'` with **no CHECK**. `NOT NULL` ruled out `NULL`; it did not rule out `''`, `'   '`, `' Europe/London'` or `'BST'`. `'BST'` is the dangerous one — `Intl` **accepts** it and silently resolves it to Asia/Dhaka (UTC+6), so an owner picking it for British Summer Time would have every appointment six hours out with no error raised anywhere.
+
+### The constraint
+```sql
+check (timezone = btrim(timezone)
+       and btrim(timezone) <> ''
+       and (timezone = 'UTC' or timezone like '%/%'))
+```
+
+It mirrors the application's own `IANA_ID_SHAPE` rule — at least one `/`, which is exactly what excludes the legacy abbreviations. **Deliberately not a frozen list** of zone names: Postgres cannot keep one in step with the runtime's ICU build, and this codebase has already been bitten by that drift (`isValidTimezone` records an India user whose valid `Asia/Kolkata` was rejected because their ICU listed only `Asia/Calcutta`). `'UTC'` is allowed explicitly — checked, not assumed: of the 418 canonical zones this runtime reports, zero are slashless.
+
+### Execution and production verification
+Run **by the owner in the Supabase SQL Editor**, not by tooling. The service-role key authorises data access, not DDL, and no DDL path exists from the development environment — worth recording, because the same will be true of any future migration.
+
+- `pg_constraint`: `organisations_timezone_shape` present exactly once, `contype = 'c'`, definition as reviewed
+- `total_orgs = 2`, `offending_rows = 0`
+- **No existing organisation data was modified** — `ADD CONSTRAINT … CHECK` validates rows, it does not rewrite them; the `DEFAULT` is unchanged
+- Rollback remains one lossless line: `alter table public.organisations drop constraint if exists organisations_timezone_shape;`
+
+### Tests
++4 in `tests/calendarTimezone.test.mjs`. The load-bearing one asserts **exhaustively** that every zone the application can canonicalise satisfies the SQL predicate — all 418, not a sample — so ICU drift is caught in CI rather than in production. One of them failed on first draft and correctly: the app does not *reject* `' Europe/London'`, it **trims** it. The test now pins that asymmetry — the app normalises padding, while `timezone = btrim(timezone)` catches a padded value that reached the database without going through canonicalisation.
+
+### Still deferred
+The **application boundary** is unchanged and still open: no code path writes this column, and `canonicaliseTimezone()` / `listSupportedTimezones()` still have zero consumers. Wiring them belongs in the timezone-picker PR, alongside the UI they validate.
+
+**PR #9's runtime protection is untouched** — `resolveOrgTimezone` still fails closed, availability still refuses rather than substituting `Europe/London`, and PR #11 changed no `src/` file.
+
 ## 2026-08-12 (Availability — business hours are judged on the business's own clock)
 
 **PR #9. MERGED AND LIVE** as `b18354e5050dedbb13e0f5324350980f096794a2`, deployed and production-verified. Closes the timezone defect parked since PR #5. No migration, no new dependency.
