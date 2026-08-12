@@ -293,3 +293,152 @@ test("fixture models the reported configuration", () => {
   assert.equal(tuesday.close_time, "17:00:00");
   assert.equal(sunday.is_closed, true);
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  REGRESSION — business hours belong to the BUSINESS's clock
+// ══════════════════════════════════════════════════════════════════
+//
+// "09:00-17:00" is a wall-clock string. It means nothing until you know
+// whose clock it is on, and the engine used to assume London's.
+//
+// getZonedParts (formerly getLondonParts) took a timezone parameter that
+// defaulted to Europe/London, and NEITHER call site ever passed one. So
+// the requested instant was parsed in the org's real zone — correctly —
+// and then judged in London. For a London business the wrong zone is the
+// right answer, which is exactly why this survived: production has only
+// London orgs, and every existing test above is a London org.
+//
+// The concrete failure: a New York business asking for 06:00 local, three
+// hours before it opens, resolves to 11:00 London, lands inside
+// 09:00-17:00, and was ACCEPTED.
+
+/** A New York business, open 09:00-17:00 on its OWN clock, Mon-Fri. */
+const NY_HOURS = [
+  { day_of_week: 0, is_closed: true, open_time: null, close_time: null },
+  ...[1, 2, 3, 4, 5].map((day_of_week) => ({
+    day_of_week,
+    is_closed: false,
+    open_time: "09:00:00",
+    close_time: "17:00:00",
+  })),
+  { day_of_week: 6, is_closed: true, open_time: null, close_time: null },
+];
+
+// Monday 3 August 2026, given as explicit UTC so the instant is
+// unambiguous. New York is UTC-4 that day (EDT), London UTC+1 (BST).
+const NY_MON_0600 = "2026-08-03T10:00:00Z"; // 06:00 New York — BEFORE it opens
+const NY_MON_1200 = "2026-08-03T16:00:00Z"; // 12:00 New York — mid-morning trade
+const NY_MON_1630 = "2026-08-03T20:30:00Z"; // 16:30 New York — would end 17:30
+
+describe("REGRESSION — business hours use the org timezone, not London", () => {
+  test("A. a London org is completely unchanged", async () => {
+    // The guard on the whole change: every existing assertion in this
+    // file is a London org, and none of them may move.
+    stubs = installStubs({ orgTimezone: "Europe/London" });
+    assert.equal((await isWithinBusinessHours(ORG_ID, MONDAY_1600)).isAvailable, true);
+    assert.equal((await isWithinBusinessHours(ORG_ID, MONDAY_0830)).isAvailable, false);
+    assert.equal((await isWithinBusinessHours(ORG_ID, SUNDAY_1400)).isAvailable, false);
+  });
+
+  test("B/E. a New York org accepts its own 12:00", async () => {
+    stubs = installStubs({ orgTimezone: "America/New_York", hours: NY_HOURS });
+    const result = await isWithinBusinessHours(ORG_ID, NY_MON_1200);
+    assert.equal(result.isAvailable, true, "midday in New York is inside 09:00-17:00 there");
+  });
+
+  test("D. THE BUG — 06:00 New York is refused, not accepted", async () => {
+    // 06:00 New York = 11:00 London. Judged on London's clock this sat
+    // inside 09:00-17:00 and was accepted, three hours before the
+    // business opened.
+    stubs = installStubs({ orgTimezone: "America/New_York", hours: NY_HOURS });
+    const result = await isWithinBusinessHours(ORG_ID, NY_MON_0600);
+    assert.equal(result.isAvailable, false, "06:00 is before this business opens");
+    assert.equal(result.reason, "outside_hours");
+  });
+
+  test("F. an appointment finishing after closing is still refused", async () => {
+    // 16:30 New York + 60 minutes runs past the 17:00 close. The reason
+    // must stay distinguishable from "outside_hours" — the start time is
+    // fine, it is the length that does not fit.
+    stubs = installStubs({ orgTimezone: "America/New_York", hours: NY_HOURS });
+    const result = await isWithinBusinessHours(ORG_ID, NY_MON_1630);
+    assert.equal(result.isAvailable, false);
+    assert.equal(result.reason, "ends_after_close");
+  });
+
+  test("C/H. the SAME instant is judged differently for two orgs", async () => {
+    // The defect in one assertion, and the tenant-isolation proof: one
+    // UTC instant, two businesses, two correct answers. 16:00Z is 17:00
+    // London (closed on a Tuesday) and 12:00 New York (open).
+    const instant = "2026-08-04T16:00:00Z";
+
+    stubs = installStubs({ orgTimezone: "Europe/London" });
+    const london = await isWithinBusinessHours(ORG_ID, instant);
+    stubs.restore();
+
+    stubs = installStubs({ orgTimezone: "America/New_York", hours: NY_HOURS });
+    const newYork = await isWithinBusinessHours(ORG_ID, instant);
+
+    assert.equal(london.isAvailable, false, "17:00 London is at the Tuesday close");
+    assert.equal(newYork.isAvailable, true, "the same instant is 12:00 in New York");
+    assert.notEqual(
+      london.isAvailable,
+      newYork.isAvailable,
+      "one instant cannot have one answer for every tenant"
+    );
+  });
+
+  test("G. DST — the SAME local time works either side of a transition", async () => {
+    // New York leaves EDT on 1 November 2026, London leaves BST on 25
+    // October. Between those dates the gap is 4 hours, not the usual 5 —
+    // the window where hand-rolled offset arithmetic silently drifts.
+    // 12:00 New York must be inside opening hours on both dates.
+    stubs = installStubs({ orgTimezone: "America/New_York", hours: NY_HOURS });
+
+    const beforeUsDst = await isWithinBusinessHours(ORG_ID, "2026-10-28T16:00:00Z"); // 12:00 EDT
+    const afterUsDst = await isWithinBusinessHours(ORG_ID, "2026-11-04T17:00:00Z"); // 12:00 EST
+
+    assert.equal(beforeUsDst.isAvailable, true, "12:00 New York under EDT");
+    assert.equal(afterUsDst.isAvailable, true, "12:00 New York under EST");
+  });
+
+  test("G2. a half-hour zone is handled by IANA rules, not offset maths", async () => {
+    // Asia/Kolkata is UTC+5:30. 09:30Z is 15:00 there — open — while the
+    // same instant is 10:30 London. A whole-hour assumption breaks here.
+    stubs = installStubs({ orgTimezone: "Asia/Kolkata", hours: NY_HOURS });
+    const result = await isWithinBusinessHours(ORG_ID, "2026-08-03T09:30:00Z");
+    assert.equal(result.isAvailable, true, "15:00 in Kolkata is inside 09:00-17:00");
+  });
+});
+
+describe("REGRESSION — an unresolvable timezone never reports available", () => {
+  test("I. a missing org timezone refuses rather than assuming London", async () => {
+    // The whole point: Europe/London is not a safe default for a booking
+    // DECISION. Substituting it is what accepted 06:00 in New York.
+    stubs = installStubs({ orgTimezone: null });
+    const result = await isWithinBusinessHours(ORG_ID, MONDAY_1600);
+    assert.equal(result.isAvailable, false, "a slot we cannot judge is not a free slot");
+    assert.equal(
+      result.reason,
+      "lookup_failed",
+      "and it must say 'could not check', never 'outside opening hours'"
+    );
+  });
+
+  test("I2. an unusable timezone value refuses too", async () => {
+    // "BST" is an abbreviation Intl resolves to Asia/Dhaka — the exact
+    // silent-wrong-zone failure isValidTimezone exists to catch.
+    stubs = installStubs({ orgTimezone: "BST" });
+    const result = await isWithinBusinessHours(ORG_ID, MONDAY_1600);
+    assert.equal(result.isAvailable, false);
+    assert.equal(result.reason, "lookup_failed");
+  });
+
+  test("I3. no alternative is suggested when the zone is unknown", async () => {
+    // findNextAvailableSlot walks opening hours, so without a zone it
+    // cannot honestly propose anything. Null means "offer nothing",
+    // never a fabricated time.
+    stubs = installStubs({ orgTimezone: null });
+    assert.equal(await findNextAvailableSlot(ORG_ID, MONDAY_0830), null);
+  });
+});

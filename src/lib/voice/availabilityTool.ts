@@ -4,7 +4,7 @@ import {
   appointmentsOverlap,
   findNextAvailableSlot,
   getOrgSettings,
-  getOrgTimezone,
+  resolveOrgTimezone,
   isWithinBusinessHours,
   overlapsBusy,
 } from "@/lib/availability";
@@ -337,7 +337,9 @@ async function gatherAlternatives(
   durationMinutes: number,
   maxConcurrent: number,
   busy: BusyInterval[],
-  busyWindowEndIso: string | null
+  busyWindowEndIso: string | null,
+  /** The org zone this call already resolved — forwarded, never re-read. */
+  timezone?: string
 ): Promise<string[]> {
   const held = await fetchHeldSlots(orgId, searchFromIso, durationMinutes);
 
@@ -405,7 +407,7 @@ async function gatherAlternatives(
     const candidate: string | null = await findNextAvailableSlot(
       orgId,
       cursor,
-      { isAcceptable }
+      { isAcceptable, timezone }
     );
     if (!candidate) break;
 
@@ -424,7 +426,36 @@ async function lookup(
   date: string,
   time: string
 ): Promise<VoiceAvailabilityOutcome> {
-  const timezone = await timed("lookup.timezone", () => getOrgTimezone(orgId));
+  // STRICT resolution, not the soft getOrgTimezone.
+  //
+  // This is a trust boundary. Everything below treats `timezone` as the
+  // org's genuinely resolved zone and passes it downstream as such —
+  // which is exactly what makes the fail-closed guards in
+  // isWithinBusinessHours, checkBookingSlot and findNextAvailableSlot
+  // skip their own resolution. Handing them the Europe/London FALLBACK
+  // would launder a failure into a confident answer: those guards only
+  // fire when no zone is supplied, so a truthy fallback silently
+  // bypasses all three and the caller is told about London's opening
+  // hours on a live call.
+  //
+  // The soft fallback remains correct for everything that merely SPEAKS
+  // a time back. It is not correct for deciding whether a slot exists.
+  const resolution = await timed("lookup.timezone", () =>
+    resolveOrgTimezone(orgId)
+  );
+  if (!resolution.resolved) {
+    console.error(
+      `[voice] org ${orgId} has no trustworthy timezone — availability unknown`
+    );
+    // No instant can even be built without a zone, so there is nothing
+    // truthful to echo back. unknownOutcome is the existing channel and
+    // already forbids saying the time is free or offering an
+    // alternative — the caller must never hear "outside business hours"
+    // when the real problem is that we cannot establish their clock.
+    return unknownOutcome(null);
+  }
+  const timezone = resolution.timezone;
+
   const requestedIso = zonedWallClockToUtc(date, time, timezone);
   if (!requestedIso) return unknownOutcome(null);
 
@@ -449,7 +480,7 @@ async function lookup(
   // availability.ts is shared with chat, the widget and post-call
   // capture, and its behaviour there is unchanged.
   const hours = await timed("lookup.businessHours", () =>
-    isWithinBusinessHours(orgId, requestedIso)
+    isWithinBusinessHours(orgId, requestedIso, timezone)
   );
   if (hours.reason === "no_hours_configured" || hours.reason === "lookup_failed") {
     console.error(
@@ -464,7 +495,7 @@ async function lookup(
   );
 
   const decision = await timed("lookup.checkBookingSlot", () =>
-    checkBookingSlot(orgId, requestedIso, appointmentDurationMinutes)
+    checkBookingSlot(orgId, requestedIso, appointmentDurationMinutes, { timezone })
   );
 
   // A calendar is connected but would not answer. The engine refuses to
@@ -520,7 +551,8 @@ async function lookup(
       appointmentDurationMinutes,
       maxConcurrent,
       decision.externalBusy,
-      decision.externalBusyWindowEndIso
+      decision.externalBusyWindowEndIso,
+      timezone
     )
   );
 

@@ -138,6 +138,15 @@ function installStubs({
   hoursFail = false,
   leadsFail = false,
   durationMinutes = 60,
+  /**
+   * organisations.timezone. Defaults to the value this stub has always
+   * returned, so every test above is untouched. Set another zone to
+   * prove the voice path judges hours on the BUSINESS's clock, or null
+   * to model an org whose zone cannot be established.
+   */
+  orgTimezone = "Europe/London",
+  /** Make the organisations read itself fail, for the strict-resolution test. */
+  orgFail = false,
 } = {}) {
   const leadRows = [...bookedAt.map(bookedLead), ...leads];
   process.env.VOICE_ENABLED = "true";
@@ -194,11 +203,19 @@ function installStubs({
     }
 
     if (url.includes("/rest/v1/organisations")) {
+      if (orgFail) {
+        return new Response(JSON.stringify({ message: "boom" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
       const row = {
         appointment_duration_minutes: durationMinutes,
         emergency_mode_enabled: false,
         max_concurrent_bookings: 1,
-        timezone: "Europe/London",
+        // Omitted entirely when null, so the row genuinely lacks the
+        // column rather than carrying a sentinel the code might accept.
+        ...(orgTimezone ? { timezone: orgTimezone } : {}),
       };
       return wantsObject ? json(row) : json([row]);
     }
@@ -836,5 +853,117 @@ describe("E — callbacks never touch appointment availability", () => {
     assert.match(prompt, /Never call it for a callback \(rule 13\)/);
     // The callback window rule is untouched.
     assert.match(prompt, /enough for a CALLBACK — confirm the calendar date/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  REGRESSION — the voice path may not launder a timezone fallback
+// ══════════════════════════════════════════════════════════════════
+//
+// The availability engine fails closed when an org's timezone cannot be
+// established: without it, "09:00-17:00" belongs to nobody's clock. But
+// that guard only fires when NO zone is supplied — a caller that passes
+// one is trusted, which is what makes threading it free.
+//
+// This path used to call getOrgTimezone, the SOFT helper, which answers
+// "Europe/London" when resolution fails. Voice then handed that fallback
+// downstream as though it were resolved, so all three guards
+// (isWithinBusinessHours, checkBookingSlot, findNextAvailableSlot) were
+// bypassed by a truthy value and a caller was told about London's
+// opening hours. Measured before the fix: the same org that made
+// chat answer available=false made voice answer available=true.
+//
+// These drive the REAL webhook → tool → lookup path rather than the
+// helpers underneath it, because the helpers were never the problem —
+// the caller above them was. They fail if anyone reverts this to
+// getOrgTimezone: the fallback would make the slot bookable again.
+
+describe("REGRESSION — voice cannot turn a timezone failure into London", () => {
+  let stubs;
+  afterEach(() => stubs.restore());
+
+  /** Every unresolvable-timezone case must land here, identically. */
+  async function assertFailsClosed(label) {
+    const { json } = await callTool(toolCallBody());
+    const outcome = json.results[0].result;
+
+    assert.match(
+      outcome,
+      /^AVAILABILITY UNKNOWN/,
+      `${label}: must use the existing unknown channel`
+    );
+    // The specific lie this prevents: the caller must not be told the
+    // business is shut when the real problem is that we cannot tell
+    // what time it is for them.
+    assert.doesNotMatch(
+      outcome,
+      /outside (our )?business hours|closed|not available/i,
+      `${label}: never "outside business hours" for a timezone failure`
+    );
+    assert.doesNotMatch(
+      outcome,
+      /^AVAILABLE/,
+      `${label}: an unjudgeable slot is never available`
+    );
+    // No fabricated alternative either — offering one would mean the
+    // slot walk ran on a zone we do not trust.
+    assert.match(outcome, /Do NOT say the time is available/);
+    assert.deepEqual(stubs.writes, [], `${label}: still read-only`);
+  }
+
+  test("1. a timezone lookup FAILURE fails closed", async () => {
+    stubs = installStubs({ orgFail: true });
+    await assertFailsClosed("db failure");
+  });
+
+  test("2. a MISSING org timezone fails closed", async () => {
+    stubs = installStubs({ orgTimezone: null });
+    await assertFailsClosed("missing timezone");
+  });
+
+  test("3. an INVALID org timezone fails closed", async () => {
+    // "BST" is an abbreviation Intl resolves to Asia/Dhaka — accepting
+    // it would be a silently wrong zone rather than an obvious failure.
+    stubs = installStubs({ orgTimezone: "BST" });
+    await assertFailsClosed("invalid timezone");
+  });
+
+  test("the failure is NOT reported as a normal unavailable slot", async () => {
+    // Distinguishes this from a genuine refusal: a real "not available"
+    // answer offers alternatives, an unknown one must not.
+    stubs = installStubs({ orgTimezone: null });
+    const { json } = await callTool(toolCallBody());
+    assert.doesNotMatch(json.results[0].result, /^NOT AVAILABLE/);
+    assert.doesNotMatch(json.results[0].result, /These ARE free/);
+  });
+
+  test("4. CONTROL — a valid Europe/London org still works normally", async () => {
+    // Without this, the three tests above would pass on a voice path
+    // broken to answer UNKNOWN for everybody.
+    stubs = installStubs({ orgTimezone: "Europe/London" });
+    const { json } = await callTool(toolCallBody());
+    assert.match(json.results[0].result, /^AVAILABLE:/);
+  });
+
+  test("5. CONTROL — a New York org is judged on New York hours", async () => {
+    // 15:00 is inside 09:00-17:00 in London and would be ACCEPTED there.
+    // In New York the same wall-clock request is still inside 09:00-17:00
+    // locally, so it stays available — what changes is WHICH clock was
+    // used, proved by the pair below.
+    stubs = installStubs({ orgTimezone: "America/New_York" });
+    const open = await callTool(toolCallBody({ date: "2026-08-12", time: "15:00" }));
+    assert.match(open.json.results[0].result, /^AVAILABLE:/, "15:00 New York is open");
+    stubs.restore();
+
+    // 08:00 New York is BEFORE it opens. Judged on London's clock that
+    // instant is 13:00 — comfortably inside 09:00-17:00 — which is
+    // exactly the acceptance this whole change exists to stop.
+    stubs = installStubs({ orgTimezone: "America/New_York" });
+    const early = await callTool(toolCallBody({ date: "2026-08-12", time: "08:00" }));
+    assert.doesNotMatch(
+      early.json.results[0].result,
+      /^AVAILABLE:/,
+      "08:00 New York is before opening and must not be offered"
+    );
   });
 });

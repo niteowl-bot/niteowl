@@ -57,12 +57,23 @@ export interface AvailabilityResult {
 }
 
 // Extract the local weekday (0=Sun) and minutes-since-midnight from an
-// ISO datetime, in the business's own timezone. The parameter defaults
-// to the historical constant so every existing caller behaves exactly
-// as it did before per-org timezones existed.
-function getLondonParts(
+// ISO datetime, in the business's own timezone.
+//
+// The timezone is REQUIRED, deliberately. It used to default to the
+// Europe/London constant, and both call sites simply never passed one —
+// so every business-hours decision was judged on London's clock while
+// the requested instant had been parsed in the org's real zone. A New
+// York business asking for 06:00 local (before it opens) resolves to
+// 11:00 London, landed inside 09:00-17:00, and was ACCEPTED. Removing
+// the default is what makes that mistake unrepresentable rather than
+// merely fixed once.
+//
+// Intl is given an explicit timeZone, so the answer never depends on
+// the server's own clock or locale, and IANA rules (BST/GMT, US DST,
+// half-hour zones) are applied by the platform rather than by hand.
+function getZonedParts(
   isoDatetime: string,
-  timezone: string = TIMEZONE
+  timezone: string
 ): { dayOfWeek: number; minutesOfDay: number } {
   const date = new Date(isoDatetime);
 
@@ -160,6 +171,42 @@ export async function getOrgSettings(
  * several of them to the wrong place ("BST" is Asia/Dhaka).
  */
 export async function getOrgTimezone(orgId: string): Promise<string> {
+  return (await resolveOrgTimezone(orgId)).timezone;
+}
+
+/** What a timezone lookup actually established. */
+export interface OrgTimezoneResolution {
+  /** Always usable — the org's own zone, or the fallback. */
+  timezone: string;
+  /**
+   * True ONLY when the organisation's own valid zone was read.
+   *
+   * False for a failed query, an org with no timezone set, or a stored
+   * value Intl cannot use — three different causes, one meaning: we do
+   * not know what "09:00" means for this business.
+   */
+  resolved: boolean;
+}
+
+/**
+ * The same lookup as getOrgTimezone, reporting whether it succeeded.
+ *
+ * ONE query, ONE column, ONE validation — this is not a second source of
+ * truth, it is the same read with the outcome no longer discarded.
+ * getOrgTimezone delegates here and flattens the result, so its
+ * fail-soft contract is byte-for-byte what it always was and no existing
+ * caller changes behaviour.
+ *
+ * The distinction exists because availability cannot afford it.
+ * Formatting a time back to a customer in the wrong zone is cosmetic and
+ * self-evident; DECIDING that a slot is bookable in the wrong zone is
+ * silent and wrong, and can offer a business a slot before it opens. So
+ * the booking path asks for `resolved` and refuses when it is false,
+ * while everything that merely renders a time keeps the soft fallback.
+ */
+export async function resolveOrgTimezone(
+  orgId: string
+): Promise<OrgTimezoneResolution> {
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -168,16 +215,22 @@ export async function getOrgTimezone(orgId: string): Promise<string> {
     .eq("id", orgId)
     .maybeSingle();
 
-  if (error || !data?.timezone) return TIMEZONE;
+  if (error) {
+    console.error(
+      `[availability] could not read the timezone for org ${orgId}: ${error.message}`
+    );
+    return { timezone: TIMEZONE, resolved: false };
+  }
+  if (!data?.timezone) return { timezone: TIMEZONE, resolved: false };
 
   const timezone = String(data.timezone);
   if (!isValidTimezone(timezone)) {
     console.error(
       `[availability] org ${orgId} has an unusable timezone (${timezone}); falling back to ${TIMEZONE}`
     );
-    return TIMEZONE;
+    return { timezone: TIMEZONE, resolved: false };
   }
-  return timezone;
+  return { timezone, resolved: true };
 }
 
 /**
@@ -350,7 +403,17 @@ export async function getBusinessHoursSummary(
  */
 export async function isWithinBusinessHours(
   orgId: string,
-  isoDatetime: string
+  isoDatetime: string,
+  /**
+   * The org's already-resolved IANA zone, when the caller has one.
+   *
+   * Supplying it is what keeps this fix free: checkBookingSlot and the
+   * voice tool both resolve the zone once for the whole operation and
+   * pass it down, so no additional organisations read is introduced on
+   * either live path. Omitted, this resolves it itself — correct, just
+   * one query dearer, which suits the low-frequency manage-link route.
+   */
+  timezone?: string
 ): Promise<AvailabilityResult> {
   const supabase = createAdminClient();
 
@@ -358,6 +421,23 @@ export async function isWithinBusinessHours(
     await getOrgSettings(supabase, orgId);
   if (emergencyModeEnabled) {
     return { isAvailable: true };
+  }
+
+  // FAIL CLOSED on an unresolvable zone, for the same reason the unread
+  // hours table below fails closed: "09:00-17:00" is meaningless without
+  // knowing whose clock it is on. Substituting Europe/London would not
+  // be a neutral guess — it is what let a New York business accept a
+  // booking three hours before it opened.
+  let zone = timezone;
+  if (!zone) {
+    const resolution = await resolveOrgTimezone(orgId);
+    if (!resolution.resolved) {
+      console.error(
+        `[availability] org ${orgId} has no trustworthy timezone — not confirming any slot`
+      );
+      return { isAvailable: false, reason: "lookup_failed" };
+    }
+    zone = resolution.timezone;
   }
 
   const lookup = await getBusinessHoursForOrg(supabase, orgId);
@@ -374,7 +454,7 @@ export async function isWithinBusinessHours(
     return { isAvailable: true, reason: "no_hours_configured" };
   }
 
-  const { dayOfWeek, minutesOfDay } = getLondonParts(isoDatetime);
+  const { dayOfWeek, minutesOfDay } = getZonedParts(isoDatetime, zone);
   const dayConfig = hours.find((h) => h.day_of_week === dayOfWeek);
 
   if (!dayConfig || dayConfig.is_closed) {
@@ -433,6 +513,14 @@ export interface SlotSearchOptions {
    * as it was before external calendars existed.
    */
   isAcceptable?: (candidateIso: string) => boolean;
+  /**
+   * The org's already-resolved IANA zone, when the caller has one.
+   *
+   * Resolved ONCE here and reused for every candidate — the walk below
+   * runs up to maxIterations times, so looking the zone up inside the
+   * loop would turn one query into hundreds.
+   */
+  timezone?: string;
 }
 
 export async function findNextAvailableSlot(
@@ -445,6 +533,21 @@ export async function findNextAvailableSlot(
   const { emergencyModeEnabled, appointmentDurationMinutes } = await getOrgSettings(supabase, orgId);
   if (emergencyModeEnabled) {
     return isoDatetime;
+  }
+
+  // Same rule as isWithinBusinessHours: without a trustworthy zone there
+  // is no honest answer to "when do they open?", and null here means the
+  // caller offers no alternative rather than a fabricated one.
+  let zone = options.timezone;
+  if (!zone) {
+    const resolution = await resolveOrgTimezone(orgId);
+    if (!resolution.resolved) {
+      console.error(
+        `[availability] org ${orgId} has no trustworthy timezone — suggesting no alternative`
+      );
+      return null;
+    }
+    zone = resolution.timezone;
   }
 
   const lookup = await getBusinessHoursForOrg(supabase, orgId);
@@ -466,7 +569,7 @@ export async function findNextAvailableSlot(
   let cursor = new Date(isoDatetime);
 
   for (let i = 0; i < maxIterations; i++) {
-    const { dayOfWeek, minutesOfDay } = getLondonParts(cursor.toISOString());
+    const { dayOfWeek, minutesOfDay } = getZonedParts(cursor.toISOString(), zone);
     const dayConfig = hoursByDay.get(dayOfWeek);
 
     if (dayConfig && !dayConfig.is_closed) {
