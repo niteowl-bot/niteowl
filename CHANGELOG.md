@@ -2,9 +2,49 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-12 (Calendar availability reliability — missing FreeBusy calendar now fails closed)
+
+**PR #5. MERGED AND LIVE** as `3b2fe4721cb63dcbc456eb15be8395d8db0370c8`. One guard in one provider file, plus regression coverage.
+
+### Behaviour
+If Google's FreeBusy API returns **successfully** but the response does not include the specifically requested calendar, Remy no longer interprets that absence as an empty — and therefore free — calendar. The condition is now an integration/availability failure, so it can never produce a false `AVAILABLE`.
+
+`parseFreeBusyResponse` previously returned `entry?.busy ?? []` when the calendar key was absent from Google's `calendars` map. An empty busy list is indistinguishable from "completely free", so a 200 that never mentioned our calendar was read as a wide-open diary and the slot was offered over whatever is really in it.
+
+Nothing about that response looks like a failure — HTTP 200, valid JSON, no `errors` block, just silence about the one calendar we asked about. It was the single place this module failed **open**, and it contradicted the rule stated two lines below it, where an `errors` entry deliberately throws because *"treating an unreadable calendar as empty would double-book a customer."* Same rule, one step earlier: **no answer is not "free"**.
+
+The thrown error is classified `transient`, deliberately **not** `auth_expired`. An incomplete payload says nothing about the credentials, and `requiresReauth` would otherwise park a healthy connection as `needs_reauth`, disabling the calendar until the owner noticed. The caller converts any non-auth failure to `lookup_failed` — UNKNOWN — which is never bookable.
+
+### Changed
+- `src/lib/integrations/providers/google.ts`
+
+### Regression coverage added/updated
+- `tests/calendarReliability.test.mjs`
+- `tests/googleIntegration.test.mjs`
+
+Twelve tests (813 → 825): five at the parser, seven end-to-end through `checkVoiceAvailability` so the whole chain is pinned rather than the parser alone. **Four are controls** proving the fix refuses *silence* and not *free time* — an answered-empty calendar is still available, a real busy window is still a conflict, half-open back-to-back is still bookable, and no connection is parked `needs_reauth`. Without them the suite would pass on a blanket refusal that had broken availability entirely.
+
+One existing assertion was corrected: it recorded the old behaviour under the name *"an empty calendar yields no busy windows"*, merging two different situations — the calendar answered and is free, versus the calendar never answered. That test is now split and the second half inverted. It is the only deleted line in the change.
+
+**Mutation-verified:** removing the guard fails 7 of the new tests, while every control keeps passing in both states.
+
+### Verification
+- 825 tests passing, 0 failing, before merge
+- `tsc --noEmit` clean
+- Vercel production deployment **Ready**; its `githubCommitSha` matched the merge commit exactly
+- `niteowlhq.com` returned **HTTP 200**
+- No unexpected files landed — exactly three files, +171/−1
+
+### Scope
+Intentionally narrow. PR #3's false-confirmation protection and PR #4's leadCapture update-path protection are both untouched and verified intact on `main`. No OAuth, Google Cloud, database, environment, Vapi/Twilio, UI, onboarding or pricing change.
+
+**The timezone defect remains unresolved** — business hours are still evaluated in `Europe/London` rather than the organisation's own timezone (`getLondonParts` is called without a timezone argument at `src/lib/availability.ts:377` and `:469`). It was deliberately not touched here and belongs to the next separate workstream.
+
 ## 2026-08-12 (Calendar — `no_calendar` could confirm a booking that did not exist)
 
-**NOT DEPLOYED, NOT PUSHED.** Committed as `7f3b136` on branch `fix/no-calendar-false-booking-confirmation`. One-line production change plus tests; no flag, schema, prompt or route change.
+**PR #3. MERGED AND LIVE** as `7f3b136`, merged `ccc8fe2`, deployed to production 2026-08-12. One-line production change plus tests; no flag, schema, prompt or route change.
+
+*(This entry originally read "NOT DEPLOYED, NOT PUSHED" — true when written, corrected here once the branch was merged and deployed.)*
 
 `mayConfirmBooking()` returned true for `no_calendar`, so an **allowlisted** org whose calendar is disconnected — or has sync switched off — was told its appointment was booked with no event in anyone's Google Calendar: status `booked`, a null `unavailableReason`, *"your appointment IS NOW BOOKED"* handed to the reply model, and a confirmation email. Availability had passed, and the code read "nothing contradicted us" as "Google said yes".
 
@@ -29,9 +69,21 @@ Verified read-only against prod before committing. Two orgs exist; applying the 
 
 That uncertainty does not gate the deploy, because the outcome is the same either way: if the allowlist is the test org alone, its calendar is writable, `no_calendar` is unreachable and **the change is a no-op in production today** — a safety net for the day a calendar is disconnected or a second org is added. If another org is on the list, that org is *currently getting the bug*, and the change stops it. There is no configuration in which this makes production worse.
 
-### Two findings this surfaced, neither fixed here
+### Two findings this surfaced, neither fixed here *(both since resolved — see below)*
 - **The Google token has not refreshed since 2026-08-08.** `last_verified_at`, `updated_at` and `token_expires_at` all sit at that date, and a successful refresh writes all three back — with `status=connected` and `last_error` null, that reads as *not exercised*, not broken. It does not interact with this change: `resolveOrgCalendar` reads the database only and never filters on connection status, so a dead token yields `unverified` or `failed` — never `no_calendar` — and both were already non-confirmable.
-- **`leadCapture.ts` returns `booked: confirmedBooking || safeNextStatus === "booked"` on the update path.** When `backsWithCalendar` is true, `safeNextStatus === "booked"` holds by construction, so the settled calendar result is computed and then discarded. No false confirmation reaches a customer today — `settleCalendarBacking` also sets `unavailableReason`, and `buildBookingOutcomeNote` bails on that first — but the field's documented contract ("whether the lead genuinely ended up confirmed") is untrue, and the insert path returns the honest value. The `||` is not removable outright: it exists so an already-`booked` lead still reports `booked` on reschedule. Left for an owner decision.
+- **`leadCapture.ts` returns `booked: confirmedBooking || safeNextStatus === "booked"` on the update path.** When `backsWithCalendar` is true, `safeNextStatus === "booked"` holds by construction, so the settled calendar result is computed and then discarded. No false confirmation reaches a customer today — `settleCalendarBacking` also sets `unavailableReason`, and `buildBookingOutcomeNote` bails on that first — but the field's documented contract ("whether the lead genuinely ended up confirmed") is untrue, and the insert path returns the honest value. The `||` is not removable outright: it exists so an already-`booked` lead still reports `booked` on reschedule. **RESOLVED by PR #4 — see the entry above.** *(This line originally ended "Left for an owner decision".)*
+
+## 2026-08-12 (Booking — the update path must report the calendar's verdict, not its intent)
+
+**PR #4. MERGED AND LIVE** as `40e1030`, merged `e45ee07`, deployed to production 2026-08-12. Resolves the second of the two findings raised by PR #3 above.
+
+`capturePartialLead`'s **update** path returned `booked: confirmedBooking || safeNextStatus === "booked"`. `backsWithCalendar` implies `safeNextStatus === "booked"` **by construction** — `requiresCalendarBacking()` demands it — so the second operand could never be false when the calendar was consulted, and `settleCalendarBacking`'s verdict, assigned to `confirmedBooking` immediately above, was computed and then discarded. The engine reported `booked: true` while the row it had just written said `needs_review`.
+
+The persisted record was always correct; only the reported value lied, and no customer ever saw a false confirmation — `settleCalendarBacking` also sets `unavailableReason`, and `buildBookingOutcomeNote` checks that guard first. It still mattered: the two contradicted each other, which is the exact coupling `bookingOutcome.ts` exists to keep honest, and one reordered guard or one new consumer of `.booked` would have surfaced it. The insert path already returned the honest value, so the two paths disagreed.
+
+The fix is one expression — `backsWithCalendar ? confirmedBooking : confirmedBooking || safeNextStatus === "booked"`. Where the calendar spoke, its settled result is the answer; where it did not, behaviour is byte-identical. The OR is deliberately kept: for a lead that is already `booked`, `confirmedBooking` is false *by design* (it tests `existing.status !== "booked"`) and a chat reschedule still has to report its booking. Removing it outright breaks that path.
+
+**Changed:** `src/lib/leadCapture.ts`. **Coverage:** `tests/calendarEventCreation.test.mjs` — 10 tests (803 → 813), including an exercise guard so the fixture cannot silently degrade into an insert-path test, an invariant sweep asserting the reported value and the persisted row can never disagree across every outcome, and three cases pinning that an existing booking survives an ordinary update with its event and link intact. **Mutation-verified:** restoring the unconditional OR fails 3 of them. 2 files, +215/−1; `tsc` clean.
 
 ## 2026-08-08 (Google Calendar sync — LIVE-VERIFIED end to end on the test org)
 
