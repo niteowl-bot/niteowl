@@ -276,6 +276,25 @@ export function parseFreeBusyResponse(
     | { busy?: Array<{ start?: string; end?: string }>; errors?: Array<{ reason?: string }> }
     | undefined;
 
+  // A calendar we never heard back about is NOT a calendar with nothing
+  // on it. Google echoes an entry for every id it was asked about, so an
+  // absent key means the answer is incomplete — and the empty busy list
+  // it would otherwise produce reads downstream as "completely free",
+  // which is precisely the double booking the errors branch below exists
+  // to prevent. Same rule, one step earlier: no answer is not "free".
+  //
+  // "transient" rather than "permanent": an incomplete response is the
+  // shape a blip or a truncated payload takes, and it must NOT be
+  // auth_expired — that would park a perfectly healthy connection as
+  // needs_reauth. The caller turns any non-auth failure into
+  // lookup_failed, i.e. UNKNOWN, which is never bookable.
+  if (!entry) {
+    throw new IntegrationError(
+      `Google returned no free/busy entry for calendar ${calendarId}`,
+      { kind: "transient", provider: PROVIDER_ID }
+    );
+  }
+
   if (entry?.errors?.length) {
     const reason = entry.errors[0]?.reason ?? "unknown";
     // A calendar we cannot read must NOT silently look free — that

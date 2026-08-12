@@ -237,8 +237,67 @@ describe("free/busy", () => {
   });
 
   test("an empty calendar yields no busy windows", () => {
+    // The calendar ANSWERED and had nothing on it. Genuinely free.
     assert.deepEqual(parseFreeBusyResponse({ calendars: { "cal-1": { busy: [] } } }, "cal-1"), []);
-    assert.deepEqual(parseFreeBusyResponse({ calendars: {} }, "cal-1"), []);
+  });
+
+  // ── REGRESSION: no answer is not the same as "free" ──────────────
+  //
+  // This case used to be asserted as `[]`, filed under "an empty
+  // calendar yields no busy windows" — conflating two different things:
+  // the calendar answered and is free, versus the calendar never
+  // answered at all. The second produced an empty busy list, which
+  // reads downstream as "completely free" and books straight over
+  // whatever is really there. It contradicted the very next test's
+  // stated rule, and it is the one place the module failed OPEN.
+  describe("REGRESSION — a calendar that did not answer is never 'free'", () => {
+    test("the requested calendar missing from the response raises", () => {
+      assert.throws(
+        () => parseFreeBusyResponse({ calendars: {} }, "cal-1"),
+        (err) =>
+          err instanceof IntegrationError &&
+          // NOT auth_expired: a healthy connection must not be parked
+          // as needs_reauth because one response came back incomplete.
+          err.kind === "transient"
+      );
+    });
+
+    test("a response carrying only OTHER calendars raises", () => {
+      // The subtle shape: Google answered, just not about us.
+      assert.throws(
+        () => parseFreeBusyResponse({ calendars: { "someone-else": { busy: [] } } }, "cal-1"),
+        (err) => err instanceof IntegrationError && err.kind === "transient"
+      );
+    });
+
+    test("a response with no calendars key at all raises", () => {
+      assert.throws(
+        () => parseFreeBusyResponse({}, "cal-1"),
+        (err) => err instanceof IntegrationError && err.kind === "transient"
+      );
+      assert.throws(
+        () => parseFreeBusyResponse(null, "cal-1"),
+        (err) => err instanceof IntegrationError && err.kind === "transient"
+      );
+    });
+
+    test("the error names the calendar, and carries no credential", () => {
+      try {
+        parseFreeBusyResponse({ calendars: {} }, "cal-1");
+        assert.fail("must throw");
+      } catch (err) {
+        assert.match(err.message, /cal-1/);
+        assert.doesNotMatch(err.message, /token|secret|Bearer|ya29/i);
+      }
+    });
+
+    test("a genuinely free calendar is still free — the fix is not a blanket refusal", () => {
+      assert.deepEqual(
+        parseFreeBusyResponse({ calendars: { "cal-1": { busy: [] } } }, "cal-1"),
+        [],
+        "an answered, empty calendar must remain bookable"
+      );
+    });
   });
 
   test("a calendar we cannot read raises rather than looking free", () => {
