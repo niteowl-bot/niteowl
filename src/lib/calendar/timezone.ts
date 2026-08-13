@@ -185,6 +185,70 @@ export function toProviderLocalTime(isoInstant: string, timezone: string): strin
 }
 
 /**
+ * The inverse of toProviderLocalTime: the UTC instant at which a zone's
+ * clock reads the given wall-clock time.
+ *
+ * Accepts what an <input type="datetime-local"> produces —
+ * "YYYY-MM-DDTHH:mm", optionally with seconds — and NOTHING else. A
+ * value carrying a Z or an offset is already an instant and must not be
+ * re-interpreted, so it is rejected rather than silently shifted.
+ *
+ * This exists because the dashboard had no way to say "2pm in the
+ * BUSINESS'S zone". `new Date("2026-08-20T14:00")` resolves in whatever
+ * zone the owner's device happens to use, so an owner in New York
+ * booking a Dublin business stored 18:00Z instead of 13:00Z — an error
+ * that then reached Google intact, because the sync layer faithfully
+ * mirrors whatever instant it is given.
+ *
+ * TWO-PASS SETTLE, matching parseDatetime's zonedWallClockToUtc: the
+ * offset used to convert the wall time is itself only knowable once you
+ * know the instant. The first pass guesses using the offset at the naive
+ * instant, the second re-resolves at that guess. Without it, any wall
+ * time within an offset's distance of a DST boundary lands on the wrong
+ * side of the transition.
+ *
+ * DST edges resolve the way the runtime's zone rules do, and are
+ * deliberately not special-cased:
+ *   * a NONEXISTENT local time (01:30 on a spring-forward morning) maps
+ *     to the instant the clock jumped to;
+ *   * an AMBIGUOUS one (01:30 repeated in autumn) resolves to a single
+ *     instant — one of the two — rather than throwing.
+ * Both are defined and stable; neither invents a time that never
+ * existed. Availability and business-hours checks run on the resulting
+ * instant, so an impossible booking is still refused downstream.
+ */
+export function wallClockToInstant(wallClock: string, timezone: string): string {
+  assertValid(timezone);
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(
+    typeof wallClock === "string" ? wallClock.trim() : ""
+  );
+  if (!match) {
+    throw new RangeError(
+      `Expected a zoneless wall-clock time "YYYY-MM-DDTHH:mm": ${String(wallClock)}`
+    );
+  }
+
+  const [, year, month, day, hour, minute, second] = match;
+  const naive = Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second ?? 0)
+  );
+  if (Number.isNaN(naive)) {
+    throw new RangeError(`Invalid wall-clock time: ${String(wallClock)}`);
+  }
+
+  const firstGuess = naive - offsetMinutesAt(new Date(naive).toISOString(), timezone) * 60_000;
+  const settled =
+    naive - offsetMinutesAt(new Date(firstGuess).toISOString(), timezone) * 60_000;
+  return new Date(settled).toISOString();
+}
+
+/**
  * Adds minutes to a UTC instant. Deliberately arithmetic on the instant,
  * not on local time: 60 minutes after 01:30 on a spring-forward morning
  * is 03:30 local, and computing it locally would produce a time that

@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { toProviderLocalTime, wallClockToInstant } from "@/lib/calendar/timezone";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -71,7 +72,12 @@ function valueOrDash(value: string | null | undefined) {
   return value && value.trim() ? value : "—";
 }
 
-function formatDate(value: string | null) {
+// Every timestamp in this view is rendered in the BUSINESS'S timezone,
+// passed down from the page. It used to be hardcoded to Europe/London,
+// which silently disagreed with the picker below — that read the
+// device's zone — so the grid and the editor could show the same
+// appointment at two different times.
+function formatDate(value: string | null, timezone: string) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-IE", {
     day: "2-digit",
@@ -79,20 +85,20 @@ function formatDate(value: string | null) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/London",
+    timeZone: timezone,
   }).format(new Date(value));
 }
 
 // Clock time only, in the same business timezone the rest of the view
 // uses — the popover lists a single day, so the date would be noise.
-function formatTime(value: string | null) {
+function formatTime(value: string | null, timezone: string) {
   if (!value) return "";
   const d = new Date(value);
   if (isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-IE", {
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/London",
+    timeZone: timezone,
   }).format(d);
 }
 
@@ -100,11 +106,11 @@ function formatTime(value: string | null) {
 // hydration pass, regardless of which timezone each machine's runtime
 // defaults to — otherwise the isToday highlight (and the SSR'd date
 // text above) can disagree between the two, which React reports as a
-// hydration mismatch. Pin it to the business's timezone, matching the
+// hydration mismatch. Pinned to the BUSINESS's timezone, matching the
 // booking logic in src/lib/availability.ts.
-function getLondonToday(): Date {
+function getBusinessToday(timezone: string): Date {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
+    timeZone: timezone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -127,14 +133,22 @@ function parseAppointmentDate(dt: string | null): Date | null {
   return null;
 }
 
-// Converts an ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a
-// <input type="datetime-local"> expects, in the browser's own timezone.
-function toDatetimeLocalValue(iso: string | null): string {
+// Converts an ISO instant to the "YYYY-MM-DDTHH:mm" value a
+// <input type="datetime-local"> expects, expressed in the BUSINESS'S
+// timezone — not the browser's.
+//
+// The browser-local version this replaces used d.getHours() etc., so the
+// picker opened showing the device's idea of the time and saved it back
+// the same way. Self-consistent on one machine, and wrong on any machine
+// whose zone differs from the organisation's.
+function toDatetimeLocalValue(iso: string | null, timezone: string): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  try {
+    // "YYYY-MM-DDTHH:mm:ss" in the org's zone; the input wants minutes.
+    return toProviderLocalTime(iso, timezone).slice(0, 16);
+  } catch {
+    return "";
+  }
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -162,10 +176,13 @@ function addDays(date: Date, days: number): Date {
 
 function EditPanel({
   lead,
+  timezone,
   onClose,
   onUpdate,
 }: {
   lead: CalendarLead;
+  /** The organisation's IANA zone. Every wall-clock time here means this. */
+  timezone: string;
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<CalendarLead>) => void;
 }) {
@@ -174,7 +191,7 @@ function EditPanel({
   );
   const [service, setService] = useState(lead.service_needed ?? "");
   const [datetime, setDatetime] = useState(
-    toDatetimeLocalValue(lead.appointment_datetime)
+    toDatetimeLocalValue(lead.appointment_datetime, timezone)
   );
   const [notes, setNotes] = useState(lead.notes ?? "");
   const [saving, setSaving] = useState(false);
@@ -209,7 +226,19 @@ function EditPanel({
       }
     }
 
-    const requestedIso = datetime ? new Date(datetime).toISOString() : null;
+    // The picker yields a ZONELESS wall-clock string. It is resolved
+    // against the ORGANISATION's timezone, never the device's — the
+    // whole point of this conversion.
+    let requestedIso: string | null = null;
+    if (datetime.trim()) {
+      try {
+        requestedIso = wallClockToInstant(datetime.trim(), timezone);
+      } catch {
+        setSaveError("That date and time could not be read. Please re-enter it.");
+        setSaving(false);
+        return;
+      }
+    }
 
     // ── Moving the appointment also goes through the API ──────────────
     //
@@ -315,7 +344,7 @@ function EditPanel({
               {lead.name ?? "Unknown customer"}
             </h2>
             <p className="mt-0.5 text-xs text-slate-400">
-              {formatDate(lead.created_at)}
+              {formatDate(lead.created_at, timezone)}
             </p>
           </div>
           <button
@@ -342,7 +371,7 @@ function EditPanel({
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400">Appointment</span>
-                <span className="text-slate-200">{formatDate(lead.appointment_datetime)}</span>
+                <span className="text-slate-200">{formatDate(lead.appointment_datetime, timezone)}</span>
               </div>
             </div>
           </section>
@@ -495,12 +524,14 @@ function popoverPosition(anchor: PopoverAnchor, mobile: boolean) {
 function DayPopover({
   date,
   leads,
+  timezone,
   anchor,
   onSelect,
   onClose,
 }: {
   date: Date;
   leads: CalendarLead[];
+  timezone: string;
   anchor: PopoverAnchor;
   onSelect: (lead: CalendarLead) => void;
   onClose: () => void;
@@ -576,7 +607,7 @@ function DayPopover({
         <div className="flex-1 space-y-1 overflow-y-auto p-2">
           {leads.map((l) => {
             const color = STATUS_COLORS[l.status ?? ""] ?? STATUS_COLORS.new;
-            const time = formatTime(l.appointment_datetime);
+            const time = formatTime(l.appointment_datetime, timezone);
             return (
               <button
                 key={l.id}
@@ -602,11 +633,13 @@ function MonthView({
   year,
   month,
   leads,
+  timezone,
   onSelect,
 }: {
   year: number;
   month: number;
   leads: CalendarLead[];
+  timezone: string;
   onSelect: (lead: CalendarLead) => void;
 }) {
   const firstDay = new Date(year, month, 1).getDay();
@@ -619,7 +652,7 @@ function MonthView({
   // Pad to full weeks
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const today = getLondonToday();
+  const today = getBusinessToday(timezone);
 
   // Which day's full list is open, and the cell it hangs off. The month
   // is stored with it so that paging to another month drops a popover
@@ -728,6 +761,7 @@ function MonthView({
 
     {openHere && openDayLeads.length > 0 && (
       <DayPopover
+          timezone={timezone}
         date={new Date(year, month, openHere.day)}
         leads={openDayLeads}
         anchor={openHere.anchor}
@@ -749,14 +783,16 @@ function MonthView({
 function WeekView({
   weekStart,
   leads,
+  timezone,
   onSelect,
 }: {
   weekStart: Date;
   leads: CalendarLead[];
+  timezone: string;
   onSelect: (lead: CalendarLead) => void;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const today = getLondonToday();
+  const today = getBusinessToday(timezone);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -804,10 +840,12 @@ function WeekView({
 function DayView({
   date,
   leads,
+  timezone,
   onSelect,
 }: {
   date: Date;
   leads: CalendarLead[];
+  timezone: string;
   onSelect: (lead: CalendarLead) => void;
 }) {
   const dayLeads = leads.filter((l) => {
@@ -815,7 +853,7 @@ function DayView({
     return parsed && isSameDay(parsed, date);
   });
 
-  const isToday = isSameDay(date, getLondonToday());
+  const isToday = isSameDay(date, getBusinessToday(timezone));
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -859,11 +897,7 @@ function DayView({
                     </p>
 {l.appointment_datetime && (
   <p className="mt-1 text-xs opacity-75">
-    {new Intl.DateTimeFormat("en-IE", {
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "Europe/London",
-    }).format(new Date(l.appointment_datetime))}
+    {formatTime(l.appointment_datetime, timezone)}
   </p>
 )}
    
@@ -889,11 +923,14 @@ function DayView({
 export default function CalendarView({
   leads: initialLeads,
   businessName,
+  timezone,
 }: {
   leads: CalendarLead[];
   businessName: string | null;
+  /** The organisation's IANA zone, from the page. Not the device's. */
+  timezone: string;
 }) {
-  const today = getLondonToday();
+  const today = getBusinessToday(timezone);
   const [view, setView] = useState<View>("month");
   const [currentDate, setCurrentDate] = useState(today);
   const [leads, setLeads] = useState<CalendarLead[]>(initialLeads);
@@ -947,6 +984,7 @@ export default function CalendarView({
     <>
       {editingLead && (
         <EditPanel
+          timezone={timezone}
           lead={editingLead}
           onClose={() => setEditingLead(null)}
           onUpdate={(id, updates) => {
@@ -1013,6 +1051,7 @@ export default function CalendarView({
         {/* Calendar body */}
         {view === "month" && (
           <MonthView
+            timezone={timezone}
             year={currentDate.getFullYear()}
             month={currentDate.getMonth()}
             leads={parseableLeads}
@@ -1021,6 +1060,7 @@ export default function CalendarView({
         )}
         {view === "week" && (
           <WeekView
+            timezone={timezone}
             weekStart={startOfWeek(currentDate)}
             leads={parseableLeads}
             onSelect={setEditingLead}
@@ -1028,6 +1068,7 @@ export default function CalendarView({
         )}
         {view === "day" && (
           <DayView
+            timezone={timezone}
             date={currentDate}
             leads={parseableLeads}
             onSelect={setEditingLead}
