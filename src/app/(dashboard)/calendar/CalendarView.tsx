@@ -184,9 +184,39 @@ function EditPanel({
     setSaving(true);
     setSaveError(null);
 
+    // ── Cancelling goes through the authenticated API, not the browser ──
+    //
+    // Same correction as the Leads table: a browser write reaches the
+    // lead row and nothing else, so the linked Google event stayed live
+    // while Remy showed "cancelled". PATCH /api/leads does the local
+    // update and then clears the event through the existing helper,
+    // local-first, so a provider failure still leaves it cancelled.
+    //
+    // ONLY the cancellation is routed this way. The date/time write
+    // below is deliberately untouched here — moving an appointment from
+    // this panel still bypasses the calendar, which is a separate known
+    // defect and a separate change.
+    if (status === "cancelled") {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: lead.id, status: "cancelled" }),
+      });
+      if (!res.ok) {
+        setSaveError("Failed to cancel. Please try again.");
+        setSaving(false);
+        return;
+      }
+    }
+
     const supabase = createClient();
+    // When cancelling, the server above is the ONLY writer of the
+    // cancellation status — repeating it here would make the browser a
+    // second writer of the same fact. Only `status` is withheld; the
+    // date/time and the other fields still save exactly as they did.
+    const cancellationOwnedByServer = status === "cancelled";
     const updates = {
-      status,
+      ...(cancellationOwnedByServer ? {} : { status }),
       service_needed: service.trim() || null,
       appointment_datetime: datetime ? new Date(datetime).toISOString() : null,
       notes: notes.trim() || null,
@@ -198,10 +228,15 @@ function EditPanel({
       .eq("id", lead.id);
 
     if (error) {
+      // A cancellation that already succeeded server-side is NOT rolled
+      // back here; only these other fields failed. The existing single
+      // error slot cannot distinguish that without broader UI work.
       setSaveError("Failed to save. Please try again.");
       setSaving(false);
     } else {
-      onUpdate(lead.id, updates);
+      // `status` is re-attached for the optimistic row: it is the
+      // server-confirmed value, just not one this write owns.
+      onUpdate(lead.id, { ...updates, status });
       onClose();
     }
   }

@@ -16,6 +16,9 @@ const SRC = path.resolve(import.meta.dirname, "..", "src");
 // outside the Next build. See tests/stubs/next-server.mjs.
 const STUBS = {
   "next/server": path.resolve(import.meta.dirname, "stubs", "next-server.mjs"),
+  // Needed by lib/supabase/server.ts, i.e. by every authenticated
+  // dashboard route a test drives. See tests/stubs/next-headers.mjs.
+  "next/headers": path.resolve(import.meta.dirname, "stubs", "next-headers.mjs"),
 };
 
 registerHooks({

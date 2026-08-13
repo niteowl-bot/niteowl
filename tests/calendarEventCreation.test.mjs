@@ -29,6 +29,10 @@ const CONNECTION_ID = "22222222-2222-4222-8222-222222222222";
 const RESOURCE_ID = "33333333-3333-4333-8333-333333333333";
 const CALENDAR_ID = "owner@example.com";
 const LEAD_ID = "44444444-4444-4444-8444-444444444444";
+// The signed-in dashboard owner, for the authenticated PATCH /api/leads
+// route. Only the owner-cancellation tests use these.
+const OWNER_ID = "55555555-5555-4555-8555-555555555555";
+const OTHER_OWNER_ID = "66666666-6666-4666-8666-666666666666";
 
 // Tuesday 11 August 2026, 10:00 Europe/London (BST, UTC+1) = 09:00Z.
 const START_ISO = "2026-08-11T09:00:00.000Z";
@@ -76,6 +80,21 @@ function installStubs({
   hoursFail = false,
   /** organisations.timezone — the org's own IANA zone. */
   orgTimezone = "Europe/London",
+  // ── Authenticated-route options (PATCH /api/leads) ────────────────
+  // All default to "absent", so every pre-existing test is unaffected:
+  // nothing else in this file drives an authenticated route.
+  /** The signed-in user /auth/v1/user reports. null ⇒ nobody, i.e. 401. */
+  authUser = { id: OWNER_ID },
+  /** The row a `.single()` read of leads returns. null ⇒ 404. */
+  leadRow = null,
+  /**
+   * Whether the organisations ownership probe finds a row.
+   *
+   * The route asks for organisations filtered by BOTH id and owner_id;
+   * false makes that come back empty, which is exactly what a real
+   * cross-tenant attempt sees, and the route must answer 403.
+   */
+  orgOwnerMatches = true,
 } = {}) {
   process.env.INTEGRATIONS_ENABLED = "true";
   process.env.CALENDAR_SYNC_ENABLED = "true";
@@ -133,6 +152,14 @@ function installStubs({
       const p = new URL(url).searchParams.get("org_id");
       if (p) calls.orgIds.push(p.replace("eq.", ""));
     } catch {}
+
+    // Who is signed in, for authenticated routes. @supabase/ssr finds no
+    // session cookie (see tests/stubs/next-headers.mjs) so it asks here.
+    if (url.includes("/auth/v1/user")) {
+      return authUser
+        ? json({ id: authUser.id, aud: "authenticated", role: "authenticated" })
+        : json({ message: "invalid claim" }, 401);
+    }
 
     if (url.includes("oauth2.googleapis.com") || url.includes("/token")) {
       return json({ access_token: "fresh", expires_in: 3600, scope: "calendar" });
@@ -243,6 +270,25 @@ function installStubs({
     }
 
     if (url.includes("/rest/v1/organisations")) {
+      // An owner_id filter means this is the route's OWNERSHIP probe,
+      // not the settings read the booking engine does. Answering it
+      // separately is what lets a test withhold the row and prove the
+      // 403, without disturbing any existing caller.
+      let ownershipProbe = false;
+      try {
+        ownershipProbe = new URL(url).searchParams.has("owner_id");
+      } catch {}
+      if (ownershipProbe) {
+        if (!orgOwnerMatches) {
+          // What PostgREST returns when `.single()` matches no row.
+          return json(
+            { code: "PGRST116", message: "no rows returned" },
+            wantsObject ? 406 : 200
+          );
+        }
+        const owned = { id: ORG_ID };
+        return wantsObject ? json(owned) : json([owned]);
+      }
       const row = {
         appointment_duration_minutes: 60,
         emergency_mode_enabled: false,
@@ -263,10 +309,18 @@ function installStubs({
         return wantsObject ? json(saved) : json([saved]);
       }
       if (method === "PATCH") {
-        calls.leadUpdates.push(init.body ? JSON.parse(init.body) : {});
-        return json([]);
+        const patch = init.body ? JSON.parse(init.body) : {};
+        calls.leadUpdates.push(patch);
+        // PATCH ... .select().single() wants the updated OBJECT back;
+        // handing it an array leaves `updated` null and the route
+        // reports a 500 it never had. Array-shaped callers are
+        // unaffected — they never set this accept header.
+        return wantsObject ? json({ ...(leadRow ?? {}), ...patch }) : json([]);
       }
-      // No competing bookings unless a test says otherwise.
+      // A `.single()` read is a route fetching ONE known lead. Answered
+      // ONLY when a test supplied the row, so every existing caller
+      // keeps the empty-array behaviour it has always had.
+      if (wantsObject && leadRow) return json(leadRow);
       return method === "HEAD"
         ? new Response(null, { status: 200, headers: { "content-range": "*/0" } })
         : json([]);
@@ -2541,4 +2595,328 @@ describe("REGRESSION — a lost link cancels loudly, not silently", () => {
     assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "deleted");
     assert.equal(lines.filter((l) => LOST_LINK.test(l)).length, 0);
   });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  E3(a) — the OWNER's cancellation reaches the calendar too
+// ══════════════════════════════════════════════════════════════════
+//
+// Until now only the CUSTOMER could cancel in a calendar-aware way, via
+// /api/bookings/manage. Both owner dashboards wrote leads.status straight
+// from the browser, so the lead said "cancelled" while the Google event
+// stayed live — deterministically, on the ordinary owner workflow.
+//
+// The fix routes owner cancellation through the authenticated
+// PATCH /api/leads, which now accepts "cancelled" and calls the SAME
+// helper the customer path uses. Ordering is local-first and identical:
+// the lead is cancelled first and nothing rolls it back, because a
+// customer must never be trapped in an appointment by a provider outage.
+//
+// These drive the real route with a real signed-in user.
+
+describe("E3(a) — owner cancellation via PATCH /api/leads", () => {
+  const BOOKED_LEAD = {
+    id: LEAD_ID,
+    org_id: ORG_ID,
+    status: "booked",
+    appointment_datetime: START_ISO,
+  };
+
+  const ALREADY_CANCELLED_LEAD = { ...BOOKED_LEAD, status: "cancelled" };
+
+  function ownerStubs(opts = {}) {
+    return installStubs({
+      existingLinks: LINKED,
+      leadRow: BOOKED_LEAD,
+      ...opts,
+    });
+  }
+
+  async function patchLead(body) {
+    const { PATCH } = await import("@/app/api/leads/route");
+    const { NextRequest } = await import("next/server");
+    return PATCH(
+      new NextRequest("https://app.test/api/leads", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    );
+  }
+
+  const cancel = () => patchLead({ id: LEAD_ID, status: "cancelled" });
+
+  async function captureErrors(fn) {
+    const original = console.error;
+    const lines = [];
+    console.error = (...args) => lines.push(args.map(String).join(" "));
+    try {
+      return { result: await fn(), lines };
+    } finally {
+      console.error = original;
+    }
+  }
+
+  // ── 1. the fix itself — booked → cancelled is a REAL transition ──
+  test("a linked appointment is cancelled locally AND removed from Google", async () => {
+    stubs = ownerStubs();
+    const res = await cancel();
+
+    assert.equal(res.status, 200);
+    const cancelled = stubs.calls.leadUpdates.find((u) => u.status === "cancelled");
+    assert.ok(cancelled, "the lead must be cancelled locally");
+    assert.equal(stubs.calls.deletes.length, 1, "the Google event is removed exactly once");
+    assert.equal(
+      stubs.calls.linkUpdates.at(-1).sync_status,
+      "deleted",
+      "and the link records it"
+    );
+  });
+
+  // ── 1b. already cancelled → cancelled is NOT a transition ──
+  test("re-saving an ALREADY cancelled lead calls the provider zero times", async () => {
+    // Harmless if it did — already-gone is success — but it is a request
+    // nobody asked for, and the SERVER must be the one that knows, not
+    // the browser. Gated on the row this route already authorised.
+    stubs = ownerStubs({ leadRow: ALREADY_CANCELLED_LEAD });
+    const { result: res, lines } = await captureErrors(cancel);
+
+    assert.equal(res.status, 200, "the route contract is unchanged");
+    assert.equal(stubs.calls.deletes.length, 0, "no provider call");
+    assert.equal(stubs.calls.linkUpdates.length, 0, "and no link failure manufactured");
+    assert.equal(
+      lines.filter((l) => l.includes("[calendar-sync]") || l.includes("[leads:PATCH]")).length,
+      0,
+      "nothing is diagnosed because nothing was attempted"
+    );
+  });
+
+  test("the transition is judged on the STORED status, not the caller's word", async () => {
+    // The browser cannot suppress the calendar step by lying about the
+    // previous state, and cannot force one either: only the persisted
+    // row decides.
+    stubs = ownerStubs({ leadRow: { ...BOOKED_LEAD, status: "qualified" } });
+    const res = await cancel();
+
+    assert.equal(res.status, 200);
+    assert.equal(stubs.calls.deletes.length, 1, "qualified → cancelled still cancels the event");
+  });
+
+  // ── 2. local-first survives a provider failure ──
+  test("a provider failure STILL leaves the lead cancelled", async () => {
+    // The failure this ordering makes impossible is the reverse: the
+    // event gone while the lead still says booked.
+    stubs = ownerStubs({ deleteStatus: 500 });
+    const { result: res, lines } = await captureErrors(cancel);
+
+    assert.equal(res.status, 200, "the owner's cancellation must not fail");
+    assert.ok(
+      stubs.calls.leadUpdates.find((u) => u.status === "cancelled"),
+      "the lead stays cancelled"
+    );
+    assert.equal(
+      stubs.calls.leadUpdates.filter((u) => u.status === "booked").length,
+      0,
+      "and is never rolled back to booked"
+    );
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "failed");
+    assert.ok(stubs.calls.linkUpdates.at(-1).last_error, "the ghost event is recorded");
+    assert.ok(
+      lines.some((l) => l.includes("[leads:PATCH]") && l.includes("could not be removed")),
+      "and the failure is diagnosable"
+    );
+
+    // No claim about Google may reach the caller.
+    const body = await res.json();
+    assert.ok(!JSON.stringify(body).includes("synced"), "no calendar claim in the response");
+  });
+
+  // ── 3. genuinely no-calendar org ──
+  test("a business with NO calendar cancels locally, quietly", async () => {
+    stubs = ownerStubs({ eventCreation: "false" });
+    const { result: res, lines } = await captureErrors(cancel);
+
+    assert.equal(res.status, 200);
+    assert.ok(stubs.calls.leadUpdates.find((u) => u.status === "cancelled"));
+    assert.equal(stubs.calls.deletes.length, 0, "no Google write");
+    assert.equal(
+      lines.filter((l) => l.includes("[leads:PATCH]")).length,
+      0,
+      "and no error for an org that never had a calendar"
+    );
+  });
+
+  // ── 4. PR #14 lost-link contract, unchanged ──
+  test("a lost link keeps PR #14's contract exactly", async () => {
+    stubs = ownerStubs({ existingLinks: [] });
+    const { result: res, lines } = await captureErrors(cancel);
+
+    assert.equal(res.status, 200, "the cancellation still stands");
+    assert.ok(stubs.calls.leadUpdates.find((u) => u.status === "cancelled"));
+    assert.equal(stubs.calls.deletes.length, 0, "no provider delete without a link");
+    assert.equal(stubs.calls.linkUpdates.length, 0, "no link to mark");
+
+    // PR #14's diagnostic still fires, from inside the helper.
+    assert.ok(
+      lines.some((l) => /no appointment link for lead .* on a connected, sync-enabled calendar/.test(l)),
+      "PR #14's lost-link diagnostic must still fire"
+    );
+    // ...and it is still no_calendar, NOT failed: the route must not log
+    // its own failure line for a case PR #14 deliberately does not escalate.
+    assert.equal(
+      lines.filter((l) => l.includes("[leads:PATCH]")).length,
+      0,
+      "no_calendar is not a failure — the contract is unchanged"
+    );
+
+    const derived = toGoogleEventId(buildAppointmentIdempotencyKey(LEAD_ID, START_ISO));
+    assert.ok(
+      stubs.calls.deletes.every((d) => !d.url.includes(derived)),
+      "and no event id is invented"
+    );
+  });
+
+  // ── 5. authorisation and tenant isolation ──
+  test("an owner cannot cancel another organisation's lead", async () => {
+    // The ownership probe finds nothing, exactly as it would for a lead
+    // belonging to someone else. Nothing may be written, anywhere.
+    stubs = ownerStubs({ orgOwnerMatches: false, authUser: { id: OTHER_OWNER_ID } });
+    const res = await cancel();
+
+    assert.equal(res.status, 403, "access denied");
+    assert.equal(stubs.calls.leadUpdates.length, 0, "no local write");
+    assert.equal(stubs.calls.deletes.length, 0, "and absolutely no calendar write");
+  });
+
+  test("an unauthenticated request cancels nothing", async () => {
+    stubs = ownerStubs({ authUser: null });
+    const res = await cancel();
+
+    assert.equal(res.status, 401);
+    assert.equal(stubs.calls.leadUpdates.length, 0);
+    assert.equal(stubs.calls.deletes.length, 0);
+  });
+
+  // ── 6. the non-cancellation control ──
+  test("CONTROL — an ordinary status update is unchanged and never touches Google", async () => {
+    // Without this, the calendar call could have been wired to every
+    // PATCH rather than only to cancellation.
+    stubs = ownerStubs();
+    const res = await patchLead({ id: LEAD_ID, status: "contacted" });
+
+    assert.equal(res.status, 200);
+    assert.ok(stubs.calls.leadUpdates.find((u) => u.status === "contacted"));
+    assert.equal(stubs.calls.deletes.length, 0, "a status change is not a cancellation");
+    assert.equal(stubs.calls.linkUpdates.length, 0);
+  });
+
+  test("CONTROL — an unsupported status is still rejected", async () => {
+    stubs = ownerStubs();
+    const res = await patchLead({ id: LEAD_ID, status: "banana" });
+
+    assert.equal(res.status, 422);
+    assert.equal(stubs.calls.leadUpdates.length, 0);
+    assert.equal(stubs.calls.deletes.length, 0);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  E3(a) — the dashboards no longer cancel straight from the browser
+// ══════════════════════════════════════════════════════════════════
+//
+// A STRUCTURAL test, deliberately. The repo has no React renderer and
+// adding one to assert a fetch call would be a large new dependency for
+// a small guarantee — so this reads the components' source and pins the
+// two properties that actually matter:
+//
+//   1. the cancellation path calls PATCH /api/leads, and
+//   2. it returns early when that fails, so a failed cancel can never
+//      fall through to the browser write and look successful.
+//
+// LIMITATION, stated plainly: this proves the code is SHAPED correctly,
+// not that React invokes it. The behavioural guarantee lives in the
+// route tests above, which drive the real endpoint. If a renderer is
+// ever added, replace this with a real interaction test.
+
+describe("E3(a) — dashboard cancellation is routed through the API", () => {
+  const FILES = [
+    "src/app/(dashboard)/leads/LeadsTable.tsx",
+    "src/app/(dashboard)/calendar/CalendarView.tsx",
+  ];
+
+  async function sourceOf(relPath) {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    return readFile(path.resolve(process.cwd(), relPath), "utf8");
+  }
+
+  for (const file of FILES) {
+    test(`${file} cancels via PATCH /api/leads`, async () => {
+      const src = await sourceOf(file);
+      const guard = src.match(
+        /if \(status === "cancelled"\) \{[\s\S]*?\n {4}\}/
+      );
+      assert.ok(guard, "a cancellation branch must exist");
+      assert.match(guard[0], /fetch\(\s*"\/api\/leads"/, "it must call the API route");
+      assert.match(guard[0], /method:\s*"PATCH"/);
+      assert.match(
+        guard[0],
+        /if \(!res\.ok\)[\s\S]*?return;/,
+        "and must bail out rather than fall through to the browser write"
+      );
+    });
+
+    test(`${file} does not cancel with a direct browser write`, async () => {
+      const src = await sourceOf(file);
+      // The direct supabase update still exists for the other fields —
+      // what must NOT exist is a cancellation that reaches it without
+      // the API call first. Proven by ordering: the guard precedes it.
+      const guardAt = src.indexOf('if (status === "cancelled")');
+      const writeAt = src.indexOf('.from("leads")');
+      assert.ok(guardAt > -1 && writeAt > -1);
+      assert.ok(
+        guardAt < writeAt,
+        "the API cancellation must come BEFORE the direct browser write"
+      );
+    });
+
+    test(`${file} makes the server the SOLE writer of the cancellation status`, async () => {
+      const src = await sourceOf(file);
+
+      // The browser write must withhold `status` when cancelling, so the
+      // cancellation has exactly one writer — the route.
+      assert.match(
+        src,
+        /\.\.\.\(cancellationOwnedByServer \? \{\} : \{ status \}\)/,
+        "the direct write must omit status when the server owns the cancellation"
+      );
+      assert.match(
+        src,
+        /const cancellationOwnedByServer = status === "cancelled"/,
+        "and it must be the cancellation that triggers withholding it"
+      );
+
+      // No `updates` literal may still carry a bare `status,` property:
+      // that would be the second writer this removes.
+      // Up to the terminating semicolon — the object literals contain
+      // none, and the two files close the declaration at different
+      // indents (CalendarView a plain object, LeadsTable a ternary).
+      const literals = src.match(/const updates =[\s\S]*?;/g) ?? [];
+      assert.ok(literals.length > 0, "the updates literal must still exist");
+      for (const literal of literals) {
+        assert.ok(
+          !/^\s+status,\s*$/m.test(literal),
+          `a bare "status," is still written directly in ${file}`
+        );
+      }
+
+      // ...but the optimistic row must still SHOW the cancelled state,
+      // otherwise the fix would silently break the UI.
+      assert.match(
+        src,
+        /onUpdate\(lead\.id, \{ \.\.\.updates, status \}\)/,
+        "the optimistic row must still reflect the server-confirmed status"
+      );
+    });
+  }
 });
