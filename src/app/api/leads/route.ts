@@ -1,6 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { cancelAppointmentOnCalendar } from "@/lib/calendarSync";
+import {
+  cancelAppointmentOnCalendar,
+  rescheduleAppointmentOnCalendar,
+} from "@/lib/calendarSync";
+import { isWithinBusinessHours, isSlotAvailable } from "@/lib/availability";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -389,13 +393,41 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  // An owner may move an appointment from either dashboard. Optional:
+  // absent means "this save is not about the time".
+  //
+  // Only the INSTANT is taken from the caller. Everything the decision
+  // turns on — the previous time, the status, the org — is read from the
+  // persisted row below.
+  let requestedIso: string | null = null;
+  if (raw.appointment_datetime !== undefined && raw.appointment_datetime !== null) {
+    if (
+      typeof raw.appointment_datetime !== "string" ||
+      Number.isNaN(Date.parse(raw.appointment_datetime))
+    ) {
+      return NextResponse.json(
+        { error: "appointment_datetime must be a valid ISO timestamp." },
+        { status: 400 }
+      );
+    }
+    requestedIso = new Date(raw.appointment_datetime).toISOString();
+  }
+
   // Fetch the lead and verify ownership via org
   // `status` is selected so the CURRENT persisted status is known: it is
   // what makes a real cancellation transition distinguishable from
   // re-saving a lead that is already cancelled.
+  //
+  // name/email/service_needed are selected for the RESCHEDULE path, and
+  // are not optional there: moveEventToMatch rebuilds the event's title
+  // and description from them (summarise()), so passing nulls would
+  // retitle a real appointment "Appointment" and strip the customer's
+  // name and email out of the business's calendar.
   const { data: existing, error: fetchError } = await supabase
     .from("leads")
-    .select("id, org_id, status, appointment_datetime")
+    .select(
+      "id, org_id, status, appointment_datetime, name, email, service_needed"
+    )
     .eq("id", raw.id)
     .single();
 
@@ -416,9 +448,12 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  // appointment_duration_minutes rides along on the ownership probe the
+  // route already makes — the reschedule path needs it, and this costs
+  // no extra round trip.
   const { data: org, error: orgError } = await supabase
     .from("organisations")
-    .select("id")
+    .select("id, appointment_duration_minutes")
     .eq("id", existing.org_id)
     .eq("owner_id", user.id)
     .single();
@@ -430,12 +465,117 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
+  // ── OWNER RESCHEDULE: CALENDAR FIRST, FAIL CLOSED ─────────────────
+  //
+  // The exact opposite ordering to the cancellation below, and
+  // deliberately so. A customer must always be able to cancel, so that
+  // path writes locally first and never rolls back. A reschedule is the
+  // reverse: showing an owner "moved to Thursday" while the event sits
+  // on Tuesday is the one outcome that must be impossible, and unlike a
+  // cancellation nothing is lost by refusing and inviting a retry. So
+  // NOTHING is written locally until the calendar has agreed.
+  //
+  // Judged on a REAL transition, read from the row above rather than
+  // from the caller: the browser can neither force the calendar step nor
+  // suppress it by lying about the previous time.
+  //
+  // Compared as INSTANTS, not strings. Postgres returns timestamptz as
+  // "…+00:00" while the browser sends "…Z"; a string compare would call
+  // every save a reschedule and fire a provider request on each one.
+  const isRescheduleTransition =
+    requestedIso !== null &&
+    existing.status === "booked" &&
+    existing.appointment_datetime !== null &&
+    new Date(requestedIso).getTime() !==
+      new Date(existing.appointment_datetime).getTime();
+
+  // The `requestedIso !== null` repeat is what narrows the type for the
+  // block; isRescheduleTransition already implies it.
+  if (isRescheduleTransition && requestedIso !== null) {
+    // The helper re-verifies the slot itself, but SKIPS that check when
+    // the move overlaps its own old time (10:00 → 10:30) because
+    // free/busy cannot tell the org's own event apart from anyone
+    // else's. These two run first so an overlapping move is still held
+    // to the business's opening hours and capacity — the same order
+    // /api/bookings/manage uses.
+    const hours = await isWithinBusinessHours(existing.org_id, requestedIso);
+    if (!hours.isAvailable) {
+      return NextResponse.json(
+        { error: "That time is outside business hours.", reason: hours.reason },
+        { status: 422 }
+      );
+    }
+
+    // The lead's OWN booking must not count against its move: capacity
+    // is an overlap test, so without this every short reschedule would
+    // be refused as a clash with itself.
+    const free = await isSlotAvailable(existing.org_id, requestedIso, {
+      excludeLeadId: existing.id,
+    });
+    if (!free) {
+      return NextResponse.json(
+        { error: "That time is already fully booked." },
+        { status: 409 }
+      );
+    }
+
+    const moved = await rescheduleAppointmentOnCalendar(
+      {
+        orgId: existing.org_id,
+        leadId: existing.id,
+        startIso: requestedIso,
+        durationMinutes: org.appointment_duration_minutes ?? 60,
+        serviceNeeded: existing.service_needed,
+        customerName: existing.name,
+        customerEmail: existing.email,
+        location: null,
+      },
+      existing.appointment_datetime
+    );
+
+    if (moved.outcome === "conflict") {
+      return NextResponse.json(
+        {
+          error: "That time is no longer available.",
+          suggestedAlternative: moved.suggestedIso,
+        },
+        { status: 409 }
+      );
+    }
+
+    // "failed" covers a provider refusal, a timeout, and PR #13's
+    // missing-link case — a calendar we cannot verify. All three mean
+    // the same thing here: the appointment has NOT moved, and the stored
+    // time must stay exactly where it is.
+    if (moved.outcome === "failed") {
+      console.error(
+        `[leads:PATCH] reschedule refused for lead ${existing.id} — the original ` +
+          `time ${existing.appointment_datetime} is unchanged`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "We couldn't move this appointment just now. The original time is unchanged — please try again shortly.",
+        },
+        { status: 503 }
+      );
+    }
+    // "synced" and "no_calendar" both permit the local write below.
+    // no_calendar is the ordinary state for a business with no calendar
+    // integration, and moving the time is exactly right for it.
+  }
+
   const { data: updated, error: updateError } = await supabase
     .from("leads")
-    .update({ status: raw.status as string })
+    .update({
+      status: raw.status as string,
+      // Written ONLY once the calendar has permitted it, and only when
+      // this save is genuinely a reschedule.
+      ...(isRescheduleTransition ? { appointment_datetime: requestedIso } : {}),
+    })
     .eq("id", raw.id)
     .select(
-      "id, name, phone, email, service_needed, preferred_datetime, message, source, status, ai_confidence, conversation_id, created_at, updated_at"
+      "id, name, phone, email, service_needed, preferred_datetime, appointment_datetime, message, source, status, ai_confidence, conversation_id, created_at, updated_at"
     )
     .single();
 
