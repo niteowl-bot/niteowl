@@ -1093,7 +1093,11 @@ describe("milestone 6 — cancel removes the event", () => {
     assert.equal(result.outcome, "failed");
     const patch = stubs.calls.linkUpdates.at(-1);
     assert.equal(patch.sync_status, "failed");
-    assert.ok(patch.last_error, "the owner must be able to see the ghost event");
+    assert.ok(
+      patch.last_error,
+      "the ghost event is recorded on the link for diagnosis — note nothing " +
+        "surfaces this to the owner today"
+    );
   });
 
   test("no event, nothing to remove", async () => {
@@ -2398,5 +2402,143 @@ describe("REGRESSION — an unresolved create never becomes a booking", () => {
     assert.equal(finalStatus(stubs.calls), "booked");
     assert.equal(stubs.calls.creates.length, 1);
     assert.match(await replyNoteFor(result), /IS NOW BOOKED/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  REGRESSION — a lost link CANCELS LOUDLY, not silently
+// ══════════════════════════════════════════════════════════════════
+//
+// The cancel counterpart of the lost-link reschedule regression above,
+// and deliberately a far smaller change. Same starting state: a real
+// Google event whose integration_links row was never written, on an org
+// with a connected, sync-enabled calendar.
+//
+// Cancellation is local-first, so unlike reschedule the OUTCOME must not
+// change. The customer's cancellation has already been persisted before
+// this code runs and nothing downstream branches on the difference, so
+// answering "failed" would alter nothing they see while claiming a
+// provider refusal that never happened. What was actually missing was
+// any trace at all: the function returned "no_calendar" in silence, so a
+// stranded event left no evidence in any system.
+//
+// These pin the diagnostic, and pin that nothing else moved.
+
+describe("REGRESSION — a lost link cancels loudly, not silently", () => {
+  /** Capture console.error for the duration of one call, then restore. */
+  async function captureErrors(fn) {
+    const original = console.error;
+    const lines = [];
+    console.error = (...args) => lines.push(args.map(String).join(" "));
+    try {
+      return { result: await fn(), lines };
+    } finally {
+      console.error = original;
+    }
+  }
+
+  async function cancel(orgId = ORG_ID, leadId = LEAD_ID) {
+    const { cancelAppointmentOnCalendar } = await import("@/lib/calendarSync");
+    return cancelAppointmentOnCalendar(orgId, leadId);
+  }
+
+  async function cancelViaManageLink() {
+    const { POST } = await import("@/app/api/bookings/manage/route");
+    const { NextRequest } = await import("next/server");
+    const req = new NextRequest("https://app.test/api/bookings/manage", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": `9.8.7.${Math.floor(Math.random() * 250)}`,
+      },
+      body: JSON.stringify({ token: "mt", action: "cancel" }),
+    });
+    return POST(req);
+  }
+
+  const LOST_LINK =
+    /no appointment link for lead .* on a connected, sync-enabled calendar/;
+
+  test("the diagnostic names the lead and what it refused to guess", async () => {
+    stubs = installStubs({ existingLinks: [] });
+    const { result, lines } = await captureErrors(cancel);
+
+    const diagnostic = lines.find((l) => LOST_LINK.test(l));
+    assert.ok(
+      diagnostic,
+      `expected a lost-link diagnostic, got: ${JSON.stringify(lines)}`
+    );
+    assert.match(diagnostic, new RegExp(LEAD_ID), "the lead must be identifiable");
+    assert.match(diagnostic, /cannot verify or remove an external event/);
+    assert.match(diagnostic, /no_calendar/, "and it must say what it decided");
+    assert.equal(result.outcome, "no_calendar", "the CONTRACT is unchanged");
+  });
+
+  test("no provider write is attempted and no event id is invented", async () => {
+    stubs = installStubs({ existingLinks: [] });
+    const { result } = await captureErrors(cancel);
+
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(stubs.calls.deletes.length, 0, "nothing may be deleted");
+    assert.equal(stubs.calls.updates.length, 0, "and nothing moved");
+    assert.equal(stubs.calls.creates.length, 0, "nor created to paper over it");
+    assert.equal(
+      stubs.calls.linkUpdates.length,
+      0,
+      "there is no link to mark — that is the missing thing"
+    );
+
+    // The id IS derivable, which is precisely why it must not be used
+    // here: a rescheduled event keeps the id built from its ORIGINAL
+    // start, so a blind delete could address the wrong event, or none.
+    const derived = toGoogleEventId(
+      buildAppointmentIdempotencyKey(LEAD_ID, START_ISO)
+    );
+    assert.ok(
+      stubs.calls.deletes.every((d) => !d.url.includes(derived)),
+      "the derived id must never be used without a verified link"
+    );
+  });
+
+  test("END TO END — the customer is still told the booking is cancelled", async () => {
+    // The behaviour that must NOT change. Local-first means the
+    // cancellation stands whatever the calendar could not confirm.
+    stubs = bookedLeadStubs({ existingLinks: [] });
+    const { result: res, lines } = await captureErrors(cancelViaManageLink);
+
+    assert.equal(res.status, 200, "the customer's cancellation must still succeed");
+    assert.equal((await res.json()).status, "cancelled");
+    assert.ok(
+      stubs.calls.leadUpdates.find((u) => u.status === "cancelled"),
+      "the lead is cancelled locally exactly as before"
+    );
+    assert.equal(stubs.calls.deletes.length, 0, "with no link, Google is never called");
+    assert.ok(lines.some((l) => LOST_LINK.test(l)), "but it is no longer silent");
+  });
+
+  test("a business with genuinely NO calendar stays silent, as it should", async () => {
+    // The diagnostic must fire only where a calendar really exists —
+    // otherwise every ordinary org would log an error on every cancel.
+    stubs = installStubs({ existingLinks: [], eventCreation: "false" });
+    const { result, lines } = await captureErrors(cancel);
+
+    assert.equal(result.outcome, "no_calendar");
+    assert.equal(
+      lines.filter((l) => LOST_LINK.test(l)).length,
+      0,
+      "nothing is wrong here, so nothing may be logged"
+    );
+  });
+
+  test("CONTROL — a linked appointment still cancels normally", async () => {
+    // Without this, the tests above would pass on a cancel path broken
+    // to find no link for anybody.
+    stubs = installStubs({ existingLinks: LINKED });
+    const { result, lines } = await captureErrors(cancel);
+
+    assert.equal(result.outcome, "synced");
+    assert.equal(stubs.calls.deletes.length, 1);
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "deleted");
+    assert.equal(lines.filter((l) => LOST_LINK.test(l)).length, 0);
   });
 });

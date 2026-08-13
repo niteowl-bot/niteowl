@@ -328,9 +328,18 @@ export async function rescheduleAppointmentOnCalendar(
  *
  * DELIBERATELY ASYMMETRIC with reschedule: a customer must always be
  * able to cancel. The caller cancels locally whatever this returns, and
- * a failure here leaves the link marked `failed` with its error for the
- * owner to see. A business clearing one ghost event is a far better
- * outcome than a customer trapped in an appointment because Google was
+ * a failure here leaves the link marked `failed` with its error on
+ * integration_links.
+ *
+ * That record is for DIAGNOSIS ONLY as things stand: no dashboard,
+ * endpoint or reconciliation pass reads sync_status or last_error, so a
+ * stranded event is not currently surfaced to the owner anywhere. It is
+ * found by whoever next looks at the calendar — in practice prompted by
+ * the cancellation email the owner already receives. Surfacing it
+ * properly is future work and deliberately not claimed here.
+ *
+ * Even so, a business clearing one ghost event is a far better outcome
+ * than a customer trapped in an appointment because Google was
  * unreachable.
  *
  * Already-gone is success, not failure — the provider layer maps 404 and
@@ -351,7 +360,33 @@ export async function cancelAppointmentOnCalendar(
     }
 
     const link = await findAppointmentLink(orgId, leadId, calendar.connectionId);
-    if (!link) return { outcome: "no_calendar", suggestedIso: null };
+    // ── A MISSING LINK IS DIAGNOSED HERE, NOT ESCALATED ──────────────
+    //
+    // Execution only reaches this line with the write flag on, a
+    // calendar connected and sync enabled — so this org demonstrably HAS
+    // a calendar. What is missing is our record of THIS appointment's
+    // event, with the same two indistinguishable causes the reschedule
+    // path documents: either no event was ever written (the booking
+    // predates the connection), or one WAS written and
+    // recordAppointmentLink failed, leaving a real event we can no
+    // longer address.
+    //
+    // Unlike reschedule, the outcome is deliberately NOT escalated to
+    // "failed". Cancellation is local-first: the caller has already
+    // persisted the cancellation and branches on nothing but a log, so
+    // "failed" would change no customer-visible behaviour while claiming
+    // a provider refusal that never happened and marking links failed
+    // for appointments that never had an event. The log line IS the
+    // whole fix — it is what makes the second cause diagnosable at all,
+    // where previously this returned silently.
+    if (!link) {
+      console.error(
+        `[calendar-sync] no appointment link for lead ${leadId} on a connected, ` +
+          `sync-enabled calendar — cannot verify or remove an external event; ` +
+          `leaving the cancellation as no_calendar`
+      );
+      return { outcome: "no_calendar", suggestedIso: null };
+    }
 
     const removed = await cancelOrgEvent(orgId, link.externalId);
 
