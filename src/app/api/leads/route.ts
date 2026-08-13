@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { cancelAppointmentOnCalendar } from "@/lib/calendarSync";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -368,7 +369,18 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const validStatuses = ["new", "contacted", "qualified", "booked", "lost"];
+  // "cancelled" is accepted so the owner's dashboard has a calendar-aware
+  // way to cancel. It used to be absent, which is exactly why both
+  // dashboards wrote to the leads table directly from the browser and the
+  // linked Google event was never touched.
+  const validStatuses = [
+    "new",
+    "contacted",
+    "qualified",
+    "booked",
+    "lost",
+    "cancelled",
+  ];
 
   if (!raw.status || !validStatuses.includes(raw.status as string)) {
     return NextResponse.json(
@@ -378,9 +390,12 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Fetch the lead and verify ownership via org
+  // `status` is selected so the CURRENT persisted status is known: it is
+  // what makes a real cancellation transition distinguishable from
+  // re-saving a lead that is already cancelled.
   const { data: existing, error: fetchError } = await supabase
     .from("leads")
-    .select("id, org_id, appointment_datetime")
+    .select("id, org_id, status, appointment_datetime")
     .eq("id", raw.id)
     .single();
 
@@ -430,6 +445,46 @@ export async function PATCH(req: NextRequest) {
       { error: "Failed to update lead." },
       { status: 500 }
     );
+  }
+
+  // ── LOCAL-FIRST, the same ordering /api/bookings/manage uses ──────
+  //
+  // The lead is already cancelled above; this only clears the mirror of
+  // it in the business's own calendar. The ordering is deliberate and
+  // must not be swapped: a provider failure here must never leave the
+  // lead sitting at "booked" with its event already gone, holding the
+  // slot internally while showing nothing in the diary. So NOTHING
+  // below rolls the local cancellation back.
+  //
+  // The accepted failure is the reverse — a ghost event, recorded on the
+  // link with its error. That record is diagnosis only; nothing surfaces
+  // it to the owner today.
+  //
+  // Every outcome leaves the cancellation standing. "no_calendar" covers
+  // both an org with no calendar at all and the lost-link case, whose
+  // own diagnostic fires inside the helper — neither is an error here,
+  // and neither is reported to the caller as one. The response says only
+  // that the lead was updated: it makes no claim about Google, because
+  // outside "synced" we have no evidence to make one.
+  //
+  // Gated on a REAL TRANSITION, read from the row this route already
+  // fetched and authorised — never from the caller. Re-saving a lead
+  // that is already cancelled is not a cancellation and must not reach
+  // the provider again: the delete would be harmless (already-gone is
+  // success) but it is a request nobody asked for, and the server, not
+  // the browser, is the right place to know that.
+  const isCancellationTransition =
+    raw.status === "cancelled" && existing.status !== "cancelled";
+
+  if (isCancellationTransition) {
+    const removed = await cancelAppointmentOnCalendar(existing.org_id, existing.id);
+    if (removed.outcome === "failed") {
+      console.error(
+        `[leads:PATCH] lead ${existing.id} is cancelled locally but its calendar ` +
+          `event could not be removed — the failure is recorded on the link for ` +
+          `diagnosis (not surfaced to the owner today)`
+      );
+    }
   }
 
   return NextResponse.json({ lead: updated });

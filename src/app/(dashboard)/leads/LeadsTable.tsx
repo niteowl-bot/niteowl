@@ -174,16 +174,46 @@ function EditPanel({
       return;
     }
 
+    // ── Cancelling goes through the authenticated API, not the browser ──
+    //
+    // A browser write reaches the lead row and nothing else, so the
+    // linked Google event stayed live while Remy showed "cancelled".
+    // PATCH /api/leads performs the same local update and then clears
+    // the calendar event through the existing helper. It is local-first,
+    // so a provider failure still leaves the lead cancelled.
+    //
+    // Only the cancellation is routed this way. Every other edit on this
+    // form still saves exactly as it did below.
+    if (status === "cancelled") {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: lead.id, status: "cancelled" }),
+      });
+      if (!res.ok) {
+        // Nothing has been written, so the row must not be shown as
+        // cancelled: leave the panel open with the previous state.
+        setSaveError("Failed to cancel. Please try again.");
+        setSaving(false);
+        return;
+      }
+    }
+
     const supabase = createClient();
+    // When cancelling, the server above is the ONLY writer of the
+    // cancellation status — repeating it here would make the browser a
+    // second writer of the same fact. Only `status` is withheld; every
+    // other field still saves exactly as it did.
+    const cancellationOwnedByServer = status === "cancelled";
     const updates = usesDatetimePicker
       ? {
-          status,
+          ...(cancellationOwnedByServer ? {} : { status }),
           service_needed: service.trim() || null,
           appointment_datetime: appointmentIso,
           notes: notes.trim() || null,
         }
       : {
-          status,
+          ...(cancellationOwnedByServer ? {} : { status }),
           service_needed: service.trim() || null,
           preferred_datetime: datetime.trim() || null,
           notes: notes.trim() || null,
@@ -195,10 +225,16 @@ function EditPanel({
       .eq("id", lead.id);
 
     if (error) {
+      // The cancellation itself already succeeded server-side and is NOT
+      // rolled back; only these other fields failed to save. The existing
+      // single error slot cannot say that without broader UI work, so it
+      // stays as it is — see the residual note in the PR.
       setSaveError("Failed to save. Please try again.");
       setSaving(false);
     } else {
-      onUpdate(lead.id, updates);
+      // `status` is re-attached for the optimistic row: it is the
+      // server-confirmed value, just not one this write owns.
+      onUpdate(lead.id, { ...updates, status });
       onClose();
     }
   }
