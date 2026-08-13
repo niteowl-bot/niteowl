@@ -157,7 +157,8 @@ export async function POST(req: NextRequest) {
     // while the lead still said "booked", holding the slot internally
     // and showing nothing in the diary. This ordering leaves only the
     // failure that IS accepted — a ghost event, recorded on the link
-    // with its error for the owner to clear.
+    // with its error. Note that nothing reads that record today: it is
+    // for diagnosis, not a surface the owner can act on.
     const { error: updateError } = await supabase
       .from("leads")
       .update({ status: "cancelled" })
@@ -171,7 +172,8 @@ export async function POST(req: NextRequest) {
     if (removed.outcome === "failed") {
       console.error(
         `[bookings/manage] lead ${lead.id} is cancelled locally but its calendar event ` +
-          `could not be removed — the link records the failure for the owner`
+          `could not be removed — the failure is recorded on the link for diagnosis ` +
+          `(not surfaced to the owner today)`
       );
     }
 
