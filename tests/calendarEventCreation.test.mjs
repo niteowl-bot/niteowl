@@ -95,6 +95,14 @@ function installStubs({
    * cross-tenant attempt sees, and the route must answer 403.
    */
   orgOwnerMatches = true,
+  /**
+   * How many OTHER booked leads the capacity probe finds in the window.
+   *
+   * 0 (the default) is what this stub has always returned, so every
+   * pre-existing test is unaffected. 1 fills the slot for an org whose
+   * max_concurrent_bookings is 1.
+   */
+  bookedCount = 0,
 } = {}) {
   process.env.INTEGRATIONS_ENABLED = "true";
   process.env.CALENDAR_SYNC_ENABLED = "true";
@@ -129,6 +137,7 @@ function installStubs({
   const calls = {
     freeBusy: 0, creates: [], updates: [], deletes: [],
     linkInserts: [], linkUpdates: [], orgIds: [], leadInserts: [], leadUpdates: [],
+    capacityQueries: [],
     // Counted so a test can prove an explicit date was resolved in code
     // and never handed to the model.
     openai: 0,
@@ -286,7 +295,9 @@ function installStubs({
             wantsObject ? 406 : 200
           );
         }
-        const owned = { id: ORG_ID };
+        // appointment_duration_minutes rides along on this probe for the
+        // reschedule path; harmless to every other caller.
+        const owned = { id: ORG_ID, appointment_duration_minutes: 60 };
         return wantsObject ? json(owned) : json([owned]);
       }
       const row = {
@@ -321,9 +332,17 @@ function installStubs({
       // ONLY when a test supplied the row, so every existing caller
       // keeps the empty-array behaviour it has always had.
       if (wantsObject && leadRow) return json(leadRow);
-      return method === "HEAD"
-        ? new Response(null, { status: 200, headers: { "content-range": "*/0" } })
-        : json([]);
+      if (method === "HEAD") {
+        // The capacity probe. Recorded so a test can prove the lead's
+        // own booking was excluded (`id=neq.<lead>`) rather than
+        // assuming it.
+        calls.capacityQueries.push(url);
+        return new Response(null, {
+          status: 200,
+          headers: { "content-range": `*/${bookedCount}` },
+        });
+      }
+      return json([]);
     }
 
     // parseDatetimeToIso asks the model to resolve the spoken time.
@@ -2911,12 +2930,368 @@ describe("E3(a) — dashboard cancellation is routed through the API", () => {
       }
 
       // ...but the optimistic row must still SHOW the cancelled state,
-      // otherwise the fix would silently break the UI.
+      // otherwise the fix would silently break the UI. Matched loosely
+      // on the object's contents rather than its exact punctuation: PR B
+      // added the confirmed appointment time alongside `status`, and the
+      // guarantee here is "status is re-attached", not "the literal is
+      // formatted this way".
+      const optimistic = src.match(/onUpdate\(lead\.id, \{[\s\S]*?\}\);/);
+      assert.ok(optimistic, "the optimistic row must still be updated");
       assert.match(
-        src,
-        /onUpdate\(lead\.id, \{ \.\.\.updates, status \}\)/,
+        optimistic[0],
+        /\.\.\.updates/,
+        "the optimistic row must carry the saved fields"
+      );
+      assert.match(
+        optimistic[0],
+        /(^|[\s,{])status\b/m,
         "the optimistic row must still reflect the server-confirmed status"
       );
+    });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  E3(b) — the OWNER's reschedule is calendar-first and fails closed
+// ══════════════════════════════════════════════════════════════════
+//
+// The cancel half (PR #15) is local-first: a customer must always be
+// able to cancel, so the lead is cancelled first and never rolled back.
+// A RESCHEDULE is the exact opposite and deliberately so — showing an
+// owner "moved to Thursday" while the Google event sits on Tuesday is
+// the one outcome that must be impossible, and unlike a cancellation
+// nothing is lost by refusing and inviting a retry.
+//
+// So nothing is written locally until the calendar has agreed, and
+// PR #13's fail-closed guard (a missing link is NOT "no calendar") now
+// protects this path too, where before the dashboard bypassed it
+// entirely.
+
+describe("E3(b) — owner reschedule via PATCH /api/leads", () => {
+  const BOOKED_LEAD = {
+    id: LEAD_ID,
+    org_id: ORG_ID,
+    status: "booked",
+    appointment_datetime: START_ISO,
+    name: "Brian Murphy",
+    email: "brian@example.com",
+    service_needed: "Boiler service",
+  };
+
+  // 09:00Z on 13 Aug 2026 = 10:00 Europe/London, inside the stubbed
+  // 09:00-17:00 hours and NOT overlapping START_ISO.
+  const NEW_ISO = MOVED_ISO;
+  // 21:00 London — outside the stubbed opening hours.
+  const AFTER_HOURS_ISO = "2026-08-13T20:00:00.000Z";
+
+  function ownerStubs(opts = {}) {
+    return installStubs({ existingLinks: LINKED, leadRow: BOOKED_LEAD, ...opts });
+  }
+
+  async function patchLead(body) {
+    const { PATCH } = await import("@/app/api/leads/route");
+    const { NextRequest } = await import("next/server");
+    return PATCH(
+      new NextRequest("https://app.test/api/leads", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    );
+  }
+
+  const reschedule = (iso = NEW_ISO, status = "booked") =>
+    patchLead({ id: LEAD_ID, status, appointment_datetime: iso });
+
+  async function captureErrors(fn) {
+    const original = console.error;
+    const lines = [];
+    console.error = (...args) => lines.push(args.map(String).join(" "));
+    try {
+      return { result: await fn(), lines };
+    } finally {
+      console.error = original;
+    }
+  }
+
+  /** The local time the route actually persisted, if any. */
+  const storedTime = (calls) =>
+    calls.leadUpdates.filter((u) => "appointment_datetime" in u).at(-1)
+      ?.appointment_datetime ?? null;
+
+  // ── 1. the fix itself ──
+  test("a linked appointment moves in Google AND locally", async () => {
+    stubs = ownerStubs();
+    const res = await reschedule();
+
+    assert.equal(res.status, 200);
+    assert.equal(stubs.calls.updates.length, 1, "Google is PATCHed exactly once");
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "synced");
+    assert.equal(storedTime(stubs.calls), NEW_ISO, "and only then does the local time move");
+  });
+
+  test("the event keeps its customer metadata — nothing is blanked", async () => {
+    // moveEventToMatch rebuilds title/description from the lead. If the
+    // route had not selected name/email/service_needed, a reschedule
+    // would silently retitle a real appointment "Appointment" and strip
+    // the customer out of the business's calendar.
+    stubs = ownerStubs();
+    await reschedule();
+
+    const body = stubs.calls.updates.at(-1).body;
+    assert.match(body.summary, /Boiler service/, "the service must survive the move");
+    assert.match(body.summary, /Brian Murphy/, "and so must the customer's name");
+    assert.match(body.description, /brian@example\.com/, "and their email");
+  });
+
+  // ── 2. provider failure — FAIL CLOSED ──
+  test("a provider failure leaves the local time UNCHANGED", async () => {
+    stubs = ownerStubs({ updateStatus: 500 });
+    const { result: res, lines } = await captureErrors(() => reschedule());
+
+    assert.equal(res.status, 503);
+    assert.equal(storedTime(stubs.calls), null, "nothing may be written locally");
+    assert.equal(stubs.calls.linkUpdates.at(-1).sync_status, "failed");
+    assert.ok(
+      lines.some((l) => l.includes("[leads:PATCH]") && l.includes("reschedule refused")),
+      "and the refusal is diagnosable"
+    );
+
+    const body = await res.json();
+    assert.match(body.error, /original time is unchanged/i, "the owner is told the truth");
+  });
+
+  // ── 3. missing link — PR #13's guard now protects this path ──
+  test("a missing appointment link fails closed, exactly as PR #13 requires", async () => {
+    stubs = ownerStubs({ existingLinks: [] });
+    const { result: res, lines } = await captureErrors(() => reschedule());
+
+    assert.equal(res.status, 503, "not a silent success");
+    assert.equal(storedTime(stubs.calls), null, "the time must NOT move");
+    assert.equal(stubs.calls.updates.length, 0, "and no provider write is attempted");
+    assert.ok(
+      lines.some((l) => /refusing to move a time we cannot verify/.test(l)),
+      "PR #13's own diagnostic must still fire"
+    );
+  });
+
+  // ── 4. occupied slot ──
+  test("an occupied slot is refused with 409 and moves nothing", async () => {
+    stubs = ownerStubs({ bookedCount: 1 });
+    const res = await reschedule();
+
+    assert.equal(res.status, 409);
+    assert.equal(storedTime(stubs.calls), null, "local time unchanged");
+    assert.equal(stubs.calls.updates.length, 0, "Google untouched");
+  });
+
+  test("the lead's OWN booking is excluded from that check", async () => {
+    // Capacity is an overlap test, so without excludeLeadId a lead
+    // moving 10:00 → 10:30 would collide with itself and every short
+    // reschedule would be refused.
+    stubs = ownerStubs();
+    await reschedule();
+
+    // Note there are TWO capacity probes on this path: the route's own
+    // (which excludes the lead) and the helper's internal re-check
+    // (which does not, and does not need to — it is skipped entirely for
+    // overlapping moves). So assert that ONE of them carries the
+    // exclusion rather than picking a position.
+    assert.ok(stubs.calls.capacityQueries.length > 0, "the capacity probe must run");
+    assert.ok(
+      stubs.calls.capacityQueries.some((u) =>
+        decodeURIComponent(u).includes(`id=neq.${LEAD_ID}`)
+      ),
+      `the lead must not count against its own move — probes were: ${JSON.stringify(
+        stubs.calls.capacityQueries.map((u) => decodeURIComponent(u))
+      )}`
+    );
+  });
+
+  // ── 5. outside business hours ──
+  test("a time outside business hours is refused with 422", async () => {
+    stubs = ownerStubs();
+    const res = await reschedule(AFTER_HOURS_ISO);
+
+    assert.equal(res.status, 422);
+    assert.equal(storedTime(stubs.calls), null, "local time unchanged");
+    assert.equal(stubs.calls.updates.length, 0, "Google untouched");
+  });
+
+  // ── 6. same datetime — a no-op, not a reschedule ──
+  test("re-submitting the SAME instant makes zero provider calls", async () => {
+    stubs = ownerStubs();
+    const res = await reschedule(START_ISO);
+
+    assert.equal(res.status, 200);
+    assert.equal(stubs.calls.updates.length, 0, "no Google write");
+    assert.equal(stubs.calls.freeBusy, 0, "and no availability round trip either");
+  });
+
+  test("the same instant in a DIFFERENT format is still a no-op", async () => {
+    // Postgres returns timestamptz as "+00:00" while the browser sends
+    // "Z". A string compare would call every save a reschedule and fire
+    // a provider request on each one.
+    stubs = ownerStubs({
+      leadRow: { ...BOOKED_LEAD, appointment_datetime: "2026-08-11T09:00:00+00:00" },
+    });
+    const res = await reschedule(START_ISO);
+
+    assert.equal(res.status, 200);
+    assert.equal(stubs.calls.updates.length, 0, "the same instant is not a move");
+  });
+
+  // ── 7. unrelated fields ──
+  test("a status-only edit triggers no reschedule", async () => {
+    stubs = ownerStubs();
+    const res = await patchLead({ id: LEAD_ID, status: "contacted" });
+
+    assert.equal(res.status, 200);
+    assert.equal(stubs.calls.updates.length, 0);
+    assert.equal(storedTime(stubs.calls), null, "the time is not rewritten");
+  });
+
+  // ── 8/9. authorisation ──
+  test("an unauthenticated reschedule is rejected and writes nothing", async () => {
+    stubs = ownerStubs({ authUser: null });
+    const res = await reschedule();
+
+    assert.equal(res.status, 401);
+    assert.equal(stubs.calls.leadUpdates.length, 0);
+    assert.equal(stubs.calls.updates.length, 0);
+  });
+
+  test("an owner cannot reschedule another organisation's lead", async () => {
+    stubs = ownerStubs({ orgOwnerMatches: false, authUser: { id: OTHER_OWNER_ID } });
+    const res = await reschedule();
+
+    assert.equal(res.status, 403);
+    assert.equal(stubs.calls.leadUpdates.length, 0, "no local write");
+    assert.equal(stubs.calls.updates.length, 0, "and absolutely no calendar write");
+  });
+
+  // ── 10. genuinely no-calendar org ──
+  test("a business with NO calendar still moves the time, with zero Google writes", async () => {
+    stubs = ownerStubs({ eventCreation: "false" });
+    const res = await reschedule();
+
+    assert.equal(res.status, 200);
+    assert.equal(storedTime(stubs.calls), NEW_ISO, "existing behaviour is preserved");
+    assert.equal(stubs.calls.updates.length, 0, "nothing is sent to Google");
+  });
+
+  // ── 12. a cancelled lead is not resurrected ──
+  test("editing a CANCELLED lead's time reschedules nothing", async () => {
+    stubs = ownerStubs({
+      leadRow: { ...BOOKED_LEAD, status: "cancelled" },
+    });
+    const res = await reschedule(NEW_ISO, "cancelled");
+
+    assert.equal(stubs.calls.updates.length, 0, "no calendar move");
+    assert.equal(storedTime(stubs.calls), null, "and the time is not rewritten");
+    assert.equal(stubs.calls.deletes.length, 0, "nor is it re-cancelled");
+  });
+
+  // ── validation ──
+  test("a malformed datetime is rejected before anything is touched", async () => {
+    stubs = ownerStubs();
+    const res = await patchLead({
+      id: LEAD_ID,
+      status: "booked",
+      appointment_datetime: "not-a-date",
+    });
+
+    assert.equal(res.status, 400);
+    assert.equal(stubs.calls.leadUpdates.length, 0);
+    assert.equal(stubs.calls.updates.length, 0);
+  });
+
+  // ── 11. PR #15 must still work ──
+  test("REGRESSION — PR #15 cancellation is unaffected", async () => {
+    stubs = ownerStubs();
+    const res = await patchLead({ id: LEAD_ID, status: "cancelled" });
+
+    assert.equal(res.status, 200);
+    assert.ok(
+      stubs.calls.leadUpdates.find((u) => u.status === "cancelled"),
+      "still local-first"
+    );
+    assert.equal(stubs.calls.deletes.length, 1, "and the event is still removed");
+    assert.equal(stubs.calls.updates.length, 0, "a cancel is not a move");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  E3(b) — the dashboards no longer move appointments from the browser
+// ══════════════════════════════════════════════════════════════════
+//
+// Structural, with the same limitation stated for the cancellation
+// fence: the repo has no React renderer, so these prove the components
+// are SHAPED correctly, not that React invokes them. The behavioural
+// guarantee lives in the route tests above.
+
+describe("E3(b) — dashboard rescheduling is routed through the API", () => {
+  const FILES = [
+    "src/app/(dashboard)/leads/LeadsTable.tsx",
+    "src/app/(dashboard)/calendar/CalendarView.tsx",
+  ];
+
+  async function sourceOf(relPath) {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    return readFile(path.resolve(process.cwd(), relPath), "utf8");
+  }
+
+  for (const file of FILES) {
+    test(`${file} sends a genuine time change to PATCH /api/leads`, async () => {
+      const src = await sourceOf(file);
+
+      assert.match(
+        src,
+        /const isRescheduleAttempt =/,
+        "a real-change guard must exist"
+      );
+      // Judged on the INSTANT, so a re-save of the same time is a no-op.
+      assert.match(
+        src,
+        /new Date\(\w+\)\.getTime\(\) !==\s*\n?\s*new Date\(lead\.appointment_datetime\)\.getTime\(\)/,
+        "the change must be judged by instant, not string"
+      );
+
+      const branch = src.match(/if \(isRescheduleAttempt\) \{[\s\S]*?\n {4}\}/);
+      assert.ok(branch, "the reschedule branch must exist");
+      assert.match(branch[0], /fetch\(\s*"\/api\/leads"/, "it must call the API route");
+      assert.match(branch[0], /method:\s*"PATCH"/);
+      assert.match(branch[0], /appointment_datetime/, "and send the new time");
+      assert.match(
+        branch[0],
+        /if \(!res\.ok\)[\s\S]*?return;/,
+        "and bail out rather than fall through to the browser write"
+      );
+    });
+
+    test(`${file} cannot write appointment_datetime when the server owns the move`, async () => {
+      const src = await sourceOf(file);
+
+      // The browser write must WITHHOLD the time on a genuine
+      // reschedule — otherwise it would be a second writer, and could
+      // persist a time the calendar refused.
+      assert.match(
+        src,
+        /\.\.\.\(isRescheduleAttempt \? \{\} : \{ appointment_datetime[^}]*\}\)/,
+        "the direct write must omit appointment_datetime on a reschedule"
+      );
+
+      // No `updates` literal may still carry an unconditional
+      // appointment_datetime property.
+      const literals = src.match(/const updates =[\s\S]*?;/g) ?? [];
+      assert.ok(literals.length > 0, "the updates literal must still exist");
+      for (const literal of literals) {
+        assert.ok(
+          !/^\s+appointment_datetime:/m.test(literal),
+          `an unconditional appointment_datetime is still written in ${file}`
+        );
+      }
     });
   }
 });

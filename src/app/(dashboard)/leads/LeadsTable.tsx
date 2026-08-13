@@ -199,17 +199,63 @@ function EditPanel({
       }
     }
 
+    // ── Moving the appointment also goes through the API ──────────────
+    //
+    // A browser write moved the stored time and left the Google event
+    // where it was, with no business-hours or capacity check either.
+    // The route re-verifies the slot, moves the event, and only then
+    // persists — CALENDAR FIRST, the opposite of cancellation, because
+    // showing a new time the calendar never accepted is the one outcome
+    // that must be impossible.
+    //
+    // Only a REAL change is sent, and only for a confirmed appointment:
+    // `preferred_datetime` on an unbooked lead is a request, not a
+    // calendar event. The server enforces the same rule from the
+    // persisted row.
+    const isRescheduleAttempt =
+      status !== "cancelled" &&
+      usesDatetimePicker &&
+      appointmentIso !== null &&
+      lead.appointment_datetime !== null &&
+      new Date(appointmentIso).getTime() !==
+        new Date(lead.appointment_datetime).getTime();
+
+    let confirmedIso = appointmentIso;
+    if (isRescheduleAttempt) {
+      const res = await fetch("/api/leads", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: lead.id,
+          status,
+          appointment_datetime: appointmentIso,
+        }),
+      });
+      if (!res.ok) {
+        // The appointment has NOT moved. Keep the panel open showing the
+        // original time rather than a time nothing has agreed to.
+        const body = await res.json().catch(() => null);
+        setSaveError(body?.error ?? "Failed to move this appointment.");
+        setSaving(false);
+        return;
+      }
+      // Use the time the SERVER stored, never the one typed.
+      const body = await res.json().catch(() => null);
+      confirmedIso = body?.lead?.appointment_datetime ?? appointmentIso;
+    }
+
     const supabase = createClient();
     // When cancelling, the server above is the ONLY writer of the
     // cancellation status — repeating it here would make the browser a
-    // second writer of the same fact. Only `status` is withheld; every
-    // other field still saves exactly as it did.
+    // second writer of the same fact. The same now applies to the
+    // appointment time on a genuine reschedule. Every other field still
+    // saves exactly as it did.
     const cancellationOwnedByServer = status === "cancelled";
     const updates = usesDatetimePicker
       ? {
           ...(cancellationOwnedByServer ? {} : { status }),
           service_needed: service.trim() || null,
-          appointment_datetime: appointmentIso,
+          ...(isRescheduleAttempt ? {} : { appointment_datetime: appointmentIso }),
           notes: notes.trim() || null,
         }
       : {
@@ -232,9 +278,14 @@ function EditPanel({
       setSaveError("Failed to save. Please try again.");
       setSaving(false);
     } else {
-      // `status` is re-attached for the optimistic row: it is the
-      // server-confirmed value, just not one this write owns.
-      onUpdate(lead.id, { ...updates, status });
+      // `status` and, on a reschedule, the appointment time are
+      // re-attached for the optimistic row: both are server-confirmed
+      // values, just not ones this write owns.
+      onUpdate(lead.id, {
+        ...updates,
+        status,
+        ...(isRescheduleAttempt ? { appointment_datetime: confirmedIso } : {}),
+      });
       onClose();
     }
   }
