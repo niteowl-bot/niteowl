@@ -3295,3 +3295,119 @@ describe("E3(b) — dashboard rescheduling is routed through the API", () => {
     });
   }
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  DASHBOARD TIMEZONE — wall-clock times mean the BUSINESS's zone
+// ══════════════════════════════════════════════════════════════════
+//
+// <input type="datetime-local"> carries a wall-clock time and NO zone.
+// Both dashboards used to resolve it with `new Date(value)`, i.e. in
+// whatever zone the owner's DEVICE is set to, and rendered it back the
+// same way with d.getHours(). Self-consistent on one machine; wrong on
+// any machine whose zone differs from the organisation's.
+//
+// Since PR #16 the reschedule reaches Google, so the error no longer
+// stays local — it is written into the business's calendar too, and
+// because both stores agree there is no divergence signal to catch it.
+//
+// Structural, with the limitation stated for the other dashboard
+// fences: no React renderer here, so these prove the components are
+// SHAPED correctly. The conversion itself is proven behaviourally in
+// tests/calendarTimezone.test.mjs.
+
+describe("DASHBOARD TIMEZONE — the device's zone is never the appointment's", () => {
+  const FILES = [
+    "src/app/(dashboard)/leads/LeadsTable.tsx",
+    "src/app/(dashboard)/calendar/CalendarView.tsx",
+  ];
+
+  async function sourceOf(relPath) {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    return readFile(path.resolve(process.cwd(), relPath), "utf8");
+  }
+
+  for (const file of FILES) {
+    test(`${file} converts the picker value with the org timezone`, async () => {
+      const src = await sourceOf(file);
+      assert.match(
+        src,
+        /wallClockToInstant\(/,
+        "the save path must resolve wall time against a named zone"
+      );
+      assert.match(
+        src,
+        /wallClockToInstant\([\s\S]{0,60}?,\s*timezone\s*\)/,
+        "and that zone must be the organisation's, not a literal"
+      );
+    });
+
+    test(`${file} never resolves an appointment with new Date(...).toISOString()`, async () => {
+      const src = await sourceOf(file);
+      // The exact shape of the defect: a zoneless picker value handed to
+      // the Date constructor, which resolves it in the device's zone.
+      assert.doesNotMatch(
+        src,
+        /new Date\((?:datetime|appointmentIso|requestedIso)\b[^)]*\)\.toISOString\(\)/,
+        "a datetime-local value must not be resolved by the Date constructor"
+      );
+    });
+
+    test(`${file} renders the picker in the org timezone, not browser-local`, async () => {
+      const src = await sourceOf(file);
+      assert.match(
+        src,
+        /toProviderLocalTime\([^)]*,\s*timezone\s*\)/,
+        "display must project the instant into the org's zone"
+      );
+      // getHours()/getFullYear() are the browser-local getters the old
+      // toDatetimeLocalValue used to build the input value.
+      const picker = src.match(/function toDatetimeLocalValue[\s\S]*?\n\}/);
+      assert.ok(picker, "the picker formatter must still exist");
+      assert.doesNotMatch(
+        picker[0],
+        /\.get(?:FullYear|Month|Date|Hours|Minutes)\(\)/,
+        "the picker must not read the device's clock fields"
+      );
+    });
+
+    test(`${file} has no hardcoded Europe/London left`, async () => {
+      const src = await sourceOf(file);
+      assert.doesNotMatch(
+        src,
+        /timeZone:\s*"Europe\/London"/,
+        "display formatters must use the organisation's zone"
+      );
+    });
+
+    test(`${file} takes the timezone as a prop rather than inventing one`, async () => {
+      const src = await sourceOf(file);
+      assert.match(src, /timezone:\s*string/, "the component must receive the zone");
+      // Intl.DateTimeFormat with no timeZone silently uses the device's.
+      assert.doesNotMatch(
+        src,
+        /new Intl\.DateTimeFormat\(\s*"en-[A-Z]{2}"\s*,\s*\{(?:(?!timeZone)[\s\S])*?\}\s*\)/,
+        "every formatter must name a timeZone explicitly"
+      );
+    });
+  }
+
+  test("both dashboard pages pass the organisation's timezone down", async () => {
+    for (const page of [
+      "src/app/(dashboard)/leads/page.tsx",
+      "src/app/(dashboard)/calendar/page.tsx",
+    ]) {
+      const src = await sourceOf(page);
+      assert.match(
+        src,
+        /\.select\("id, business_name, timezone"\)/,
+        `${page} must read organisations.timezone`
+      );
+      assert.match(
+        src,
+        /timezone=\{org\.timezone \?\? DEFAULT_ORG_TIMEZONE\}/,
+        `${page} must pass it, falling back to the column default`
+      );
+    }
+  });
+});

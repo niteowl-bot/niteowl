@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_ORG_TIMEZONE } from "@/lib/calendar/timezone";
 import LeadsTable, { Lead } from "./LeadsTable";
 
 export default async function LeadsPage() {
@@ -15,9 +16,11 @@ export default async function LeadsPage() {
     redirect("/login");
   }
 
+  // timezone: every appointment time this page shows or edits is a
+  // wall-clock time in the BUSINESS'S zone, never the viewing device's.
   const { data: org, error: orgError } = await supabase
     .from("organisations")
-    .select("id, business_name")
+    .select("id, business_name, timezone")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -60,6 +63,7 @@ export default async function LeadsPage() {
     <LeadsTable
       leads={safeLeads}
       businessName={org.business_name}
+      timezone={org.timezone ?? DEFAULT_ORG_TIMEZONE}
       leadsError={Boolean(leadsError)}
     />
   );

@@ -14,6 +14,7 @@ import {
   canonicaliseTimezone,
   listSupportedTimezones,
   toProviderLocalTime,
+  wallClockToInstant,
   addMinutesIso,
   offsetMinutesAt,
   crossesDstTransition,
@@ -393,5 +394,173 @@ describe("the organisations.timezone CHECK agrees with the application", () => {
     // organisation created without the column — the only creation path.
     assert.equal(satisfiesDbConstraint(DEFAULT_ORG_TIMEZONE), true);
     assert.equal(canonicaliseTimezone(DEFAULT_ORG_TIMEZONE), "Europe/London");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  wallClockToInstant — the dashboard's missing direction
+// ══════════════════════════════════════════════════════════════════
+//
+// The dashboard reads a <input type="datetime-local">, which carries a
+// wall-clock time and NO zone. It used to resolve that with
+// `new Date(value)`, i.e. in whatever zone the owner's device happens to
+// be set to. An owner in New York editing a Dublin business therefore
+// stored 18:00Z for "14:00" instead of 13:00Z — and since PR #16 that
+// error reaches Google intact, because the sync layer faithfully mirrors
+// whatever instant it is handed.
+//
+// This function is the inverse of toProviderLocalTime, and the two must
+// round-trip exactly.
+
+describe("wall-clock time resolved in the BUSINESS's zone", () => {
+  test("14:00 in Dublin is 13:00Z in summer, whatever the device thinks", () => {
+    assert.equal(
+      wallClockToInstant("2026-08-20T14:00", "Europe/Dublin"),
+      "2026-08-20T13:00:00.000Z"
+    );
+  });
+
+  test("the SAME wall time in New York is a different instant", () => {
+    // The defect in one assertion: identical input, different zone,
+    // five hours apart. Nothing about the string says which was meant,
+    // which is why the zone must come from the organisation.
+    assert.equal(
+      wallClockToInstant("2026-08-20T14:00", "America/New_York"),
+      "2026-08-20T18:00:00.000Z"
+    );
+  });
+
+  test("a UTC business gets the literal wall time", () => {
+    assert.equal(
+      wallClockToInstant("2026-08-20T14:00", "UTC"),
+      "2026-08-20T14:00:00.000Z"
+    );
+  });
+
+  test("winter and summer differ for the same zone", () => {
+    // Europe/London is UTC+0 in January and UTC+1 in July. A fixed
+    // offset would get one of these wrong.
+    assert.equal(
+      wallClockToInstant("2026-01-15T09:00", "Europe/London"),
+      "2026-01-15T09:00:00.000Z"
+    );
+    assert.equal(
+      wallClockToInstant("2026-07-15T09:00", "Europe/London"),
+      "2026-07-15T08:00:00.000Z"
+    );
+  });
+
+  test("seconds are accepted, and default to zero", () => {
+    assert.equal(
+      wallClockToInstant("2026-08-20T14:00:30", "UTC"),
+      "2026-08-20T14:00:30.000Z"
+    );
+  });
+
+  test("ROUND TRIP — instant → business wall time → instant is stable", () => {
+    for (const zone of ["Europe/London", "Europe/Dublin", "America/New_York", "Asia/Tokyo"]) {
+      for (const instant of [
+        "2026-01-15T09:00:00.000Z",
+        "2026-07-15T09:00:00.000Z",
+        "2026-08-20T13:00:00.000Z",
+        "2026-12-31T23:30:00.000Z",
+      ]) {
+        const wall = toProviderLocalTime(instant, zone);
+        assert.equal(
+          wallClockToInstant(wall, zone),
+          instant,
+          `${zone} ${instant} did not round-trip`
+        );
+      }
+    }
+  });
+
+  test("an already-absolute value is REFUSED, never re-interpreted", () => {
+    // A string carrying Z or an offset is an instant already. Silently
+    // shifting it would be the same class of bug in reverse.
+    for (const bad of [
+      "2026-08-20T14:00:00Z",
+      "2026-08-20T14:00:00+01:00",
+      "2026-08-20",
+      "not-a-date",
+      "",
+    ]) {
+      assert.throws(
+        () => wallClockToInstant(bad, "Europe/Dublin"),
+        RangeError,
+        `${JSON.stringify(bad)} should be refused`
+      );
+    }
+  });
+
+  test("an unknown zone is refused rather than defaulted", () => {
+    assert.throws(
+      () => wallClockToInstant("2026-08-20T14:00", "Mars/Olympus"),
+      RangeError
+    );
+    // "BST" resolves to Asia/Dhaka in Intl — six hours out, silently.
+    assert.throws(() => wallClockToInstant("2026-08-20T14:00", "BST"), RangeError);
+  });
+});
+
+describe("wall-clock resolution across DST boundaries", () => {
+  // Europe/London 2026: forward 29 March 01:00→02:00, back 25 October
+  // 02:00→01:00.
+
+  test("the two-pass settle picks the right side of a spring transition", () => {
+    // 00:30 is still GMT; 03:30 is already BST. A single-pass conversion
+    // using the offset at the naive instant gets one of these wrong.
+    assert.equal(
+      wallClockToInstant("2026-03-29T00:30", "Europe/London"),
+      "2026-03-29T00:30:00.000Z"
+    );
+    assert.equal(
+      wallClockToInstant("2026-03-29T03:30", "Europe/London"),
+      "2026-03-29T02:30:00.000Z"
+    );
+  });
+
+  test("a NONEXISTENT local time resolves to a real instant, not a crash", () => {
+    // 01:30 on 29 March never happens in London — the clock jumps 01:00
+    // → 02:00. The runtime maps it onto the transition rather than
+    // inventing a time, and the result is a genuine instant. What must
+    // NOT happen is a throw or an Invalid Date reaching the database.
+    const iso = wallClockToInstant("2026-03-29T01:30", "Europe/London");
+    assert.match(iso, /^2026-03-29T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.equal(Number.isNaN(Date.parse(iso)), false);
+  });
+
+  test("an AMBIGUOUS local time resolves to ONE of its two instants", () => {
+    // 01:30 on 25 October happens twice in London: once at 00:30Z (BST)
+    // and once at 01:30Z (GMT). Either is defensible; silence is not.
+    const iso = wallClockToInstant("2026-10-25T01:30", "Europe/London");
+    assert.ok(
+      iso === "2026-10-25T00:30:00.000Z" || iso === "2026-10-25T01:30:00.000Z",
+      `expected one of the two real instants, got ${iso}`
+    );
+  });
+
+  test("either side of the autumn transition is unambiguous and correct", () => {
+    assert.equal(
+      wallClockToInstant("2026-10-25T00:30", "Europe/London"),
+      "2026-10-24T23:30:00.000Z"
+    );
+    assert.equal(
+      wallClockToInstant("2026-10-25T03:30", "Europe/London"),
+      "2026-10-25T03:30:00.000Z"
+    );
+  });
+
+  test("a zone whose DST dates differ from London is handled on its own rules", () => {
+    // US transitions are two weeks earlier than the EU's. On 20 March
+    // New York is already on EDT while London is still on GMT.
+    assert.equal(
+      wallClockToInstant("2026-03-20T09:00", "America/New_York"),
+      "2026-03-20T13:00:00.000Z"
+    );
+    assert.equal(
+      wallClockToInstant("2026-03-20T09:00", "Europe/London"),
+      "2026-03-20T09:00:00.000Z"
+    );
   });
 });

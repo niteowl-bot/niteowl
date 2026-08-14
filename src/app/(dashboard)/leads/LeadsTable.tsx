@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { toProviderLocalTime, wallClockToInstant } from "@/lib/calendar/timezone";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -79,7 +80,11 @@ function statusLabel(value: string | null): string | null {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function formatDate(value: string | null) {
+// Every timestamp shown here is rendered in the BUSINESS'S timezone,
+// which is passed down from the page. It used to be hardcoded to
+// Europe/London, so an owner elsewhere read every appointment at the
+// wrong hour without editing anything.
+function formatDate(value: string | null, timezone: string) {
   if (!value) return "—";
   return new Intl.DateTimeFormat("en-IE", {
     day: "2-digit",
@@ -87,7 +92,7 @@ function formatDate(value: string | null) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/London",
+    timeZone: timezone,
   }).format(new Date(value));
 }
 
@@ -95,21 +100,29 @@ function valueOrDash(value: string | null | undefined) {
   return value && value.trim() ? value : "—";
 }
 
-// Converts an ISO timestamp to the local "YYYY-MM-DDTHH:mm" value a
-// <input type="datetime-local"> expects, in the browser's own timezone.
-function toDatetimeLocalValue(iso: string | null): string {
+// Converts an ISO instant to the "YYYY-MM-DDTHH:mm" value a
+// <input type="datetime-local"> expects, expressed in the BUSINESS'S
+// timezone — not the browser's.
+//
+// The browser-local version this replaces used d.getHours() etc., so the
+// picker opened showing the device's idea of the time and saved it back
+// the same way. Self-consistent on one machine, and wrong on any machine
+// whose zone differs from the organisation's.
+function toDatetimeLocalValue(iso: string | null, timezone: string): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  try {
+    // "YYYY-MM-DDTHH:mm:ss" in the org's zone; the input wants minutes.
+    return toProviderLocalTime(iso, timezone).slice(0, 16);
+  } catch {
+    return "";
+  }
 }
 
 // Shows the confirmed appointment once one exists; falls back to the
 // customer's originally stated preference for leads not yet booked.
-function displayAppointment(lead: Lead) {
+function displayAppointment(lead: Lead, timezone: string) {
   return lead.appointment_datetime
-    ? formatDate(lead.appointment_datetime)
+    ? formatDate(lead.appointment_datetime, timezone)
     : valueOrDash(lead.preferred_datetime);
 }
 
@@ -130,10 +143,13 @@ function SummaryPreview({ text }: { text: string | null | undefined }) {
 
 function EditPanel({
   lead,
+  timezone,
   onClose,
   onUpdate,
 }: {
   lead: Lead;
+  /** The organisation's IANA zone. Every wall-clock time here means this. */
+  timezone: string;
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<Lead>) => void;
 }) {
@@ -147,7 +163,7 @@ function EditPanel({
   const hasConfirmedAppointment = Boolean(lead.appointment_datetime);
   const [datetime, setDatetime] = useState(
     hasConfirmedAppointment
-      ? toDatetimeLocalValue(lead.appointment_datetime)
+      ? toDatetimeLocalValue(lead.appointment_datetime, timezone)
       : lead.preferred_datetime ?? ""
   );
   const [notes, setNotes] = useState(lead.notes ?? "");
@@ -162,11 +178,19 @@ function EditPanel({
     // to an ISO timestamp. A lead may only be Booked with a valid appointment
     // date/time (the calendar reads appointment_datetime), so refuse to save
     // otherwise — the DB CHECK constraint is the final backstop.
+    // The picker yields a ZONELESS wall-clock string. It is resolved
+    // against the ORGANISATION's timezone, never the device's — the
+    // whole point of this conversion. A malformed value yields null and
+    // is caught by the Booked guard below rather than throwing.
     const usesDatetimePicker = hasConfirmedAppointment || status === "booked";
-    const appointmentIso =
-      usesDatetimePicker && datetime.trim()
-        ? new Date(datetime).toISOString()
-        : null;
+    let appointmentIso: string | null = null;
+    if (usesDatetimePicker && datetime.trim()) {
+      try {
+        appointmentIso = wallClockToInstant(datetime.trim(), timezone);
+      } catch {
+        appointmentIso = null;
+      }
+    }
 
     if (status === "booked" && (!appointmentIso || Number.isNaN(Date.parse(appointmentIso)))) {
       setSaveError("Add an appointment date and time before marking this lead as Booked.");
@@ -317,7 +341,7 @@ function EditPanel({
               {lead.name ?? "Unknown customer"}
             </h2>
             <p className="mt-0.5 text-xs text-slate-400">
-              {formatDate(lead.created_at)}
+              {formatDate(lead.created_at, timezone)}
             </p>
           </div>
           <button
@@ -501,10 +525,13 @@ function EditPanel({
 export default function LeadsTable({
   leads: initialLeads,
   businessName,
+  timezone,
   leadsError,
 }: {
   leads: Lead[];
   businessName: string | null;
+  /** The organisation's IANA zone, from the page. Not the device's. */
+  timezone: string;
   leadsError: boolean;
 }) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
@@ -526,6 +553,7 @@ export default function LeadsTable({
       {editingLead && (
         <EditPanel
           lead={editingLead}
+          timezone={timezone}
           onClose={() => setEditingLead(null)}
           onUpdate={(id, updates) => {
             handleUpdate(id, updates);
@@ -614,7 +642,7 @@ export default function LeadsTable({
                           className="cursor-pointer align-middle hover:bg-slate-800/40"
                         >
                           <td className="whitespace-nowrap px-5 py-4 text-slate-300">
-                            {formatDate(lead.created_at)}
+                            {formatDate(lead.created_at, timezone)}
                           </td>
                           <td className="px-5 py-4">{valueOrDash(lead.name)}</td>
                           <td className="whitespace-nowrap px-5 py-4">{valueOrDash(lead.phone)}</td>
@@ -622,7 +650,7 @@ export default function LeadsTable({
                           <td className="max-w-xs px-5 py-4">
                             <SummaryPreview text={lead.service_needed || lead.message} />
                           </td>
-                          <td className="whitespace-nowrap px-5 py-4">{displayAppointment(lead)}</td>
+                          <td className="whitespace-nowrap px-5 py-4">{displayAppointment(lead, timezone)}</td>
                           <td className="px-5 py-4">
                             <span className={`rounded-full border px-3 py-1 text-xs ${statusStyle}`}>
                               {valueOrDash(statusLabel(lead.status))}
@@ -663,7 +691,7 @@ export default function LeadsTable({
                         <div>
                           <p className="font-semibold">{valueOrDash(lead.name)}</p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {formatDate(lead.created_at)}
+                            {formatDate(lead.created_at, timezone)}
                           </p>
                         </div>
                         <span className={`rounded-full border px-3 py-1 text-xs ${statusStyle}`}>
@@ -684,7 +712,7 @@ export default function LeadsTable({
                         </div>
                         <div>
                           <p className="text-slate-500">Appointment time</p>
-                          <p className="text-slate-200">{displayAppointment(lead)}</p>
+                          <p className="text-slate-200">{displayAppointment(lead, timezone)}</p>
                         </div>
                         {lead.notes && (
                           <div>
