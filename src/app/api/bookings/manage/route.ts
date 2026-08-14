@@ -178,6 +178,7 @@ export async function POST(req: NextRequest) {
         bookingReference,
         action: "cancelled",
         previousDatetime: lead.appointment_datetime ?? "",
+        timezone: ownerInfo?.timezone ?? null,
       }).catch((err) =>
         console.error("[bookings/manage] Failed to send cancellation notification:", err)
       )
@@ -328,6 +329,9 @@ export async function POST(req: NextRequest) {
         action: "rescheduled",
         previousDatetime,
         newDatetime: newIso,
+        // The zone this reschedule was interpreted in, so the owner's
+        // email states the same wall-clock time the customer picked.
+        timezone: ownerInfo?.timezone ?? timezone,
       }).catch((err) =>
         console.error("[bookings/manage] Failed to send reschedule notification:", err)
       )
