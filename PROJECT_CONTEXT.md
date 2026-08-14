@@ -31,6 +31,15 @@ The following features are complete and tested:
 - Needs Review Workflow
 - Dashboard Preview Lead Separation
 - GitHub Workflow
+- Dashboard Timezone Correctness (PR #17, merged and live 2026-08-14)
+
+Dashboard timezone rule:
+
+Dashboard appointment times mean the **business's** timezone (`organisations.timezone`), never the owner's browser/device timezone.
+
+- `datetime-local` values are converted with `wallClockToInstant(value, orgTimezone)` in `src/lib/calendar/timezone.ts`, which is DST-aware
+- dashboard display formatting uses the organisation timezone; the previous hardcoded `Europe/London` formatting is gone
+- this matches the chat, widget and voice booking paths, which already resolved the organisation's zone
 
 ---
 

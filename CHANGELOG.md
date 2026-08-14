@@ -2,6 +2,43 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-14 (Dashboard — appointment times now mean the business's clock, not the owner's device)
+
+**PR #17. MERGED AND LIVE** as merge commit `0c513bb3ff1f6db112a7e8215443b5c6f0a2fcca` (branch commit `b74bfd0140209240b112cf75435de89347976662`). Vercel preview succeeded before merge; the merge triggered a production deployment which completed **Ready**, and `niteowlhq.com` returns 200 served by that deployment. **920 tests pass / 0 fail; `tsc --noEmit` clean.**
+
+**No schema, SQL, RLS, OAuth, Vapi/Twilio or provider-architecture change.** Seven files: four dashboard files, one library helper, two test files.
+
+### The defect
+An `<input type="datetime-local">` carries a wall-clock time and **no zone**. Both dashboards resolved it with `new Date(value)` and rendered it back with `d.getHours()`, so the zone actually in play was whatever the owner's device was set to. Self-consistent on one machine, wrong on any machine whose zone differs from the organisation's: an owner in New York editing a Dublin business stored **18:00Z for "14:00"** instead of 13:00Z.
+
+Since PR #16 routed owner reschedules through calendar sync, that error no longer stayed local — it was written into the business's Google calendar too, and because both stores then agreed there was no divergence to detect it by. Large offsets get caught by the business-hours check and surface as a baffling 422; small ones (an owner one zone away) land inside opening hours and are accepted **silently at the wrong hour**.
+
+The organisation's zone was already the source of truth everywhere else — `organisations.timezone`, resolved by `resolveOrgTimezone`, validated against canonical IANA names, used correctly by the chat, widget and voice booking paths via `parseDatetimeToIso`. Only the dashboard did not participate.
+
+### The input half — `wallClockToInstant`
+One primitive was missing. `lib/calendar/timezone.ts` owned `toProviderLocalTime` (instant → wall time) but not its inverse; the inverse existed only as a private function inside `parseDatetime.ts`. `wallClockToInstant` adds it to the timezone module, so datetime-local values are now converted using `organisations.timezone` rather than the browser's.
+
+**DST-aware, via the same two-pass offset settle** as `parseDatetime`'s `zonedWallClockToUtc`: the offset needed to convert a wall time is only knowable once you know the instant, so the first pass guesses at the naive instant and the second re-resolves at that guess. Without it, any wall time within an offset's distance of a DST boundary lands on the wrong side of the transition. No manual UTC-offset arithmetic was introduced.
+
+It accepts **only** zoneless `"YYYY-MM-DDTHH:mm[:ss]"` and **throws** on anything carrying a `Z` or an offset — a value that is already an instant must never be re-interpreted, which is the same bug in reverse.
+
+DST edges are documented rather than special-cased: a nonexistent spring-forward time maps to the instant the clock jumped to; an ambiguous autumn time resolves to one of its two real instants rather than throwing. Both are defined and stable, and availability still refuses an impossible slot downstream. Silence was the actual defect.
+
+### The display half
+Five hardcoded `Europe/London` formatters are gone, and `getLondonToday` is now `getBusinessToday(zone)`. Fixing only the picker would have left the grid showing London times while the picker showed organisation times — a new internal mismatch, arguably worse than the old one. Both pages already query `organisations`, so `timezone` rides along on the existing `select` and is threaded down as an explicit prop. **No context, no new architecture.**
+
+### Deliberately unchanged
+`PATCH /api/leads` receives an absolute instant and correctly refuses to re-interpret it, so the conversion happens exactly once at the browser edge. `/api/bookings/manage` keeps its own `Europe/London` hardcode on the **customer** page — same class of bug, separate change, and `wallClockToInstant` is now available for it.
+
+### Expected visible effect
+Existing appointments will appear to move for any owner whose browser zone differs from the organisation's. **That is the fix** — those times were being displayed wrongly before. Nothing shifts for a London- or Dublin-aligned owner.
+
+### Coverage
+**+285 lines of tests** across `tests/calendarTimezone.test.mjs` and `tests/calendarEventCreation.test.mjs`, covering the wall-clock conversion, its rejection of instants, and the DST boundary behaviour.
+
+### Post-merge state
+Local `main` fast-forwarded to `0c513bb`; the merged feature branch `fix/dashboard-business-timezone` was deleted locally and on the remote after confirming the merged tree is byte-identical to the reviewed commit. No unrelated branch was touched.
+
 ## 2026-08-12 (Database — `organisations.timezone` now rejects clearly-invalid values)
 
 **PR #11. MERGED** as `2a2a008017c78634fc493c56d569417b73b33c89`. The SQL was **executed manually against production on 2026-08-12, via the Supabase SQL Editor**, and verified there. The database half of the timezone follow-up hardening; the application half remains deferred.
