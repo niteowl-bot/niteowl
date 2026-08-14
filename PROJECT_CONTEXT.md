@@ -33,6 +33,7 @@ The following features are complete and tested:
 - GitHub Workflow
 - Dashboard Timezone Correctness (PR #17, merged and live 2026-08-14)
 - Customer Manage-Link Timezone Correctness (PR #19, merged and live 2026-08-14)
+- Email Appointment Timezone Correctness (PR #21, merged and live 2026-08-14)
 
 Dashboard timezone rule:
 
@@ -51,7 +52,18 @@ A time a customer picks on the manage-booking link means that wall-clock time in
 - an unresolvable organisation timezone **fails closed**: the reschedule is refused, and neither Google Calendar nor `appointment_datetime` is written
 - cancellation is unaffected — it converts no wall-clock time
 
-Known follow-up, deliberately not part of PR #19: `src/lib/email.ts` still formats appointment times in `Europe/London`.
+Email timezone rule (closed by PR #21 — this was the PR #19 follow-up):
+
+Appointment times in emails render in the **business's** timezone. `formatAppointmentDate` in `src/lib/email.ts` takes the organisation zone; the `Europe/London` hardcode is gone.
+
+- the zone comes from `getOrgOwnerEmail`'s existing `organisations` read — no extra database query
+- threaded into booking confirmation, owner new-booking notification, cancellation, reschedule and call-summary formatting, **including subject lines**
+- display **fails soft**: a missing, empty or unusable zone falls back to `DEFAULT_ORG_TIMEZONE` so the email still sends, and the formatter's `try/catch` remains as final protection
+- `en-GB` wording and date format are unchanged — that is date presentation, not a timezone
+
+Standing timezone rule (all three surfaces):
+
+Appointment instants are stored as **UTC instants**, always. A business-local timezone is used only to interpret or display a wall-clock time. **Email formatting must never reintroduce a hardcoded tenant timezone.**
 
 ---
 
