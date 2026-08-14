@@ -32,6 +32,7 @@ The following features are complete and tested:
 - Dashboard Preview Lead Separation
 - GitHub Workflow
 - Dashboard Timezone Correctness (PR #17, merged and live 2026-08-14)
+- Customer Manage-Link Timezone Correctness (PR #19, merged and live 2026-08-14)
 
 Dashboard timezone rule:
 
@@ -40,6 +41,17 @@ Dashboard appointment times mean the **business's** timezone (`organisations.tim
 - `datetime-local` values are converted with `wallClockToInstant(value, orgTimezone)` in `src/lib/calendar/timezone.ts`, which is DST-aware
 - dashboard display formatting uses the organisation timezone; the previous hardcoded `Europe/London` formatting is gone
 - this matches the chat, widget and voice booking paths, which already resolved the organisation's zone
+
+Customer manage-link timezone rule (same rule, customer side):
+
+A time a customer picks on the manage-booking link means that wall-clock time in the **business's** timezone — never `Europe/London`, never the customer's device.
+
+- `/api/bookings/manage` converts with the same `wallClockToInstant`; the old London-only conversion is gone
+- the page displays and prefills in the organisation timezone, returned by `GET`
+- an unresolvable organisation timezone **fails closed**: the reschedule is refused, and neither Google Calendar nor `appointment_datetime` is written
+- cancellation is unaffected — it converts no wall-clock time
+
+Known follow-up, deliberately not part of PR #19: `src/lib/email.ts` still formats appointment times in `Europe/London`.
 
 ---
 

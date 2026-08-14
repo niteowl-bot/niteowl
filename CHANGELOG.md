@@ -2,6 +2,36 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-14 (Customer manage link — a rescheduled time means the business's clock, not London's)
+
+**PR #19 — `fix(calendar): use business timezone for customer rescheduling`. MERGED AND LIVE** via the normal GitHub merge, as merge commit `935bb73cb56aaedb9dc9c48880aa7ab2dfd91af7` (branch commit `94b36451943dac840bf721215cca2b66e3183b36`). Vercel preview passed before the merge; the merge-triggered production deployment completed **Ready**, and `niteowlhq.com` returned **200**, served by that deployment. **934 tests pass / 0 fail / 0 skipped**; `tsc --noEmit` and lint clean.
+
+**No SQL, schema, RLS, OAuth, Vapi/Twilio, provider or configuration change.** Four files: two production, two test.
+
+### The defect
+The manage-booking link's date and time inputs carry a wall-clock time and **no zone**, and `/api/bookings/manage` converted them with a hardcoded `Europe/London`. The page that prefills them formatted in London too — so the two halves agreed with each other and nothing looked wrong, while every time on the page sat `(org offset − London offset)` from the business's real clock.
+
+Measured, for a customer picking 14:00: Dublin 14:00, New York **09:00**, Dubai **17:00**. Eastward zones mostly failed loudly, refused by the business-hours check for a time the page's own opening-hours hint said was open. New York is the dangerous one — 09:00 lands exactly on opening time, so it was **accepted**, written into the lead and the business's Google calendar, and confirmed to the customer as their 2pm.
+
+### The fix
+The organisation timezone is now the sole authority on this path. `GET` returns `organisations.timezone` (riding on the existing `organisations` read — no extra round trip), the page displays and prefills in it, and the reschedule converts with the shared **`wallClockToInstant`** from PR #17 — DST-aware via its two-pass offset settle, no offset arithmetic, no second timezone system. The route's own London-only, single-pass conversion is deleted.
+
+Both halves moved together deliberately: fixing the server alone would have been worse than the bug, because a London-prefilled value reinterpreted in the org's zone would have **silently moved** an appointment whose time the customer had not changed.
+
+### Failure behaviour
+An unresolvable or unusable organisation timezone **fails closed** — the reschedule is refused, nothing reaches Google Calendar, `appointment_datetime` is not written, and no success is reported. Malformed date/time remains a controlled client error rather than a 500: `wallClockToInstant` throws where the old regexes returned `null`, so the boundary is wrapped rather than the helper weakened.
+
+### Unchanged
+**Customer cancellation** — it converts no wall-clock time at all, and still succeeds even for an org whose zone cannot be resolved. **London and Dublin behaviour** — Dublin shares London's offsets year-round, so every existing production organisation is unaffected. Also untouched: the idempotent write on a no-op reschedule, and the owner-dashboard work from PR #17.
+
+### Coverage
+**+14 tests**, all in `tests/calendarEventCreation.test.mjs`: Dublin unchanged, New York and Dubai correct end to end (asserted through to the Google event body), the display half, the no-op round trip, a DST boundary, the fail-closed refusal, malformed input, and a cancellation fence. `tests/stubs/next-server.mjs` gained a `nextUrl` getter — test-only infrastructure, without which no test can drive this route's `GET`.
+
+**Mutation-verified twice:** restoring the London hardcode fails 5 tests (Dublin still passes, which is what makes it a real no-change fence); disabling the fail-closed branch fails 2.
+
+### Separate follow-up, not bundled
+`src/lib/email.ts` still formats appointment times in `Europe/London` and was **not** changed here. Same class of bug, display-only, separate surface — its own task.
+
 ## 2026-08-14 (Dashboard — appointment times now mean the business's clock, not the owner's device)
 
 **PR #17. MERGED AND LIVE** as merge commit `0c513bb3ff1f6db112a7e8215443b5c6f0a2fcca` (branch commit `b74bfd0140209240b112cf75435de89347976662`). Vercel preview succeeded before merge; the merge triggered a production deployment which completed **Ready**, and `niteowlhq.com` returns 200 served by that deployment. **920 tests pass / 0 fail; `tsc --noEmit` clean.**
