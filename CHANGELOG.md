@@ -2,6 +2,38 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-14 (Emails — the appointment time is announced on the business's clock, not London's)
+
+**PR #21 — `fix(email): use business timezone for appointment emails`. MERGED AND LIVE** via a normal GitHub merge commit, `7df5f622ba81bb0a9074fa5273e7aacfea6cee07` (branch commit `d6ef7dcc8d504ff37bf76c0e2d21aac65ca8bfeb`). The merge-triggered production deployment completed **Ready**, and `niteowlhq.com` returned **200**, served by that deployment. **953 tests pass / 0 fail / 0 skipped**, 172 suites; `tsc --noEmit` clean; ESLint clean on all four changed production files.
+
+**No SQL, schema, RLS, OAuth, Vapi/Twilio, provider, configuration, environment-variable or dependency change.** Five files: four production, one new test file.
+
+### The defect
+`email.ts` had exactly one time formatter and it was pinned to `Europe/London`. The **stored instant was always correct** — the dashboard (PR #17) and the manage link (PR #19) both resolve the organisation's zone — so this was purely a rendering fault, and only for organisations outside the UK and Ireland.
+
+Measured, for appointments booked at 14:00 local: Dublin announced as 14:00 (right), **Dubai as 11:00**, **New York as 19:00**, Sydney as 00:00. Worse at the edges: a New York appointment at 20:00 on Thursday was announced as **"Friday, 21 August at 01:00"** — the wrong **day**, in an email whose entire purpose is telling someone when to turn up.
+
+### The fix
+`formatAppointmentDate` now receives the organisation's IANA zone and the `Europe/London` literal is gone from this surface. The zone rides on `getOrgOwnerEmail`'s **existing** `organisations` read — every affected email already calls it immediately before sending — so **no extra database query was added** and no second source of truth introduced.
+
+Threaded into all five renderings: **booking confirmation** (customer), **new-booking notification** (owner), **cancellation**, **reschedule** (both the previous and new times), and the **call-summary** time. Subject lines use the same business-local zone — two of them carried the wrong time in the owner's inbox list.
+
+`en-GB` wording and date format are unchanged: that is date presentation, not a timezone.
+
+### Fail-soft, deliberately
+Unlike the booking write paths, which refuse rather than store an instant nobody can vouch for, this is a notification — an email in the default zone beats no email telling a business someone booked. A missing, empty or unusable zone falls back to `DEFAULT_ORG_TIMEZONE`, and the formatter's existing `try/catch` remains as final protection so no send can fail on a formatting problem. `"BST"` is covered by the validity check: `Intl` accepts it and resolves it to Asia/Dhaka, six hours out.
+
+### Not changed
+`appointment_datetime` storage; Google Calendar behaviour; booking creation; cancellation, rescheduling and availability logic; calendar sync; and the timezone **write**/conversion logic. Display-only — the formatter's output reaches HTML bodies and subject lines and nothing else.
+
+### Coverage
+New `tests/emailTimezone.test.mjs` (+325 lines, 19 tests): London/Dublin rendering unchanged; New York and Dubai correct; the date-boundary case; DST across the US March transition; confirmation body and subject; cancellation; reschedule; call summary; five invalid/missing-zone fail-soft cases; a test proving the zone arrives on **one** `organisations` read; and structural fences against the London literal returning.
+
+**Mutation-verified four ways** — the tests fail if the London hardcode is restored (9 fail, **Dublin still passing**, which is what makes it a real no-change fence), if threading is removed at a caller (1), if the zone is no longer passed to the formatter (6), or if the fail-soft fallback is removed (4).
+
+### Repository state
+Feature branch `fix/email-appointment-business-timezone` deleted locally and remotely after the merge; local `main` equals `origin/main`; working tree clean.
+
 ## 2026-08-14 (Customer manage link — a rescheduled time means the business's clock, not London's)
 
 **PR #19 — `fix(calendar): use business timezone for customer rescheduling`. MERGED AND LIVE** via the normal GitHub merge, as merge commit `935bb73cb56aaedb9dc9c48880aa7ab2dfd91af7` (branch commit `94b36451943dac840bf721215cca2b66e3183b36`). Vercel preview passed before the merge; the merge-triggered production deployment completed **Ready**, and `niteowlhq.com` returned **200**, served by that deployment. **934 tests pass / 0 fail / 0 skipped**; `tsc --noEmit` and lint clean.
