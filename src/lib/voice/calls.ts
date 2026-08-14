@@ -756,6 +756,7 @@ export async function processCallEnded(
     summary: event.summary,
     transcript: event.transcript,
     leadCreated: Boolean(leadId),
+    timezone: ownerInfo.timezone,
   });
 
   // A send failure used to be swallowed: sendCallSummaryEmail returns

@@ -620,14 +620,30 @@ async function resolveAppointmentDatetime(
 
 export async function getOrgOwnerEmail(
   orgId: string
-): Promise<{ email: string; businessName: string } | null> {
+): Promise<{
+  email: string;
+  businessName: string;
+  /**
+   * The organisation's own IANA zone, for RENDERING times in the email
+   * this lookup is feeding. Carried here rather than fetched separately
+   * because every notification already calls this immediately before
+   * sending, so it rides on a read that was happening anyway — no
+   * second organisations query, and no second source of truth.
+   *
+   * Null when unset or unreadable. Display formatting falls back to the
+   * column default rather than refusing to send; deciding a booking on
+   * an unknown zone is what must fail closed, and that happens in
+   * availability, not here.
+   */
+  timezone: string | null;
+} | null> {
 
   try {
     const admin = createAdminClient();
 
     const { data: org, error: orgError } = await admin
       .from("organisations")
-      .select("owner_id, business_name, notification_email")
+      .select("owner_id, business_name, notification_email, timezone")
       .eq("id", orgId)
       .single();
 
@@ -643,8 +659,14 @@ export async function getOrgOwnerEmail(
     // affecting who can sign in. Falls back to the owner's auth login
     // email when unset, which is the only behaviour every other org has
     // ever had.
+    const timezone = org.timezone ? String(org.timezone) : null;
+
     if (org.notification_email) {
-      return { email: org.notification_email, businessName: org.business_name ?? "the business" };
+      return {
+        email: org.notification_email,
+        businessName: org.business_name ?? "the business",
+        timezone,
+      };
     }
 
     const { data: userData, error: userError } =
@@ -655,7 +677,11 @@ export async function getOrgOwnerEmail(
       return null;
     }
 
-    return { email: userData.user.email, businessName: org.business_name ?? "the business" };
+    return {
+      email: userData.user.email,
+      businessName: org.business_name ?? "the business",
+      timezone,
+    };
   } catch (err) {
     console.error("[email] Unexpected error resolving owner email:", err);
     return null;
@@ -1267,6 +1293,7 @@ export async function capturePartialLead(
           bookingReference: existing.id.slice(0, 8).toUpperCase(),
           serviceNeeded: existing.service_needed,
           manageToken,
+          timezone: ownerInfo?.timezone ?? null,
         }).catch((err) =>
           console.error("[email] Failed to send booking confirmation:", err)
         )
@@ -1402,6 +1429,7 @@ export async function capturePartialLead(
           bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
           serviceNeeded: extracted.service ?? userMessage,
           manageToken,
+          timezone: ownerInfo?.timezone ?? null,
         }).catch((err) =>
           console.error("[email] Failed to send booking confirmation:", err)
         )

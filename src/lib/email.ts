@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { DEFAULT_ORG_TIMEZONE, isValidTimezone } from "@/lib/calendar/timezone";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
@@ -87,9 +88,37 @@ interface BookingConfirmationParams {
   bookingReference: string;
   serviceNeeded?: string | null;
   manageToken?: string | null;
+  /**
+   * The organisation's IANA zone, from getOrgOwnerEmail — which already
+   * reads `organisations` for the recipient, so this costs no query.
+   * Optional so every existing caller keeps its exact behaviour.
+   */
+  timezone?: string | null;
 }
 
-function formatAppointmentDate(iso: string): string {
+/**
+ * Renders a stored UTC instant on the BUSINESS's clock.
+ *
+ * The zone was hardcoded to Europe/London, which is right for a UK or
+ * Irish business and wrong for every other one: a Dubai booking stored
+ * (correctly) as 10:00Z was announced to the customer as 11:00 rather
+ * than 14:00, and a New York evening appointment shifted onto the wrong
+ * DAY. The instant itself has always been right — only this rendering
+ * of it was not.
+ *
+ * FAILS SOFT, deliberately, and unlike the booking write paths. Those
+ * refuse rather than store a time nobody can vouch for; this is a
+ * notification, and an email in the default zone beats no email telling
+ * a business someone booked. An unusable zone therefore falls back to
+ * the column default, and the try/catch stays as a last resort so no
+ * send can fail on a formatting problem.
+ *
+ * Locale stays "en-GB": that is date WORDING (day before month, 24-hour
+ * clock), not a timezone, and every existing email reads that way.
+ */
+function formatAppointmentDate(iso: string, timezone?: string | null): string {
+  const zone =
+    timezone && isValidTimezone(timezone) ? timezone : DEFAULT_ORG_TIMEZONE;
   try {
     return new Date(iso).toLocaleString("en-GB", {
       weekday: "long",
@@ -98,7 +127,7 @@ function formatAppointmentDate(iso: string): string {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
-      timeZone: "Europe/London",
+      timeZone: zone,
     });
   } catch {
     return iso;
@@ -117,9 +146,10 @@ export async function sendBookingConfirmationEmails(
     bookingReference,
     serviceNeeded,
     manageToken,
+    timezone,
   } = params;
 
-  const formattedDate = formatAppointmentDate(appointmentDatetime);
+  const formattedDate = formatAppointmentDate(appointmentDatetime, timezone);
   const displayName = escapeHtml(customerName?.trim() || "there");
   const safeBusinessName = escapeHtml(businessName);
   const safeService = serviceNeeded ? escapeHtml(serviceNeeded) : null;
@@ -273,6 +303,8 @@ interface BookingSelfServiceChangeParams {
   action: "cancelled" | "rescheduled";
   previousDatetime: string;
   newDatetime?: string; // required when action is "rescheduled"
+  /** The organisation's IANA zone — see BookingConfirmationParams. */
+  timezone?: string | null;
 }
 
 /**
@@ -294,6 +326,7 @@ export async function sendBookingSelfServiceChangeNotification(
     action,
     previousDatetime,
     newDatetime,
+    timezone,
   } = params;
 
   if (!businessOwnerEmail) {
@@ -307,7 +340,7 @@ export async function sendBookingSelfServiceChangeNotification(
   const safeEmail = customerEmail ? escapeHtml(customerEmail) : null;
   const safePhone = customerPhone ? escapeHtml(customerPhone) : null;
   const safeService = serviceNeeded ? escapeHtml(serviceNeeded) : null;
-  const formattedPrevious = formatAppointmentDate(previousDatetime);
+  const formattedPrevious = formatAppointmentDate(previousDatetime, timezone);
   const subject =
     action === "cancelled"
       ? `Booking cancelled: ${customerName?.trim() || "A customer"} — ${formattedPrevious}`
@@ -317,7 +350,8 @@ export async function sendBookingSelfServiceChangeNotification(
     action === "cancelled"
       ? `<p style="margin:0 0 4px;"><strong>${displayName}</strong> has cancelled their booking for <strong>${formattedPrevious}</strong>.</p>`
       : `<p style="margin:0 0 4px;"><strong>${displayName}</strong> has rescheduled their booking from <strong>${formattedPrevious}</strong> to <strong>${formatAppointmentDate(
-          newDatetime ?? previousDatetime
+          newDatetime ?? previousDatetime,
+          timezone
         )}</strong>.</p>`;
 
   try {
@@ -420,6 +454,8 @@ interface CallSummaryParams {
   summary: string | null;
   transcript: string | null;
   leadCreated: boolean;
+  /** The organisation's IANA zone — see BookingConfirmationParams. */
+  timezone?: string | null;
 }
 
 function formatCallDuration(durationSeconds: number | null): string | null {
@@ -451,6 +487,7 @@ export async function sendCallSummaryEmail(
     summary,
     transcript,
     leadCreated,
+    timezone,
   } = params;
 
   if (!businessOwnerEmail) {
@@ -468,7 +505,9 @@ export async function sendCallSummaryEmail(
   const safeAlternatePhone = alternatePhone?.trim()
     ? escapeHtml(alternatePhone.trim())
     : null;
-  const formattedTime = startedAt ? formatAppointmentDate(startedAt) : null;
+  const formattedTime = startedAt
+    ? formatAppointmentDate(startedAt, timezone)
+    : null;
   const formattedDuration = formatCallDuration(durationSeconds);
   const safeSummary = summary
     ? escapeHtml(summary)
