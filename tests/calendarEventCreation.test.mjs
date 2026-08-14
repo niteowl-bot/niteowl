@@ -3411,3 +3411,299 @@ describe("DASHBOARD TIMEZONE — the device's zone is never the appointment's", 
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════════════
+//  CUSTOMER MANAGE TIMEZONE — the customer's pick means the
+//  BUSINESS's clock, not London's
+// ══════════════════════════════════════════════════════════════════
+//
+// The manage link's date+time inputs carry a wall-clock time and NO
+// zone, and the page converts server-side, so the customer's device was
+// never involved — this defect was a hardcoded Europe/London, in the
+// conversion AND in the display that prefills it.
+//
+// Both halves were London, so the page agreed with itself and nothing
+// looked wrong. That is what makes these tests worth having: they pin
+// the two halves to the SAME org zone, because fixing only the server
+// would turn "confirm the time already shown" into a silent move.
+//
+// Measured against the old implementation, a customer picking 14:00
+// got: Dublin 14:00 (right), New York 09:00 (five hours early, and
+// ACCEPTED because it lands on opening time), Dubai 17:00 (refused as
+// after close). The New York row is the dangerous one.
+
+describe("CUSTOMER MANAGE TIMEZONE — a picked time is the business's wall clock", () => {
+  // Thursday 20 August 2026 — inside 09:00–17:00 in every zone below,
+  // so business hours never mask a conversion error.
+  const PICK_DATE = "2026-08-20";
+  const PICK_TIME = "14:00";
+
+  // Distinct token AND IP per call: both rate limits in this route are
+  // process-wide (10/min per token, 20/min per IP) and every test here
+  // hits the same one. The leads stub answers on any token.
+  let n = 0;
+  async function manageReschedule(date = PICK_DATE, time = PICK_TIME) {
+    n += 1;
+    const { POST } = await import("@/app/api/bookings/manage/route");
+    const { NextRequest } = await import("next/server");
+    const req = new NextRequest("https://app.test/api/bookings/manage", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": `10.0.${n % 250}.${(n * 7) % 250}`,
+      },
+      body: JSON.stringify({ token: `mt-${n}`, action: "reschedule", date, time }),
+    });
+    return POST(req);
+  }
+
+  async function manageGet() {
+    n += 1;
+    const { GET } = await import("@/app/api/bookings/manage/route");
+    const { NextRequest } = await import("next/server");
+    return GET(new NextRequest(`https://app.test/api/bookings/manage?token=mt-${n}`));
+  }
+
+  /** What the browser sees: the instant in the zone the server sent. */
+  function zonedParts(iso, timeZone) {
+    const map = {};
+    for (const p of new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(iso))) {
+      map[p.type] = p.value;
+    }
+    return { date: `${map.year}-${map.month}-${map.day}`, time: `${map.hour}:${map.minute}` };
+  }
+
+  // A: the zone production actually runs on. Dublin shares London's
+  // offsets year-round, so this is the fence proving the fix changes
+  // NOTHING for every existing organisation.
+  test("Europe/Dublin — 14:00 still stores 13:00Z, exactly as before", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "Europe/Dublin" });
+    const res = await manageReschedule();
+    const json = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(json.appointmentDatetime, "2026-08-20T13:00:00.000Z");
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, "2026-08-20T13:00:00.000Z");
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-20T14:00:00");
+    assert.equal(stubs.calls.updates[0].body.start.timeZone, "Europe/Dublin");
+  });
+
+  // B: the load-bearing one. The old code stored 13:00Z, which is
+  // 09:00 in New York — inside opening hours, so it was accepted, and
+  // the customer was told their 2pm was confirmed.
+  test("America/New_York — 14:00 means 18:00Z, NOT London's 13:00Z", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "America/New_York" });
+    const res = await manageReschedule();
+    const json = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(
+      json.appointmentDatetime,
+      "2026-08-20T18:00:00.000Z",
+      "13:00Z would be 09:00 in New York — five hours before the customer's pick"
+    );
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, "2026-08-20T18:00:00.000Z");
+    // What the business's own calendar ends up saying.
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-20T14:00:00");
+    assert.equal(stubs.calls.updates[0].body.start.timeZone, "America/New_York");
+  });
+
+  // C: eastward, where the old code failed LOUDLY — 13:00Z is 17:00 in
+  // Dubai, so the hours check refused a slot the page said was open.
+  test("Asia/Dubai — 14:00 means 10:00Z, and is no longer refused", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "Asia/Dubai" });
+    const res = await manageReschedule();
+    const json = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(json.appointmentDatetime, "2026-08-20T10:00:00.000Z");
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-20T14:00:00");
+    assert.equal(stubs.calls.updates[0].body.start.timeZone, "Asia/Dubai");
+  });
+
+  // D: the display half — GET must hand the browser the org's zone, or
+  // the page has no way to render the instant on the business's clock.
+  test("GET returns the organisation's zone, not a London assumption", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "Asia/Dubai" });
+    const body = await (await manageGet()).json();
+
+    assert.equal(body.timezone, "Asia/Dubai");
+    // START_ISO is 09:00Z: 10:00 in London, 13:00 in Dubai. The page
+    // showing 10:00 for a 13:00 appointment was the visible half of it.
+    assert.equal(zonedParts(body.appointmentDatetime, body.timezone).time, "13:00");
+  });
+
+  test("GET falls back to the column default when the zone is unusable", async () => {
+    // Display fails SOFT on purpose — a page that cannot render its own
+    // appointment is worse than one rendering it in the default zone.
+    // The write path is where the same uncertainty is refused (below).
+    stubs = bookedLeadStubs({ orgTimezone: null });
+    const body = await (await manageGet()).json();
+    assert.equal(body.timezone, "Europe/London");
+  });
+
+  // E: the regression a server-only fix would have introduced. The
+  // customer opens the link, changes nothing, confirms.
+  test("no-op round trip — the instant survives GET → prefill → POST", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "Asia/Dubai" });
+    const body = await (await manageGet()).json();
+    const shown = zonedParts(body.appointmentDatetime, body.timezone);
+
+    const res = await manageReschedule(shown.date, shown.time);
+    const json = await res.json();
+
+    assert.equal(res.status, 200);
+    assert.equal(
+      json.appointmentDatetime,
+      START_ISO,
+      "resubmitting the time already displayed must not move the appointment"
+    );
+    assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, START_ISO);
+    // The event is re-sent to Google at the SAME wall time. The route
+    // has always written on a no-op; this pins that it is idempotent,
+    // not that it is skipped.
+    assert.equal(stubs.calls.updates[0].body.start.dateTime, "2026-08-11T13:00:00");
+  });
+
+  // F: DST. Same wall clock, two dates either side of the US spring
+  // transition, two different instants — impossible with a fixed offset
+  // and impossible with the old London-only conversion.
+  test("DST — 14:00 New York resolves differently across the transition", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: "America/New_York" });
+    const before = await (await manageReschedule("2026-03-07", "14:00")).json();
+    assert.equal(before.appointmentDatetime, "2026-03-07T19:00:00.000Z", "EST, UTC-5");
+
+    stubs.restore();
+    stubs = bookedLeadStubs({ orgTimezone: "America/New_York" });
+    const after = await (await manageReschedule("2026-03-08", "14:00")).json();
+    assert.equal(after.appointmentDatetime, "2026-03-08T18:00:00.000Z", "EDT, UTC-4");
+  });
+
+  // G: fail closed. The one outcome that must never happen is a
+  // cheerful confirmation of an instant nobody can vouch for.
+  test("an unresolvable org timezone REFUSES the reschedule", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: null });
+    const res = await manageReschedule();
+    const json = await res.json();
+
+    assert.equal(res.status, 503);
+    assert.ok(!json.success, "no false success");
+    assert.equal(stubs.calls.updates.length, 0, "nothing may reach Google");
+    assert.equal(stubs.calls.leadUpdates.length, 0, "the stored time must not change");
+    assert.match(json.error, /original time is unchanged/i);
+  });
+
+  // H: wallClockToInstant throws where the old regexes returned null.
+  // The contract the customer sees must not change.
+  test("malformed date/time is a 400, never a 500", async () => {
+    for (const [date, time] of [
+      ["20-08-2026", "14:00"],
+      ["2026-08-20", "2pm"],
+      // Absent altogether. `null`, not `undefined`: JSON.stringify drops
+      // an undefined value, and the helper's own default would then
+      // quietly supply a VALID time and prove nothing.
+      ["2026-08-20", null],
+      [null, "14:00"],
+      ["", ""],
+      // An absolute instant, which must never be re-interpreted as a
+      // wall clock — the same bug in reverse.
+      ["2026-08-20T14:00:00Z", "14:00"],
+    ]) {
+      stubs = bookedLeadStubs({ orgTimezone: "America/New_York" });
+      const res = await manageReschedule(date, time);
+      assert.equal(res.status, 400, `${date} ${time} must be a controlled 400`);
+      assert.equal(stubs.calls.updates.length, 0);
+      assert.equal(stubs.calls.leadUpdates.length, 0);
+      stubs.restore();
+    }
+    stubs = null;
+  });
+
+  // I: cancellation shares this route and this page, and converts no
+  // wall-clock time at all. It must be untouched by any of the above.
+  test("cancellation is unaffected — no timezone is resolved for it", async () => {
+    stubs = bookedLeadStubs({ orgTimezone: null });
+    n += 1;
+    const { POST } = await import("@/app/api/bookings/manage/route");
+    const { NextRequest } = await import("next/server");
+    const res = await POST(
+      new NextRequest("https://app.test/api/bookings/manage", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": `10.9.${n % 250}.${(n * 3) % 250}`,
+        },
+        body: JSON.stringify({ token: `mt-cancel-${n}`, action: "cancel" }),
+      })
+    );
+
+    // An org with no usable zone still cancels: the refusal above is
+    // specific to interpreting a wall-clock time, not to the route.
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).status, "cancelled");
+    assert.equal(stubs.calls.leadUpdates.at(-1).status, "cancelled");
+  });
+});
+
+// Structural fences for the same surface. No React renderer here, so
+// the page is proven SHAPED correctly; the conversions themselves are
+// proven behaviourally above and in tests/calendarTimezone.test.mjs.
+describe("CUSTOMER MANAGE TIMEZONE — no London literal survives on this path", () => {
+  async function sourceOf(relPath) {
+    const { readFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    return readFile(path.resolve(process.cwd(), relPath), "utf8");
+  }
+
+  const ROUTE = "src/app/api/bookings/manage/route.ts";
+  const PAGE = "src/app/booking/manage/ManageBookingClient.tsx";
+
+  test("the route converts with the shared helper, not its own", async () => {
+    const src = await sourceOf(ROUTE);
+    assert.match(src, /wallClockToInstant\(`\$\{date\}T\$\{time\}`,\s*timezone\s*\)/);
+    assert.doesNotMatch(
+      src,
+      /function londonWallTimeToUtcIso/,
+      "the London-only single-pass conversion must be gone, not merely unused"
+    );
+  });
+
+  test("neither file pins a formatter to Europe/London", async () => {
+    for (const file of [ROUTE, PAGE]) {
+      const src = await sourceOf(file);
+      assert.doesNotMatch(
+        src,
+        /timeZone:\s*"Europe\/London"/,
+        `${file} still formats in London`
+      );
+    }
+  });
+
+  test("the route resolves the zone STRICTLY before converting", async () => {
+    const src = await sourceOf(ROUTE);
+    assert.match(src, /const \{ timezone, resolved \} = await resolveOrgTimezone\(/);
+    assert.match(src, /if \(!resolved\)/, "an unresolved zone must have its own branch");
+  });
+
+  test("the page reads its zone from the server, never the device", async () => {
+    const src = await sourceOf(PAGE);
+    assert.match(src, /timezone:\s*string/, "the GET payload must carry the zone");
+    // Every wall-clock formatter on the page takes an explicit zone.
+    for (const call of src.match(/formatDisplayDate\([^)]*\)/g) ?? []) {
+      if (call.includes("iso: string")) continue; // the definition
+      assert.match(call, /zoneOf\(/, `${call} must name the business zone`);
+    }
+    for (const call of src.match(/isoToZonedParts\([^)]*\)/g) ?? []) {
+      if (call.includes("iso: string")) continue;
+      assert.match(call, /zoneOf\(|json\.timezone/, `${call} must name the business zone`);
+    }
+  });
+});
