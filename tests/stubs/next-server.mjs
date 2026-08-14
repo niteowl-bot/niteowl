@@ -28,4 +28,14 @@ export const NextResponse = {
 
 // A type-only import at runtime; the handler is called with a plain
 // Request in tests, which supplies everything it reads (headers, json).
-export class NextRequest extends Request {}
+//
+// `nextUrl` is the one thing the standard Request does not provide, and
+// GET /api/bookings/manage reads its searchParams for the manage token.
+// Next's own nextUrl is a parsed URL of the request with framework
+// extras none of these routes touch, so a plain URL is the whole of it
+// here. Additive: nothing that used this class before reads it.
+export class NextRequest extends Request {
+  get nextUrl() {
+    return new URL(this.url);
+  }
+}

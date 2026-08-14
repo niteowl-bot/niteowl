@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { DEFAULT_ORG_TIMEZONE } from "@/lib/calendar/timezone";
 
 interface BusinessHoursRow {
   day_of_week: number;
@@ -21,9 +22,20 @@ interface BookingData {
   appointmentDurationMinutes: number;
   emergencyModeEnabled: boolean;
   businessHours: BusinessHoursRow[];
+  /**
+   * The BUSINESS's IANA zone, from organisations.timezone via GET.
+   *
+   * Every wall-clock time on this page is read and written in it. Not
+   * the customer's device zone: the opening hours shown alongside are
+   * the business's own, and a picker that meant something else would
+   * make "Open 09:00–17:00" a lie. Not Europe/London either, which is
+   * what this page assumed before and is correct only for UK and Irish
+   * businesses.
+   */
+  timezone: string;
 }
 
-function formatDisplayDate(iso: string | null): string {
+function formatDisplayDate(iso: string | null, timeZone: string): string {
   if (!iso) return "—";
   return new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
@@ -32,15 +44,22 @@ function formatDisplayDate(iso: string | null): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    timeZone: "Europe/London",
+    timeZone,
   }).format(new Date(iso));
 }
 
 // Splits an ISO instant into the "YYYY-MM-DD" / "HH:MM" wall-clock
-// values it represents in Europe/London, for prefilling the picker.
-function isoToLondonParts(iso: string): { date: string; time: string } {
+// values it represents in the BUSINESS's zone, for prefilling the
+// picker.
+//
+// This is the display half of the same round trip the server closes
+// with wallClockToInstant: the customer is shown business-local parts,
+// edits them, and the server reads them back in that same zone. Both
+// halves must name the same zone or resubmitting an unchanged time
+// would silently move the appointment.
+function isoToZonedParts(iso: string, timeZone: string): { date: string; time: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -51,6 +70,20 @@ function isoToLondonParts(iso: string): { date: string; time: string } {
   const map: Record<string, string> = {};
   for (const p of parts) map[p.type] = p.value;
   return { date: `${map.year}-${map.month}-${map.day}`, time: `${map.hour}:${map.minute}` };
+}
+
+/**
+ * The zone GET resolved for this booking.
+ *
+ * The fallback is defensive only — the route always sends a zone, using
+ * the same soft default when the organisation's own is unreadable — and
+ * it is the shared organisations.timezone default rather than a London
+ * assumption reintroduced here. Falling back to the DEVICE zone is what
+ * must not happen: Intl treats an undefined timeZone as local, which
+ * would put the picker on the customer's clock.
+ */
+function zoneOf(booking: BookingData | null): string {
+  return booking?.timezone || DEFAULT_ORG_TIMEZONE;
 }
 
 const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -84,7 +117,7 @@ export default function ManageBookingClient() {
         const json: BookingData = await res.json();
         setData(json);
         if (json.appointmentDatetime) {
-          const parts = isoToLondonParts(json.appointmentDatetime);
+          const parts = isoToZonedParts(json.appointmentDatetime, zoneOf(json));
           setRescheduleDate(parts.date);
           setRescheduleTime(parts.time);
         }
@@ -147,7 +180,7 @@ export default function ManageBookingClient() {
 
   function acceptSuggestedAlternative() {
     if (!suggestedAlternative) return;
-    const parts = isoToLondonParts(suggestedAlternative);
+    const parts = isoToZonedParts(suggestedAlternative, zoneOf(data));
     setRescheduleDate(parts.date);
     setRescheduleTime(parts.time);
     submitReschedule(parts.date, parts.time);
@@ -204,7 +237,9 @@ export default function ManageBookingClient() {
         <p className="text-slate-400 text-sm mb-6">with {data.businessName}</p>
 
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-6 text-sm">
-          <p className="text-white font-medium">{formatDisplayDate(data.appointmentDatetime)}</p>
+          <p className="text-white font-medium">
+            {formatDisplayDate(data.appointmentDatetime, zoneOf(data))}
+          </p>
           {data.serviceNeeded && <p className="text-slate-400 mt-1">{data.serviceNeeded}</p>}
         </div>
 
@@ -224,7 +259,7 @@ export default function ManageBookingClient() {
                   disabled={busy}
                   className="text-indigo-400 hover:text-indigo-300 font-medium underline disabled:opacity-50"
                 >
-                  Use {formatDisplayDate(suggestedAlternative)} instead
+                  Use {formatDisplayDate(suggestedAlternative, zoneOf(data))} instead
                 </button>
               </div>
             )}

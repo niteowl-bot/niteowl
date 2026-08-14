@@ -7,11 +7,17 @@ import {
   isWithinBusinessHours,
   isSlotAvailable,
   findNextAvailableSlot,
+  resolveOrgTimezone,
 } from "@/lib/availability";
 import {
   cancelAppointmentOnCalendar,
   rescheduleAppointmentOnCalendar,
 } from "@/lib/calendarSync";
+import {
+  DEFAULT_ORG_TIMEZONE,
+  isValidTimezone,
+  wallClockToInstant,
+} from "@/lib/calendar/timezone";
 
 // Public, unauthenticated route — a customer reaches this via the
 // manage-booking link in their confirmation email, with no logged-in
@@ -22,43 +28,11 @@ import {
 const LEAD_FIELDS =
   "id, org_id, name, email, phone, service_needed, appointment_datetime, status";
 
-// Converts a wall-clock date+time the customer picked (assumed to be in
-// the business's own timezone) into the correct UTC instant. A plain
-// `new Date("2026-07-10T14:00:00")` would be parsed in the server's
-// runtime timezone (UTC on Vercel), which is wrong for a UK business —
-// this instead finds the UTC instant that actually displays as that
-// wall-clock time in Europe/London, correctly handling the BST/GMT
-// offset for the specific date in question.
-function londonWallTimeToUtcIso(date: string, time: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
-    return null;
-  }
-
-  const naiveUtc = new Date(`${date}T${time}:00.000Z`);
-  if (isNaN(naiveUtc.getTime())) return null;
-
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/London",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  });
-
-  const parts = formatter.formatToParts(naiveUtc);
-  const map: Record<string, string> = {};
-  for (const p of parts) map[p.type] = p.value;
-
-  const shownAsLondon = new Date(
-    `${map.year}-${map.month}-${map.day}T${map.hour}:${map.minute}:${map.second}.000Z`
-  );
-
-  const offsetMs = naiveUtc.getTime() - shownAsLondon.getTime();
-  return new Date(naiveUtc.getTime() + offsetMs).toISOString();
-}
+// The wall-clock conversion this route used to own was hardcoded to
+// Europe/London and single-pass. Both are now the shared
+// wallClockToInstant's problem: it takes the org's IANA zone explicitly
+// and settles the offset twice, so a wall time near a DST transition
+// lands on the right side of it. Nothing here does offset arithmetic.
 
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
@@ -80,9 +54,24 @@ export async function GET(req: NextRequest) {
 
   const { data: org } = await supabase
     .from("organisations")
-    .select("business_name, appointment_duration_minutes, emergency_mode_enabled")
+    .select("business_name, appointment_duration_minutes, emergency_mode_enabled, timezone")
     .eq("id", lead.org_id)
     .maybeSingle();
+
+  // Every wall-clock time on the customer's page is read in this zone —
+  // the appointment it shows and the pickers it prefills — so that what
+  // the customer sees, and therefore what they send back, is the
+  // BUSINESS's clock rather than London's or their own device's.
+  //
+  // Rides on the organisations read above; no extra round trip. The
+  // fallback is deliberately soft, matching getOrgTimezone: a page that
+  // cannot render its own appointment is worse than one rendering it in
+  // the default zone. The WRITE path is where uncertainty is refused —
+  // POST resolves strictly and declines rather than guess.
+  const timezone =
+    org?.timezone && isValidTimezone(String(org.timezone))
+      ? String(org.timezone)
+      : DEFAULT_ORG_TIMEZONE;
 
   const { data: businessHours } = await supabase
     .from("business_hours")
@@ -98,6 +87,7 @@ export async function GET(req: NextRequest) {
     appointmentDurationMinutes: org?.appointment_duration_minutes ?? 60,
     emergencyModeEnabled: org?.emergency_mode_enabled ?? false,
     businessHours: businessHours ?? [],
+    timezone,
   });
 }
 
@@ -198,9 +188,42 @@ export async function POST(req: NextRequest) {
 
   if (action === "reschedule") {
     const { date, time } = body;
-    const newIso = londonWallTimeToUtcIso(date, time);
 
-    if (!newIso) {
+    // STRICT resolution, and the organisation is the ONLY authority.
+    //
+    // The customer picked a wall-clock time with no zone attached, so
+    // the zone is entirely our inference — and the wrong one is silent:
+    // it writes a real instant, at the wrong hour, into both the lead
+    // and the business's Google calendar, where the two then agree and
+    // nothing looks broken. Not knowing the zone therefore refuses,
+    // rather than falling back to a default that would be right only
+    // for UK and Irish businesses. Nothing from the browser is trusted
+    // here; the request carries no timezone and would not be believed
+    // if it did.
+    const { timezone, resolved } = await resolveOrgTimezone(lead.org_id);
+    if (!resolved) {
+      console.error(
+        `[bookings/manage] refusing to reschedule lead ${lead.id}: org ${lead.org_id} ` +
+          `has no usable timezone, so "${String(date)} ${String(time)}" cannot be ` +
+          `converted to an instant`
+      );
+      return NextResponse.json(
+        {
+          error:
+            "We can't change this booking online just now. Your original time is unchanged — please contact the business directly.",
+        },
+        { status: 503 }
+      );
+    }
+
+    // wallClockToInstant THROWS on anything that is not a zoneless
+    // "YYYY-MM-DDTHH:mm" — which is exactly the validation this route
+    // used to do with two regexes. Caught here so malformed input stays
+    // the 400 it has always been rather than becoming a 500.
+    let newIso: string;
+    try {
+      newIso = wallClockToInstant(`${date}T${time}`, timezone);
+    } catch {
       return NextResponse.json({ error: "Invalid date or time" }, { status: 400 });
     }
 
@@ -209,7 +232,10 @@ export async function POST(req: NextRequest) {
     // lead's own existing booking against itself and report the slot
     // as full.
     if (newIso !== lead.appointment_datetime) {
-      const hours = await isWithinBusinessHours(lead.org_id, newIso);
+      // The zone is already resolved for this request, so hand it over
+      // rather than making isWithinBusinessHours read organisations a
+      // second time. Same decision, one query fewer.
+      const hours = await isWithinBusinessHours(lead.org_id, newIso, timezone);
       if (!hours.isAvailable) {
         return NextResponse.json(
           { error: "That time is outside business hours.", reason: hours.reason },
