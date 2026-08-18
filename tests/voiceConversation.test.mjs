@@ -314,10 +314,23 @@ describe("conversation order — the job comes before the caller", () => {
       /do not restate it back to them either; the rule 11 recap is where they hear it again/
     );
     assert.match(prompt, /Do NOT repeat the recap, and do not restate a single unchanged detail/);
-    // One genuine reason to re-recap survives: the appointment itself.
+    // Two genuine reasons to re-recap survive: the SERVICE and the DATE.
+    //
+    // The TIME used to be a third, and a live call showed what that
+    // cost: a caller who moved 4 PM to 3 PM — changing one word — was
+    // read the whole address, email and phone summary back. A time-only
+    // change now re-states just the appointment sentence.
     assert.match(
       prompt,
-      /ONLY when what changed was the appointment itself — the date, the time or the service/
+      /ONLY when the SERVICE or the calendar DATE changed/
+    );
+    assert.match(
+      prompt,
+      /If ONLY THE TIME changed, re-state just the appointment sentence — the service, the date and the new time/
+    );
+    assert.match(
+      prompt,
+      /Never re-read the name, email, address or number when only the time moved/
     );
   });
 
