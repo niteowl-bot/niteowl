@@ -87,3 +87,36 @@ export function isCalendarEventCreationEnabled(
 
   return allowed.includes(orgId.trim().toLowerCase());
 }
+
+/**
+ * Whether a PHONE appointment may become a calendar-backed booking.
+ *
+ * The fifth level, and deliberately NOT a second organisation allowlist.
+ * `CALENDAR_EVENT_CREATION_ORG_IDS` above stays the single answer to
+ * "which businesses may have events written", because two lists drift:
+ * an org present in one and missing from the other produces silent
+ * channel asymmetry that is very hard to diagnose from the outside.
+ *
+ * What this adds is a CHANNEL switch, and it exists for one concrete
+ * reason — rollback. Without it, disabling voice booking would mean
+ * removing the org from the allowlist, which also disables the tested
+ * chat/widget write path and demotes those bookings to needs_review.
+ * Turning off the new thing would break the working thing.
+ *
+ * The two channels genuinely differ in blast radius. Chat books while
+ * the customer is reading the reply, so a wrong outcome is visible
+ * immediately. Voice writes AFTER the call has ended, unattended, and
+ * the caller was told the team would confirm — so a systematic fault
+ * writes into a real diary with nobody watching.
+ *
+ * Boolean, and `isTrue` demands the exact literal "true": unset, empty,
+ * "1", "yes", "TRUE" and a stray space all read as OFF. Same failure
+ * direction as every switch above it.
+ */
+export function isVoiceCalendarBookingEnabled(
+  orgId: string,
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  if (!isCalendarEventCreationEnabled(orgId, env)) return false;
+  return isTrue(env.VOICE_CALENDAR_BOOKING_ENABLED);
+}
