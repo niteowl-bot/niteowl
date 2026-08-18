@@ -861,7 +861,22 @@ export async function capturePartialLead(
   extracted: ExtractedLead,
   leadSource: string = "chat",
   needsReview: boolean = false,
-  conversationTranscript: string | null = null
+  conversationTranscript: string | null = null,
+  /**
+   * Where the work happens, for the CALENDAR EVENT only — never stored
+   * on the lead by this function.
+   *
+   * Optional and defaulted, so every existing caller is unaffected: the
+   * eight chat/widget call sites pass nothing and the event payload
+   * keeps the literal `null` it has always carried. Voice supplies the
+   * address the caller gave, because the lead's own copy is written
+   * afterwards and would arrive too late for the event.
+   *
+   * The UPDATE path does not use this — it already reads the address
+   * back from the lead's metadata, which is what makes a webhook replay
+   * consistent with the first pass.
+   */
+  serviceLocation: string | null = null
 ): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean; /** The appointment instant actually stored, so a reply can state it rather than guess. */ appointmentIso: string | null; /** Whether the lead genuinely ended up confirmed. */ booked: boolean; /** The customer named a date we will not guess at — the reply must ASK. Never set by an availability, calendar or lookup outcome; only by the datetime parser. */ needsClarification: boolean; /** The date we understood, when only the time is missing. Null when the date itself is what needs clarifying. */ clarificationDate: string | null }> {
 
 
@@ -1407,7 +1422,10 @@ export async function capturePartialLead(
           service: extracted.service ?? userMessage,
           name: extracted.name,
           email: extracted.email,
-          location: null,
+          // Null for chat and the widget, exactly as before. A phone
+          // booking carries the address the caller gave, so the event
+          // reaches the engineer's diary with somewhere to go.
+          location: serviceLocation,
         }
       );
       confirmedInsert = settled.status === "booked";

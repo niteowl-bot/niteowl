@@ -8,6 +8,7 @@ import {
   type LeadIntent,
 } from "@/lib/leadCapture";
 import { sendCallSummaryEmail } from "@/lib/email";
+import { isVoiceCalendarBookingEnabled } from "@/lib/integrations/flags";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
@@ -612,10 +613,48 @@ export async function processCallEnded(
     // The lead is still created: hasSubstance holds for any real
     // appointment request, so needsReview below carries it through on
     // the same path unconfirmed-service calls already take.
-    if (isAppointmentRequest) {
+    //
+    // ── The one exception: a calendar-backed phone booking ──────────
+    //
+    // When the gate below is open, the intent is LEFT ALONE so the call
+    // takes the same route chat does — and "booked" is then settled from
+    // Google's answer by settleCalendarBacking, never assigned here.
+    // isVoiceCalendarBookingEnabled requires the org write allowlist, so
+    // requiresCalendarBacking() downstream cannot be false: there is no
+    // path where lifting the downgrade produces a "booked" lead with no
+    // event behind it.
+    //
+    // Nothing is claimed to the caller either way. This runs AFTER the
+    // call has ended, and Remy has already said the team will confirm —
+    // so a successful write over-delivers on that, and every failure
+    // leaves exactly the request the caller was promised.
+    //
+    // Three narrowings, all deliberate:
+    //   - new_booking ONLY. Voice skips merge-layer 2, so every call
+    //     creates an isolated lead; a phone "reschedule" has nothing to
+    //     move and would book a SECOND appointment.
+    //   - the service must be named AND matched in the Knowledge Base.
+    //     serviceConfirmed DEFAULTS to true and the KB check only runs
+    //     for new_booking with a service, so testing it alone would let
+    //     a serviceless call through on the default. Rule 9 preserved:
+    //     an unlisted service is never implied to be on offer.
+    //   - the org must be allowlisted for writes AND the channel switch
+    //     must be on. Unset means off (see flags.ts).
+    const mayBookOnCalendar =
+      extracted.intent === "new_booking" &&
+      Boolean(extracted.service) &&
+      serviceConfirmed &&
+      isVoiceCalendarBookingEnabled(orgId);
+
+    if (isAppointmentRequest && !mayBookOnCalendar) {
       extracted.intent = "question";
       console.log(
         "[voice] appointment recorded as a request awaiting confirmation:",
+        event.providerCallId
+      );
+    } else if (mayBookOnCalendar) {
+      console.log(
+        "[voice] attempting a calendar-backed booking for call:",
         event.providerCallId
       );
     }
@@ -652,7 +691,15 @@ export async function processCallEnded(
         userMessage,
         extracted,
         "voice",
-        needsReview
+        needsReview,
+        null,
+        // Where the work happens, for the calendar event ONLY. The lead's
+        // own copy is written by recordLeadCallDetails below, which runs
+        // after this returns — too late for the event payload, which is
+        // built inside. Passing it here changes no write and adds no
+        // query; without it a phone booking reaches the engineer's diary
+        // with no address on it.
+        details?.service_address ?? null
       );
       leadId = captureResult.leadId;
 
