@@ -2,6 +2,37 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-18 (Architecture Part III — the compounding moat is history, and history is currently overwritten)
+
+**Documentation only. No production code, schema, SQL, RLS, flag, environment variable, dependency or provider was changed** — and none is requested. `docs/ARCHITECTURE.md` gained **Part III — Compounding Moat and Outcome Intelligence** (§17–33), extending Parts I and II rather than duplicating them; `CHECKLIST.md`'s architecture-map pointer was updated. Written against `c7d9b78`.
+
+### Why
+Parts I and II asked whether the architecture survives growth and survives its providers. Part III asks what is left once every capability in the product is commoditised. The answer is not "several AI specialists over shared data" — every component of that is purchasable in weeks to months. It is the accumulated record of **what was decided, what was done, and what followed**, which cannot be back-filled by anyone starting later.
+
+### The finding that matters — M1
+**NiteOwl records state, not history, and the state is destructively overwritten.** `leads` is mutated in place: status replaced, `appointment_datetime` overwritten on every reschedule, contact fields merged. There is **no revision table and no audit trigger on `leads`** — unlike `business_knowledge`, which has both. So how many times an appointment moved, who moved it, what was originally requested, and whether a cancelled customer came back are **permanently unanswerable for every booking already taken**.
+
+This re-prices the existing C3 finding (a returning customer's second booking overwrites their first): it is a correctness bug *and* the clearest case of history loss, destroying the record of the most valuable customer — the one who came back. **Cost went up; urgency did not.** Production holds test orgs only, so almost nothing has been lost yet. Settle it before the first paying business, not before the calendar work.
+
+### The finding that makes the rest cheap — M2
+**The decision record is already computed and then thrown away.** `calendarSync`'s seven outcomes, `checkBookingSlot`'s reason codes, `bookingOutcome.ts`, and `parseDatetimeToIso`'s `failed`/`needsClarification` produce outcome, evidence, alternatives and confidence at one choke point, at one instant — the exact shape of a decision record. They are used to phrase one reply and discarded. When this is eventually persisted it is a projection of known values, not new instrumentation.
+
+### What Part III adds
+Business Operating State named as a **read model, not a stored object**; the Outcome Spine's shape and six candidate event names, modelled on `voice_events` (`dedupe_key`, `occurred_at` vs `recorded_at`, `schema_version`, no provider names); Decision & Outcome Memory; a nine-level provenance vocabulary whose governing rule is **an inference may drive an action but may never silently become a fact**; four causal tiers (`caused_by` / `attributed_to` / `correlated_with` / `hypothesised`) with no automatic promotion; the Cross-Product Learning Contract (no product reads another's tables, no cross-product foreign keys, no synchronous cross-product call on a customer-facing path); the free-product staging model (no `org_id` until explicit consent); and one new provider guardrail — **never let a provider hold NiteOwl's memory** (hosted threads, managed conversation state, provider-side vector stores and memory features).
+
+### Decisions taken (owner-approved 2026-08-18)
+1. **C3's deadline is "before the first paying business", not "before the calendar work".** The calendar sequence keeps its priority.
+2. **Standing principle adopted — *record what cannot be recomputed*.** Configuration, inferences and projections can be rebuilt; a transition that was overwritten cannot. It is the single exception to §3.6's "collect nothing without a current use", and the two now stand together.
+3. **Provider-memory guardrail adopted.** No provider-hosted memory, threads or vector stores over tenant data; our database remains the system of record, and any provider-side index or embedding must be rebuildable from it alone.
+
+None of the three requires a code, schema or configuration change today.
+
+### Phasing
+**NOW: none.** Zero new tables, services, abstractions or providers are proposed for the current product; every recommendation is a decision, a naming convention or a documented seam. Ten PREPARE items (documentation), seven LATER items (each with a trigger), five MUCH LATER items requiring legitimate accumulated outcome data.
+
+### Remy's roadmap
+**Unchanged and explicitly verified** (§32). Calendar reliability remains the priority; Reception Intelligence and Dynamic Schedule Recovery stay behind it. The only intersections with current work are C3 (re-priced, still deferrable, still an owner decision) and P1 (`subject_type = 'appointment'`, already decided and implemented — confirmed correct for a second reason, since every future canonical reference inherits that identity).
+
 ## 2026-08-14 (Emails — the appointment time is announced on the business's clock, not London's)
 
 **PR #21 — `fix(email): use business timezone for appointment emails`. MERGED AND LIVE** via a normal GitHub merge commit, `7df5f622ba81bb0a9074fa5273e7aacfea6cee07` (branch commit `d6ef7dcc8d504ff37bf76c0e2d21aac65ca8bfeb`). The merge-triggered production deployment completed **Ready**, and `niteowlhq.com` returned **200**, served by that deployment. **953 tests pass / 0 fail / 0 skipped**, 172 suites; `tsc --noEmit` clean; ESLint clean on all four changed production files.

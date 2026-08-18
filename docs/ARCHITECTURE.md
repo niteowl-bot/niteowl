@@ -6,10 +6,15 @@ changed, no working code was refactored. Written 2026-08-08 against commit `8b48
 
 **Part I** (§1–5) is the future-infrastructure guardrail review: architecture, tenancy,
 entity model, NiteOwl Core and Business Graph compatibility.
-**Part II** (§6–13) extends it with the provider-independence and resilience review —
+**Part II** (§6–16) extends it with the provider-independence and resilience review —
 provider inventory and risk, failure isolation, truthful degradation, idempotency,
 source of truth, portability and recovery. Part II does not repeat Part I; where a
 finding belongs to both, Part II references it by its Part I label (C1, C2, C3, P1).
+**Part III** (§17–33, added 2026-08-18) extends both with the compounding-moat and
+outcome-intelligence review: business operating state, the outcome spine, decision and
+outcome memory, provenance, the cross-product learning contract, the free-product
+assessment layer, and what NiteOwl must own rather than rent. Part III likewise does not
+repeat Parts I and II; it references their labels (C3, P1, L1, L2, L4, L5, R3, B3).
 
 Governing principle for every recommendation below:
 
@@ -1146,4 +1151,1036 @@ calendar design rests on *"cannot check is never free."* That rule is enforced a
 Google, and enforced on the phone — but a database blip on the website path still produces
 a confirmed booking that nothing ever checked. The rule should hold against every provider
 below Remy, including the one Remy is built on.
+
+---
+---
+
+# Part III — Compounding Moat and Outcome Intelligence
+
+Added 2026-08-18 against commit `c7d9b78`. Same rules as Parts I and II:
+**documentation only.** No schema was created, no table was added, no route was changed,
+no flag was introduced, no working code was touched. Nothing below was implemented, and
+nothing below asks for implementation now.
+
+Governing principle for this part:
+
+> **MINIMUM CHANGE NOW, MAXIMUM OPTIONALITY, RECOVERABILITY AND COMPOUNDING
+> INTELLIGENCE LATER.**
+
+Parts I and II asked *can this architecture survive growth, and can it survive its
+providers?* Part III asks a different question: **when every capability in this product
+has been commoditised, what is left that a competitor cannot buy?**
+
+The eight-product NiteOwl line (Remy, Ledger, Atlas, Scout, Pulse, Forge, Nova, Beacon)
+is referenced here only to mark boundaries. **None of them is built, scaffolded or
+depended on anywhere in this repository, and nothing in Part III creates a dependency on
+one.** The current development priority is unchanged and is restated in §32: Remy's
+calendar reliability.
+
+---
+
+## 17. What the competitive review actually exposes
+
+The strategic finding to be tested is that large competitors are combining AI agents with
+proprietary native workflow data — field-service platforms pairing voice AI with dispatch,
+CRM platforms pairing agents with pipeline data, accounting platforms pairing agents with
+ledgers, suites pairing many agents with one customer record.
+
+Applying Part I's own abstraction discipline to that claim gives an uncomfortable but
+correct result. **"Several AI specialists over shared business data" is not a moat**,
+because every component of it is purchasable:
+
+| Component | Time for a funded competitor to reproduce | Verdict |
+|---|---|---|
+| An AI receptionist that answers and books | Weeks | Commodity |
+| Voice, telephony, transcription | Bought, not built | Commodity |
+| Calendar/CRM/accounting integrations | Weeks each | Commodity |
+| A shared customer/business record across products | Months | Table stakes |
+| Prompts, RAG, dashboards, lead scoring | Days to weeks | Commodity |
+| **A five-year record of what this business promised, what it actually delivered, and which promises produced repeat revenue** | **Cannot be bought at any price** | **Candidate moat** |
+
+Only the last line survives the copy test in §25, and it survives for one reason: it is
+not information *about* a business, it is information *produced by* a business over time,
+which no amount of funding compresses.
+
+That yields the honest verdict of this part:
+
+> **NiteOwl's moat is not that several products share data. It is that NiteOwl records
+> what was decided, what was done and what followed — and that this record cannot be
+> back-filled by anyone who starts later.**
+
+And it yields the finding that matters most today, which is not about anything NiteOwl
+lacks. It is about something NiteOwl is actively destroying.
+
+---
+
+## 18. Existing architecture assessment — what already supports this, and must not be touched
+
+Before the gaps, the assets. A surprising amount of what an outcome-intelligence
+architecture needs is already present, because it was built for other reasons and built
+well. **None of the following should be redesigned to serve Part III.**
+
+| Asset that already exists | Why Part III depends on it |
+|---|---|
+| **One booking engine behind four channels** (§1.2) | Outcome data is only comparable if every channel produced it the same way. A second booking path would fork the history, not just the code |
+| **`org_id` on every business-owned table, two deliberate trust models** (§1.4) | Tenant isolation is the precondition for *any* cross-tenant aggregation ever being permissible. It is sound and was verified against production |
+| **Capability contracts, not wrapped vendor APIs** (§3.8) | The event and decision models can be expressed in NiteOwl's own terms because the calendar layer already proved the pattern |
+| **`voice_events`: raw payload stored before processing, `dedupe_key` unique, `processed_at` for replay** | This *is* an append-only event log with idempotency and replay. The outcome spine should copy it, not invent a rival |
+| **`integration_jobs`: dedupe key, attempts, backoff, payload snapshot** (B3) | The durable-work pattern an outcome pipeline would otherwise reinvent. Built, migrated, live, unused |
+| **`integration_links.subject_type` polymorphic, `subject_id` uuid** (P1) | Canonical entity references across products need exactly this shape, and the decision to write `subject_type = 'appointment'` has already been taken |
+| **Knowledge import: staged → confidence → review → approve → publish, with revisions and an audit trigger** | A **working provenance pipeline in this codebase**. §20.6 asks for nothing that this has not already demonstrated |
+| **`business_knowledge_revisions`** | Proof that the team already knows how to keep history for a mutable entity |
+| **Reason codes computed at every choke point** — `CalendarConfirmOutcome`, `BookingOutcome`, `UnavailableReason`, `parseDatetimeToIso`'s `failed`/`needsClarification`, `checkBookingSlot`'s `lookup_failed` | §19/M2. The hard part of a decision record is already computed. It is then discarded |
+| **Truthful degradation everywhere** (§11) | An outcome record built on fabricated confirmations would be worse than none. "Cannot check is never free" is what makes the eventual history trustworthy |
+| **`sales_leads` has no `org_id`** (§3.7) | NiteOwl's own funnel is already separated from tenant data — the boundary a free-product platform must respect |
+
+Two further properties are load-bearing for everything below and are stated so they are
+not weakened by accident:
+
+1. **Consequential actions funnel through single choke points** — `capturePartialLead` for
+   booking, `calendarService`/`calendarSync` for the calendar, `lib/email.ts` for
+   messaging. Every event and decision Part III describes can be emitted from a place that
+   already exists. This is the single biggest reason the eventual work is small.
+2. **Idempotency is designed in, not bolted on** (§13 scorecard). An event log without
+   idempotency becomes a corpus of duplicates that no learning can survive. This codebase
+   already has five independent guards.
+
+---
+
+## 19. Gap analysis
+
+Six genuine gaps. They are labelled **M1–M6** and continue the existing scheme (Part I
+C/P/L, Part II R/B/L).
+
+### M1 — NiteOwl records state, not history, and the state is destructively overwritten
+
+**This is the finding of Part III, and it costs nothing to see.**
+
+`leads` is mutated in place. A lead moves `new → qualified → booked`, its
+`appointment_datetime` is overwritten on every reschedule, its contact fields are merged
+from later messages, and its `status` is replaced. There is **no revision table, no audit
+trigger and no history on `leads`** — unlike `business_knowledge`, which has both.
+
+So today the following questions are **unanswerable, permanently, for every booking
+already taken**:
+
+- How many times was this appointment moved before it happened?
+- Was it moved by the customer, the business, or Remy?
+- What time was originally requested, and what was accepted instead?
+- How long between enquiry and booking?
+- Did the customer who cancelled ever come back?
+- Which offered alternative did callers accept, and which did they refuse?
+
+Every one of those is raw material for Reception Intelligence, Dynamic Schedule Recovery
+and every product-level moat in §25. **None of it is recoverable later.** Configuration
+can be re-entered, inferences can be recomputed, models can be retrained — but a
+transition that was overwritten is gone.
+
+This also **reprices C3**. Part I found that a returning customer's second booking
+overwrites their first, and classified it as a correctness bug affecting one behaviour.
+It is that, and it is also the clearest instance of M1: the *most valuable customer* —
+the one who came back — is precisely the one whose history is destroyed.
+
+**It does not follow that anything must change today**, and §30 does not ask for it.
+Production holds test orgs only, so almost nothing of value has been lost yet. What
+follows is that the window in which this is cheap is open now and closes with the first
+paying business.
+
+### M2 — The decision is computed and then thrown away
+
+Remy already decides things and already knows why. `checkBookingSlot` returns a reason.
+`calendarSync` returns one of seven outcomes and the caller derives the lead's status
+*from* it. `bookingOutcome.ts` exists specifically to state what was actually persisted.
+`parseDatetimeToIso` reports `failed` and `needsClarification` rather than guessing.
+
+All of it is used to shape one reply to one customer, and then discarded. Nothing records
+that on 14 August Remy refused a 10:00 request because the external lookup failed, offered
+10:30 instead, and the customer accepted. **The evidence, the confidence, the alternatives
+considered and the outcome all exist in memory at the same instant** — which is the exact
+shape of a decision record, and the reason §20.5 is a small piece of work rather than a
+research project.
+
+### M3 — There is no canonical vocabulary for "what happened"
+
+Confirmed by inspection: no `events` table, no emitter, no event type constants. Part I
+raised this as L4 with the trigger "a second consumer of what happened". Part III's
+competitive framing raises the stakes but **not the urgency** — the correct response is
+still to define the vocabulary and *not* build the pipeline (§30, PREPARE).
+
+The risk of leaving it entirely undefined is specific and worth naming: when a second
+product or an analytics need does arrive, the fastest path will be to read Remy's tables
+directly. Part I §3.3 already forbids that. A named vocabulary is what makes the
+prohibition actionable rather than aspirational.
+
+### M4 — Nothing distinguishes an observed fact from an inferred one, outside the Knowledge Base
+
+The knowledge-import pipeline models provenance properly. **Nothing else does.** A time
+extracted by `gpt-4o-mini` from a phone transcript lands in `appointment_datetime` in a
+column shaped identically to one the owner typed. `voice_calls` extraction is inferred.
+Lead names and emails from chat are inferred. None of them carries a source, a confidence
+or a verification state.
+
+Today this is tolerable because the inferences are immediately acted on and immediately
+visible to a human — a wrong appointment time produces a wrong confirmation email that
+someone notices. It stops being tolerable the moment inferences are *accumulated* rather
+than acted on, because at that point a model's mistake becomes a permanent business fact
+that a later model learns from. That is the single most damaging failure mode available
+to this architecture, and §20.6 exists to prevent it.
+
+### M5 — Business Operating State has no home, and the current substitute is a query
+
+"What is true right now?" is currently answered by re-deriving it: business hours plus
+booked leads plus a Google free/busy call, computed per request. For a single-location,
+single-staff, one-calendar business that is **correct and should not be changed** — the
+derivation is cheap and always fresh.
+
+The gap is conceptual rather than urgent. There is no place to express *running late*,
+*capacity temporarily reduced*, *staff member off*, *travel time between two jobs*,
+*a slot held pending confirmation*, or *this appointment's real duration is uncertain* —
+and Dynamic Schedule Recovery is made entirely of those. §20.4 defines the concept and
+§30 defers the build, because the honest trigger is L1/L2 (appointment identity and real
+durations), not a new subsystem.
+
+### M6 — No permission model, and Part III raises the cost of not having one
+
+Part I L5 deferred permissions on the sound reasoning that Remy takes no autonomous
+consequential action, so the model would govern an empty set. **That reasoning still
+holds and no change is recommended.**
+
+Part III adds a second consumer that L5 did not anticipate: an intelligence layer is a
+*read* privilege problem as much as an action problem. "Which of Nova's personal signals
+may Atlas see?" and "may a cross-product recommendation cite evidence the requesting
+product could not read directly?" are permission questions, and answering them by
+convention rather than by mechanism is how tenant and personal boundaries erode. The
+mechanism is not needed until the second product exists; the *rule* is needed before the
+first cross-product read, and is stated in §24.
+
+---
+
+## 20. Recommended architecture
+
+Nine layers. Each is a **conceptual boundary**, not a table, a service or a package. The
+existing application implements a subset of them today by other means, and that is
+correct — the value of naming them is that future work lands in the right place instead of
+being bolted onto `leads`.
+
+```
+                       ┌─────────────────────────────────────────────┐
+                       │  NiteOwl Core (conceptual — not extracted)  │
+   ┌───────────────────┤  identity · graph · events · decisions ·    │
+   │                   │  provenance · permissions · learning        │
+   │                   └─────────────────────────────────────────────┘
+   │
+   │  1. Business Identity      who the tenant is                 (exists: organisations)
+   │  2. Business Graph         what the business IS              (partly: leads/hours/KB)
+   │  3. Business Operating     what is TRUE RIGHT NOW            (derived; no home — M5)
+   │     State
+   │  4. Outcome Spine          what HAPPENED                     (absent — M3)
+   │  5. Decision & Outcome     what we DECIDED, why, and what    (computed then discarded
+   │     Memory                 followed                           — M2)
+   │  6. Provenance & Confidence  how do we KNOW                  (KB only — M4)
+   │  7. Permissions & Classification  who may see or do          (absent — M6/L5)
+   │  8. Business Memory        durable institutional knowledge   (business_knowledge)
+   │  9. Learning Layer         which decisions actually worked   (MUCH LATER)
+   └────────────────────────────────────────────────────────────────────────────────
+```
+
+### 20.1 Business Identity
+
+`organisations.id` is the tenant, and it should remain the only business identity NiteOwl
+ever has. Part I L7 (membership) and Part II §12 (Supabase Auth lock-in) already cover the
+open questions and neither changes here.
+
+One rule Part III adds, because eight products make it violable for the first time:
+**no product may mint its own business id.** A future product joins by referencing
+`org_id`; it does not create a parallel "account" concept that later has to be reconciled.
+Reconciling two identity spaces after both have history is among the most expensive
+mistakes available in this design.
+
+### 20.2 Business Graph — *what the business is*
+
+Unchanged from Part I §3.1, restated for completeness: a **modelling target, not a storage
+technology**. Relational Postgres remains correct; nothing here argues for a graph
+database, and adding one would be exactly the speculative infrastructure the guardrail
+forbids.
+
+Eventual entities: business, locations, staff, roles, customers, suppliers, services,
+products, resources, assets, policies, schedules, territories, channels, commercial
+relationships, operational dependencies. Today three of those (customer, lead,
+appointment) are one `leads` row — the C3/L1 collapse.
+
+Two rules:
+
+- **The Graph belongs to Core, not to a product.** Remy contributes customers and
+  appointments; it does not own the definition of a customer. The first product to declare
+  "the customers table is mine" is the moment the suite becomes a monolith.
+- **Products own their specialist entities permanently.** Booking rules, availability,
+  reception behaviour and prompts are Remy's and stay Remy's (§4, §14).
+
+### 20.3 Why the Graph is not enough
+
+The Graph says a staff member exists and works Tuesdays. It cannot say that they are
+running forty minutes late, that the 15:00 job has uncertain duration, or that a slot is
+held pending a caller's confirmation. Those are the facts every scheduling decision
+actually turns on, and they have different lifetimes, different truth conditions and
+different failure modes from the Graph's.
+
+### 20.4 Business Operating State — *what is true right now*
+
+**Keep the name, with one qualifier that changes how it gets built:**
+
+> **Business Operating State is a read model — a projection over durable facts and
+> events — not a stored object.**
+
+The name is right; the danger is that it *sounds* like a table, and a single mutable
+`business_state` row per org would be the worst outcome available: unauditable,
+racy, impossible to reconstruct, and stale in exactly the situations that matter. The
+qualifier is the whole design.
+
+Four categories, each with its own truth rule:
+
+| Category | Example | Lifetime | Source of truth |
+|---|---|---|---|
+| **Durable fact** | Opening hours, staff roster, service list | Until changed | The Graph / Operating Profile (§3.2) |
+| **Commitment** | A booked appointment; a held slot | Until fulfilled, moved or cancelled | The record itself (`leads` today) |
+| **Observation** | Running 40 min late; van broken down; staff off sick | **Expires** — must carry a validity window | An event, with provenance |
+| **Derived** | Capacity remaining at 15:00; next available slot | Computed per query, never stored authoritatively | Recomputation |
+
+Design constraints, all of which today's code already satisfies by accident and should
+satisfy deliberately:
+
+- **Derived state is recomputed, not cached, until measurement says otherwise.** The
+  current per-request derivation is correct and Part III recommends no change to it.
+- **Every observation expires.** "Running late" with no expiry is a permanent lie the
+  moment the day ends. An observation without a validity window must not be storable.
+- **State is reconstructible from events plus durable facts.** If the projection is ever
+  materialised, it must be rebuildable by replay — which is why the Outcome Spine (§20.5)
+  precedes any materialisation, not the reverse.
+- **Tenant-scoped, always.** No cross-org state object exists, ever.
+
+The relationship, stated once:
+
+> **The Graph is what changes when the business changes. Operating State is what changes
+> when the day changes. History (§20.5) is what never changes at all.**
+
+### 20.5 The Outcome Spine — canonical events
+
+One append-only, tenant-scoped record of business-meaningful things that happened.
+**Not an event bus.** Part I §3.3 already ruled: a table plus the existing `after()`
+pattern is sufficient for a single application, and a broker would be infrastructure with
+no consumer. Part III does not overturn that — it only names what the table would hold.
+
+**Shape** (conceptual; deliberately close to `voice_events`, which already works):
+
+| Field | Why |
+|---|---|
+| `org_id` | Tenant. Non-negotiable, on every row |
+| `event_type` | Canonical name — see conventions below |
+| `schema_version` | Events outlive the code that wrote them |
+| `occurred_at` / `recorded_at` | **Both.** They differ for a phone call processed after it ended, a webhook replay, or any back-fill. Learning that conflates them will draw false conclusions about latency and sequence |
+| `source_product` | `remy` today, permanently |
+| `source_provider` | `google`, `vapi`, `resend`, or null when NiteOwl itself is the source |
+| `actor_type` / `actor_id` | `customer` / `owner` / `staff` / `system` / `ai`. **The distinction between a human and a model acting is the one an audit will most want** |
+| `subject_type` / `subject_id` | Canonical entity reference. Uses the **same identity P1 already fixed** — `appointment`, not `lead`, for anything appointment-shaped |
+| `correlation_id` | The whole customer episode: enquiry → booking → reminder → completion |
+| `causation_id` | The immediate prior event. Cheap, and the only honest basis for deterministic causal links (§23) |
+| `dedupe_key` (unique) | Copies `voice_events`. Without it, retries corrupt every count that follows |
+| `confidence` + `provenance` | Null for observed facts; populated when the event asserts something inferred (§20.6) |
+| `data_classification` | `operational` / `personal` / `sensitive` / `financial`. Cheaper to assign at write time than to retrofit before the first data-subject request |
+| `payload` jsonb | Type-specific detail, kept small |
+
+**Naming conventions** — chosen so the vocabulary stays governable:
+
+- `noun.past_tense_verb`, always past tense: `appointment.booked`, not `book_appointment`.
+  An event is a fact, and facts do not take imperatives.
+- The noun is a **canonical entity**, not a product concept. `appointment.rescheduled`,
+  never `remy_lead_updated`. If a name only makes sense inside one product, it is an
+  internal detail and does not belong on the spine.
+- **Never name an event after a provider.** No `google.event_created`. Providers map in
+  through adapters; if Google is replaced, the history must not need rewriting.
+- **No event without a consumer, with one exception**: information that *cannot be
+  recomputed later*. That exception is the whole point of §19/M1 and is stated as a
+  principle in §30.
+
+**Volume discipline.** An event per HTTP request is telemetry, not history — that is
+Sentry's and Vercel's job, and duplicating it here is the "uncontrolled event growth" risk
+in §31. The spine records **business-meaningful transitions only**, which for Remy today
+would be well under ten types (§22) and a handful of rows per booking.
+
+### 20.6 Provenance and confidence — the rule that protects everything else
+
+One rule, and it is the most important sentence in Part III:
+
+> **An inference may drive an action. An inference may never silently become a fact.**
+
+Nine source types, in descending trust:
+
+| Source type | Example today | May become a durable fact? |
+|---|---|---|
+| `verified` | Owner confirmed in the dashboard; provider-confirmed write | Yes |
+| `business_provided` | Owner typed it into settings | Yes |
+| `provider_reported` | Google says the event exists | Yes, attributed to the provider |
+| `observed` | A call arrived; an email was delivered | Yes — it happened |
+| `derived_deterministic` | Capacity remaining; overlap computation | Yes, and recomputable |
+| `ai_inferred` | Datetime parsed from a transcript; extracted name | **Only after confirmation** |
+| `ai_predicted` | "This customer is likely to churn" | **Never** |
+| `recommended` | "Offer 10:30 instead" | Never — it is a proposal |
+| `assumed` | Default duration standing in for a real one | Never — and must be visible as an assumption |
+
+Carried alongside where relevant: `source_product`, `provider`, `model` + `model_version`,
+`observed_at`, `valid_until`, `verification_state`, supporting and contradicting evidence
+references, and `data_classification`.
+
+**This has already been built once in this codebase.** The knowledge-import pipeline —
+staged item with a confidence score → owner review → approve → publish → revision history
+— is precisely the `ai_inferred → verified` promotion path. Reuse that shape; do not
+invent a parallel scheme (Part I §3.6 says the same thing, and Part III only sharpens why).
+
+The failure this prevents is specific: a model extracts "prefers morning appointments"
+from one ambiguous sentence; it is stored as a customer preference; six months later a
+second model learns from a corpus in which that guess is indistinguishable from a
+statement the customer actually made. Nothing downstream can undo it, because the evidence
+that it was ever a guess was never written down. **Confidence must be stored at the moment
+of inference or it is unrecoverable** — the same argument as M1, applied to belief rather
+than to history.
+
+### 20.7 Decision & Outcome Memory
+
+The record of a judgement NiteOwl made. Distinct from an event: an event says the
+appointment was booked; a decision record says *why 10:30 was offered when 10:00 was
+asked for, what was known at the time, how confident we were, whether a human had to
+approve it, and what became of it three months later.*
+
+Conceptual fields, pruned to what §25's learning loops genuinely need:
+
+| Group | Fields |
+|---|---|
+| Identity | `org_id`, `decision_id`, `decision_type`, `originating_product`, `decided_at` |
+| Subject | canonical entity references (`subject_type`/`subject_id`), `correlation_id` |
+| Content | `action_taken`, `alternatives_considered` (only where a real choice existed), `reason_codes` (**enumerated, not prose**), `explanation` |
+| Basis | `evidence_refs` (events, records, provider responses), `confidence`, `provenance` |
+| Authority | `authority_level` (observe / recommend / approval-required / automatic), `approval_required`, `approved_by`, `approved_at` |
+| Execution | `action_status`, `resulting_event_ids` |
+| Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version` |
+| Traceability | `model`, `model_version`, `policy_version`, `schema_version` |
+
+Three rules keep this from becoming a research project:
+
+1. **`reason_codes` are enumerated, and the enumeration already exists.**
+   `lookup_failed`, `no_hours_configured`, `capacity_full`, `external_conflict`,
+   `needs_clarification`, `unverified` are live values in today's code. Free-text
+   explanations are for humans; only codes are learnable.
+2. **Write the decision at the choke point, once.** `calendarSync` already computes
+   outcome, evidence, alternative and confidence in one place at one instant (M2). A
+   decision record is a projection of what that function already knows.
+3. **The outcome is filled in later, by a separate process, and may stay empty forever.**
+   A decision with no outcome is normal and honest. A decision with a *guessed* outcome is
+   corruption.
+
+### 20.8 Permissions and classification
+
+No mechanism is recommended now (M6/L5 stand). Three rules are, because they are free
+today and expensive later:
+
+- **Every stored assertion carries a data classification.** Retrofitting classification
+  across an accumulated corpus is the kind of work that stops a product for a quarter.
+- **Personal-scope data never widens by default.** Nova's personal execution signals are
+  the clearest case: personal → business-wide must be an explicit, recorded, revocable
+  consent, never a side effect of an employee using a product.
+- **Cross-product reads are permissioned at the boundary, not at the table.** §24.
+
+### 20.9 Business Memory and the Learning Layer
+
+Business Memory is durable institutional knowledge — what the business is, how it
+operates, what it has learned about its own customers. `business_knowledge` is today's
+implementation and it already has revisions, audit and review.
+
+The Learning Layer — "which kinds of recommendation actually worked" — is **MUCH LATER**
+and requires the outcome data that does not yet exist. The only thing to decide now is
+where it will sit: **it consumes Decision & Outcome Memory and produces new decision
+inputs; it never writes to the Graph or to Business Memory directly.** A learner that can
+edit the facts it learns from will eventually launder its own predictions into the record.
+
+---
+
+## 21. Data flow
+
+```mermaid
+flowchart TB
+    subgraph Providers["Providers — capabilities only, never the record"]
+        GC[Google Calendar]:::prov
+        VAPI[Vapi telephony]:::prov
+        AI[OpenAI]:::prov
+        RS[Resend]:::prov
+    end
+
+    subgraph Adapters["NiteOwl adapters — provider terms in, NiteOwl terms out"]
+        CAP[CalendarCapability<br/>integrationFetch · IntegrationError]:::own
+        VAD[lib/voice/vapi.ts]:::own
+        MAIL[lib/email.ts]:::own
+    end
+
+    subgraph Product["Remy — product domain, permanently Remy's"]
+        CH[Channels: widget · chat · booking page · phone]:::own
+        ENG[Booking engine<br/>availability · capacity · hours]:::own
+        SYNC[calendarSync — the write choke point]:::own
+        CAPTURE[capturePartialLead — the booking choke point]:::own
+    end
+
+    subgraph Core["NiteOwl Core — conceptual, NOT extracted today"]
+        ID[Business Identity<br/>organisations.id]:::core
+        GRAPH[Business Graph<br/>what the business IS]:::core
+        STATE[Business Operating State<br/>read model — what is TRUE NOW]:::future
+        SPINE[(Outcome Spine<br/>append-only canonical events)]:::future
+        DEC[(Decision &amp; Outcome Memory)]:::future
+        PROV[Provenance · Confidence · Classification]:::future
+        PERM[Permissions · least privilege]:::future
+        MEM[Business Memory<br/>business_knowledge]:::core
+        LEARN[Learning Layer — MUCH LATER]:::future
+    end
+
+    subgraph Free["Free products — separate namespace, no org_id until consent"]
+        TOOL[Public tool UI]:::free
+        SESS[Temporary assessment session<br/>TTL · anonymous]:::free
+        DIAG[Diagnostic engine → findings]:::free
+        PROMO{{Explicit consent<br/>= the ONLY promotion path}}:::gate
+    end
+
+    GC <--> CAP
+    VAPI <--> VAD
+    AI --> ENG
+    MAIL --> RS
+
+    CH --> CAPTURE --> ENG
+    ENG --> SYNC --> CAP
+    CAPTURE --> MAIL
+
+    CAPTURE -. emit .-> SPINE
+    SYNC -. emit .-> SPINE
+    SYNC -. "reason codes already computed" .-> DEC
+    VAD -. emit .-> SPINE
+
+    ID --> GRAPH
+    GRAPH --> STATE
+    SPINE --> STATE
+    SPINE --> DEC
+    PROV -.governs.-> SPINE
+    PROV -.governs.-> DEC
+    PROV -.governs.-> GRAPH
+    PERM -.governs.-> DEC
+    PERM -.governs.-> GRAPH
+    DEC --> LEARN
+    LEARN -. "proposals only — never writes facts" .-> DEC
+    MEM --> ENG
+
+    TOOL --> SESS --> DIAG --> PROMO
+    PROMO -->|consent recorded| GRAPH
+    PROMO -->|consent recorded| SPINE
+    PROMO -.->|"no consent → expires"| SESS
+
+    subgraph Other["Other products — NONE BUILT"]
+        P2[Scout · Ledger · Atlas · Pulse<br/>Forge · Nova · Beacon]:::none
+    end
+    SPINE <-. "canonical events + permissioned<br/>derived claims ONLY" .-> P2
+
+    classDef prov fill:#fde8e8,stroke:#c53030,color:#1a202c
+    classDef own fill:#e6f4ea,stroke:#2f855a,color:#1a202c
+    classDef core fill:#e8f0fe,stroke:#2b6cb0,color:#1a202c
+    classDef future fill:#f7fafc,stroke:#718096,stroke-dasharray:4 3,color:#1a202c
+    classDef free fill:#fffaf0,stroke:#b7791f,color:#1a202c
+    classDef gate fill:#fefcbf,stroke:#975a16,color:#1a202c
+    classDef none fill:#ffffff,stroke:#cbd5e0,stroke-dasharray:2 2,color:#4a5568
+```
+
+Solid arrows exist today. **Dashed arrows and dashed boxes do not exist and are not to be
+built now.**
+
+---
+
+## 22. Canonical event and decision examples
+
+Deliberately few. **These are illustrations of shape, not a schema to implement**, and the
+list is short on purpose — a hundred event types defined before a consumer exists is a
+hundred guesses.
+
+Six events would cover everything Remy does today that is plausibly meaningful outside
+Remy:
+
+`customer.identified` · `enquiry.received` · `appointment.requested` ·
+`appointment.booked` · `appointment.rescheduled` · `appointment.cancelled`
+
+Everything else Remy does — call ringing, transcript processed, knowledge published,
+capacity checked — is internal detail and does not belong on the spine (Part I §3.3 drew
+the same line).
+
+**Event example**
+
+```jsonc
+{
+  "org_id": "e3a9ae40-…",
+  "event_type": "appointment.booked",
+  "schema_version": 1,
+  "occurred_at": "2026-08-18T09:14:22Z",   // when the customer confirmed
+  "recorded_at": "2026-08-18T09:14:23Z",   // when we wrote it — differs on replay
+  "source_product": "remy",
+  "source_provider": "google",             // the write was provider-confirmed
+  "actor_type": "customer",
+  "subject_type": "appointment",           // P1's identity, not "lead"
+  "subject_id": "b21f…",
+  "correlation_id": "conv_8f2c…",          // the whole episode
+  "causation_id": "evt_…",                 // appointment.requested
+  "dedupe_key": "appointment.booked:b21f…:1755508462000",
+  "data_classification": "personal",
+  "payload": {
+    "starts_at": "2026-08-20T13:00:00Z",
+    "business_timezone": "Europe/London",  // stored UTC, interpreted business-local
+    "channel": "web_widget",
+    "calendar_confirmed": true             // "booked" only if Google said so
+  }
+}
+```
+
+**Decision example** — the same episode, one layer up. Every value below is *already
+computed* by `checkBookingSlot` and `calendarSync`; none of it requires new inference:
+
+```jsonc
+{
+  "org_id": "e3a9ae40-…",
+  "decision_id": "dec_…",
+  "decision_type": "appointment.alternative_offered",
+  "originating_product": "remy",
+  "decided_at": "2026-08-18T09:13:58Z",
+  "subject_type": "appointment",
+  "subject_id": "b21f…",
+  "correlation_id": "conv_8f2c…",
+  "action_taken": "offer_alternative",
+  "alternatives_considered": [
+    { "starts_at": "2026-08-20T12:00:00Z", "rejected_because": "external_conflict" },
+    { "starts_at": "2026-08-20T13:00:00Z", "offered": true }
+  ],
+  "reason_codes": ["external_conflict"],   // an existing live value, not a new vocabulary
+  "evidence_refs": [
+    { "type": "provider_response", "provider": "google", "capability": "freebusy",
+      "observed_at": "2026-08-18T09:13:57Z" },
+    { "type": "internal_capacity", "result": "available" }
+  ],
+  "confidence": 1.0,                        // deterministic — an engine result, not a model
+  "provenance": "derived_deterministic",
+  "authority_level": "automatic",
+  "approval_required": false,
+  "action_status": "completed",
+  "resulting_event_ids": ["evt_appointment_booked_…"],
+  "outcome_refs": [],                       // empty, honestly, until the job completes
+  "model": null,                            // no model participated in this decision
+  "policy_version": "booking-rules-2026-08"
+}
+```
+
+Note what the second document makes possible that nothing today can answer: *when Remy
+offers an alternative, how often is it accepted — and do those appointments get kept?*
+That is Reception Intelligence's first real question, and it needs no new data collection
+beyond persisting what already exists.
+
+---
+
+## 23. Action → outcome linking, without lying about causation
+
+The chain the moat depends on:
+
+```
+signal → interpretation → recommendation → decision → action → outcome
+```
+
+The temptation is to store this as one causal graph. **That would be the most damaging
+possible form of overreach**, because a stored claim of causation is indistinguishable
+from a measured one once it is a row in a table.
+
+Four link tiers, each with a different evidential standard, and **no automatic promotion
+between them**:
+
+| Tier | Meaning | Standard | Example |
+|---|---|---|---|
+| `caused_by` | The system knows it, because the system did it | Deterministic; same execution path or provider confirmation | `appointment.booked` caused by `decision:offer_alternative` |
+| `attributed_to` | A stated rule assigned it | Explicit attribution window + `attribution_model_version` recorded | Revenue attributed to a campaign within a 30-day window |
+| `correlated_with` | Observed together, above a threshold | Sample size and time window stored with the claim | "Same-day callbacks correlate with higher booking rates" |
+| `hypothesised` | A model proposed it | Never displayed as fact; requires evidence to move tiers | "Thursday cancellations may be weather-driven" |
+
+Rules:
+
+- **A link's tier is stored, and every surface that displays it must display the tier.**
+  Atlas presenting a `correlated_with` claim as "X caused Y" is a product bug of the most
+  expensive kind — it destroys trust in the entire intelligence layer at once.
+- **Attribution models are versioned, and re-attribution never rewrites history.** It
+  produces a new attribution row referencing the same events. Otherwise last quarter's
+  numbers silently change and no one can reconcile them.
+- **Absence of outcome is a valid state, permanently.** Most decisions will never have a
+  measured outcome. Filling that gap with an inference is exactly the M4 failure.
+- **Multi-touch reality is acknowledged, not resolved.** A retained customer may have been
+  influenced by a Pulse campaign, a Remy interaction and a Beacon intervention. The
+  honest representation is several `attributed_to` links with a stated model, not one
+  winner.
+
+---
+
+## 24. Cross-Product Learning Contract
+
+Applies when a second product exists. **No product exists today, and this contract creates
+no work now.**
+
+### The four permitted exchange types
+
+1. **Canonical events** from the spine, filtered by permission and classification.
+2. **Canonical entity references** — `org_id` plus `subject_type`/`subject_id`. A
+   reference, never a copy of the row.
+3. **Permissioned derived claims** — a finding, a score, a recommendation, always carrying
+   provenance, confidence, model version and the tier from §23.
+4. **Approved operating state** — a projection, read-only, with its freshness stated.
+
+### The five prohibitions
+
+- **No product reads another product's tables.** This is Part I §3.3's rule, promoted to
+  a contract. It is the single rule that keeps eight products from becoming one monolith
+  with eight names.
+- **No cross-product foreign keys.** A foreign key is a deployment dependency and a
+  deletion hazard; references are by id and are resolved through Core.
+- **No synchronous cross-product call on a customer-facing path.** Remy must never wait on
+  Ledger to answer a caller. Cross-product intelligence is read from what Core already
+  holds, or it is absent.
+- **No product writes another product's facts.** Beacon may recommend; only Remy may
+  reschedule an appointment, through Remy's own choke point, subject to Remy's own rules.
+- **No derived claim loses its provenance in transit.** A confidence-0.4 prediction that
+  arrives in a second product as a bare value has become a fact by accident (M4).
+
+### Degradation
+
+Every product must be fully usable with Core intelligence unavailable. Concretely: Remy
+books appointments if the entire rest of NiteOwl is down. Cross-product intelligence is
+**additive only**, and a product that cannot function without it has violated its own
+standalone promise.
+
+This mirrors what the calendar layer already does: "not connected" is not an error, and
+"cannot check" is never "free" (§1.5).
+
+### Direction of the moat
+
+A deliberate stance, because it is easy to get backwards:
+
+> **Each product's moat must be real on its own, per tenant. Cross-product linking is a
+> multiplier, not the foundation.**
+
+An architecture whose moat only appears when a business buys four products has no moat at
+all — most businesses will buy one.
+
+---
+
+## 25. Moat mapping, and the copy test
+
+| Product | Accumulating asset | Outcome loop | Survives the copy test? |
+|---|---|---|---|
+| **Remy** | **Reception & Service Operations Memory** — real job durations vs. promised, which enquiry patterns convert, which offered alternatives are accepted, reschedule and no-show patterns, safe-promise limits | enquiry → intent → response → appointment → job → revenue → satisfaction → repeat | **Yes.** "An AI receptionist" fails instantly. "This business's measured duration truth, so promises are keepable" cannot be copied without the same years of that business's jobs |
+| **Scout** | **Commercial Opportunity Intelligence** — which signals became profitable *retained* customers, per sector and per business | signal → opportunity → outreach → meeting → sale → margin → retention | **Partly.** Opportunity scoring is a commodity; scoring calibrated on realised profit and retention is not |
+| **Ledger** | **Financial Decision Memory** — recommendation → business action → cash/margin consequence | recommendation → action → cash → margin → risk | **Yes**, provided it stays decision-and-consequence. Reduced to bookkeeping or financial chat it is a commodity within months |
+| **Atlas** | **Institutional Business Intelligence** — a business's causal model over its own history | change → measured consequence, with §23 tiers | **Yes**, and it is the most dependent on §23 discipline. Atlas confusing correlation for causation destroys the asset rather than building it |
+| **Pulse** | **Marketing-to-Profit Memory** — campaign → enquiry → customer → revenue → **profit** → retention | as stated | **Yes.** Click and lead attribution is a commodity; profit-and-retention attribution requires Remy's and Ledger's outcomes for the same tenant |
+| **Forge** | **Operational Process Intelligence** — task → resources → constraints → exceptions → intervention → outcome | as stated | **Yes**, but slowest to accumulate and most dependent on honest exception recording |
+| **Nova** | **Personal Execution Model** | personal signal → intervention → completion | **Weakest as a moat, strongest as a privacy risk.** Value it for retention, not defensibility, and hold the §20.8 boundary absolutely |
+| **Beacon** | **Customer Relationship Memory + Retention Outcome Intelligence** — which interventions actually retained customers | intervention → response → retained/churned | **Yes.** Requires measured churn over years, which is precisely what cannot be back-filled |
+
+Applying the copy test honestly to the whole line:
+
+- **Fails (features, not moats):** AI calling, AI email writing, lead scoring, dashboards,
+  chatbots, basic scheduling, generic RAG, prompts, calendar and CRM integrations,
+  multilingual support, basic workflow automation. Every one is 6–12 months for a funded
+  competitor, and several are 6–12 *weeks*.
+- **Passes:** measured action-to-outcome history per tenant; decision provenance with
+  confidence, checkable in hindsight; real operational truth (durations, delays, keepable
+  promises); linked outcomes across the same business's products; and — much later, and
+  only if earned legitimately — privacy-safe cohort benchmarks.
+
+The uncomfortable corollary, which should be stated plainly rather than discovered later:
+**none of the passing items exists yet, and none can be accelerated with money.** They
+accumulate at the rate real businesses use the product, which is the reason they are worth
+having, and the reason §30 puts almost everything in PREPARE rather than NOW. The clock
+starts when the first paying business books its first real appointment — which is why
+Remy's calendar reliability, not this document, is the actual priority.
+
+---
+
+## 26. Free products platform
+
+Free tools must be genuinely useful on their own. A tool that exists to harvest data is
+both a bad product and, under most privacy regimes, a bad legal position.
+
+### Staged model
+
+```
+Public tool UI
+   → Temporary assessment session   (anonymous, TTL, NO org_id)
+   → Evidence collection            (self-reported + optional read-only connection)
+   → Diagnostic engine              (deterministic rules first, model second)
+   → Findings + confidence + provenance
+   → Report                         ← FULL VALUE DELIVERED HERE, no account required
+   → [optional] account / business identity
+   → [optional] EXPLICIT CONSENT
+   → promotion into Business Graph / Business Memory
+```
+
+### Non-negotiable rules
+
+- **Value is delivered before any account exists.** If the report is worthless without
+  signing up, it is an advertisement wearing a diagnostic's clothes.
+- **Assessment data lives in its own namespace with no `org_id` until promotion**, and
+  expires by default. `sales_leads` already proves the codebase can keep NiteOwl's funnel
+  separate from tenant data (§3.7); assessments follow the same separation.
+- **Promotion is explicit, recorded, scoped and revocable.** Consent names what is
+  promoted and for what purpose. Running a tool must never create permanent unrestricted
+  Business Memory — that is the single rule this section exists for.
+- **Self-reported inputs are promoted as `business_provided`, never as `verified`.**
+  A number typed into a public form by an unauthenticated visitor is the lowest-trust
+  input in the entire architecture and must be labelled as such forever (§20.6).
+- **Findings carry confidence and their evidence.** "You may be losing ~£2,400/month"
+  requires the assumptions to be visible, or it is a sales figure, not a finding.
+
+### The outcome loop
+
+`assessment → finding → recommendation → business acts → re-assessment → measured change`
+is a genuinely defensible asset, because it accumulates knowledge of *which
+recommendations actually improved things*. Architecturally it needs only three things,
+all of which the model above already provides: a stable assessment identity, comparable
+scoring across runs (so **the scoring version must be stored with every result**), and
+consent to link runs to the same business.
+
+**No benchmarking until it is earned.** A "you rank in the bottom 30% of plumbers"
+statement made before enough legitimate data exists is a fabrication with a chart on it.
+Gate it as in §27 — and build the gate before the feature, or ship neither.
+
+---
+
+## 27. Privacy-safe network intelligence — MUCH LATER, gates first
+
+Not designed here beyond its preconditions, because designing it now would be exactly the
+speculative infrastructure this guardrail forbids. **All five gates must hold before any
+cross-business statistic is computed, let alone displayed:**
+
+1. **Minimum cohort size**, enforced in code, with suppression of small cells and of
+   differences that would re-identify a member.
+2. **De-identification with re-identification analysis** — sector plus region plus size
+   plus service mix identifies a single business surprisingly often.
+3. **Lawful basis and explicit, revocable, per-purpose consent.** Buried terms-of-service
+   language is not consent for this.
+4. **Opt-out that actually removes contribution**, including from anything already derived.
+5. **Benchmark provenance** — every displayed statistic states cohort size, period and
+   method.
+
+Two absolute prohibitions, which no future business case overrides:
+
+- **No cross-tenant raw-data access, ever.** Aggregates only, computed inside the boundary.
+- **No training on confidential tenant data without a specific, informed, revocable
+  agreement** — and never by default, and never at a third-party provider (§28).
+
+---
+
+## 28. Provider boundary review
+
+Part II §14's table stands unchanged. Part III adds the ownership line for the
+intelligence layers specifically:
+
+| Concern | Owner | Note |
+|---|---|---|
+| Business identity | **NiteOwl** | `organisations.id`. §20.1 |
+| Business Graph, entity definitions | **NiteOwl** | Never a provider's object model |
+| Canonical event schema | **NiteOwl** | Providers map in through adapters; no provider name in an event type |
+| Decision records, outcome links, attribution models | **NiteOwl** | The moat itself |
+| Provenance, confidence, classification | **NiteOwl** | |
+| Permissions and consent records | **NiteOwl** | |
+| Business Memory, institutional knowledge | **NiteOwl** | |
+| Learning logic and models trained on outcomes | **NiteOwl** | Weights may be computed anywhere; the *data and the models* are NiteOwl's |
+| Calendar, telephony, email, payments, language, observability | **Providers** | Capabilities, replaceable, already contracted (§3.8, §14) |
+
+Future gateway boundaries — AI Model, Voice/Telephony, Calendar, CRM,
+Accounting/Finance, Messaging, Evidence/Web Data, Analytics/Observability — remain as
+Part II left them: **only Calendar is built, and only OpenAI and Vapi would eventually
+justify one** (L11, L12). Nothing here promotes any of them.
+
+**One new guardrail, ADOPTED 2026-08-18, which Part II had no reason to state.** The moat
+framing creates a specific new lock-in temptation that did not exist when the only
+question was capability:
+
+> **Never let a provider hold NiteOwl's memory.** Provider-hosted assistant threads,
+> managed conversation state, hosted vector stores, provider-side "memory" features and
+> provider-resident fine-tunes over tenant data all move the asset this entire document is
+> about into someone else's account, under their retention and export terms.
+>
+> Providers may *process* NiteOwl data. The **record of what happened, what was decided
+> and what followed lives in NiteOwl's own database**, and any embedding, index or model
+> derived from it must be rebuildable from that database alone.
+
+The same rule reads onto today's providers: Google holds calendar events but NiteOwl holds
+the appointment record and the link; Vapi carries the call but `voice_events` and
+`voice_calls` hold what happened; Resend delivers but the send decision is ours. That
+posture is already correct and merely needs to survive the next eight products.
+
+---
+
+## 29. Architecture quality review
+
+| Requirement | Standing | Note |
+|---|---|---|
+| Multi-tenancy, tenant isolation | **Strong** | §1.4, verified against production. Every Part III structure is `org_id`-scoped by construction |
+| Least privilege | **Adequate today, insufficient for eight products** | M6/L5 — needed at the first cross-product read, not before |
+| Data ownership & portability | **Adequate, gap known** | No export feature; clean `org_id` scoping makes it a query set (§12). Part III raises the bar: an export must include the tenant's *history*, not just current state |
+| Privacy | **Adequate today** | Classification at write time (§20.8) is the cheap step; the pilot's sales-chat PII logging remains a known, owner-accepted item (§3.7) |
+| Auditability | **Weak — M1** | State is overwritten with no history on `leads`. The single biggest gap in this part |
+| Idempotency | **Strong** | Five independent guards (§13). Any event emitter must inherit `dedupe_key` |
+| Failure isolation | **Strong** | §11. §24's degradation rule extends it to products |
+| Graceful degradation | **Strong** | Truthful everywhere except R1's path |
+| Provider independence | **Strong** | §3.8, §14, plus §28's memory guardrail |
+| Event schema evolution | **N/A — nothing to evolve** | `schema_version` from the first event is what keeps it that way |
+| Provenance | **Weak outside the Knowledge Base — M4** | The pattern exists and is proven; it is simply not applied elsewhere |
+| Model/version traceability | **Absent** | Model ids are hardcoded at nine call sites (L11). No stored record of which model produced which value |
+| Business continuity & recoverability | **Adequate, restore unproven** | B6, plus the `INTEGRATION_TOKEN_ENCRYPTION_KEY` custody gap (§11) |
+| Product independence | **N/A today, contracted for later** | §24 |
+| Cross-product interoperability | **Not blocked** | Requires only stable identity and canonical references, both of which exist |
+
+**Simplicity check.** Part III proposes zero new tables, zero new services, zero new
+providers and zero new abstractions for the current product. Every recommendation is
+either a decision, a naming convention, or a documented seam. That is the correct ratio
+for a product whose next milestone is booking reliability for its first paying customer.
+
+---
+
+## 30. Phased plan
+
+### NOW — changes genuinely necessary to avoid a dead end
+
+**None.**
+
+No code change, no schema change, no migration, no flag, no new table is required now, and
+none is requested. The §21 rule holds: **default is no production code change**, and
+nothing found in this review meets the bar of "cannot safely wait."
+
+Two items are re-priced rather than promoted, and both remain owner decisions already on
+the checklist:
+
+- **C3 (a returning customer's second booking overwrites their first)** is now understood
+  to destroy history as well as produce a wrong booking (M1). Its cost went up; its
+  urgency did not, because production holds test orgs only. It is to be settled **before
+  the first paying business**, not before the calendar work. **Deadline owner-approved
+  2026-08-18.**
+- **P1 (`subject_type = 'appointment'`)** was already decided and implemented. Part III
+  confirms it was the right call for a second reason: every future canonical reference to
+  an appointment inherits that identity, and had it been the lead id, the outcome spine
+  would have been born with a wrong subject.
+
+### PREPARE — define now, build nothing
+
+| # | Item | Why now |
+|---|---|---|
+| **P3** | **ADOPTED 2026-08-18** — the standing principle: ***record what cannot be recomputed***. Configuration, inferences and projections can be rebuilt; a transition that was overwritten cannot. This is the one exception to §3.6's "collect nothing without a current use", and the two now stand together as standing rules | Free. Resolves a genuine tension between two correct rules, and is the reason M1 matters |
+| **P4** | **Canonical event vocabulary and shape** (§20.5, §22) — six event names, the field list, `occurred_at` vs `recorded_at`, `dedupe_key`, `schema_version`, no provider names | Documented, not built. Prevents the first analytics need from being met by reading Remy's tables |
+| **P5** | **Provenance vocabulary** (§20.6) — the nine source types and the inference-never-becomes-fact rule | Free, and it is the rule that protects the corpus from the model |
+| **P6** | **Decision record shape** (§20.7), and the observation that `calendarSync` already computes every field | Makes the eventual implementation a projection of existing values rather than new instrumentation |
+| **P7** | **Cross-Product Learning Contract** (§24) | Costs nothing until a second product, and is unenforceable if written after one |
+| **P8** | **Causal-tier vocabulary** (§23) | Written before any product can display a claim it cannot support |
+| **P9** | **Data classification on new stored assertions** | Retrofitting classification across an accumulated corpus is a quarter of work |
+| **P10** | **Free-product staging rule** (§26) — separate namespace, no `org_id` until explicit consent | Must exist before the first free tool ships, not after |
+
+### LATER — build when the trigger fires
+
+| # | Item | Trigger |
+|---|---|---|
+| **L16** | **Appointment history / status-transition record** (M1) | The first paying business — or L1, whichever comes first. Cheapest form: an append-only transition record at `capturePartialLead`, not a general event bus |
+| **L17** | **The events table itself** | Part I L4's trigger, unchanged: a second consumer of "what happened". Follows `voice_events`' shape; drained by `integration_jobs` (B3) if it ever needs async work |
+| **L18** | **Decision records persisted** | Reception Intelligence, or the first "why did Remy do that?" the owner cannot answer from logs |
+| **L19** | **Provenance on non-KB assertions** (M4) | The first stored value derived from a model that is *accumulated* rather than immediately acted on |
+| **L20** | **Business Operating State as a materialised projection** (M5) | Dynamic Schedule Recovery — which itself depends on L1/L2 |
+| **L21** | **Permission model** | Part I L5's trigger (first withholdable action) **or** the first cross-product read, whichever comes first |
+| **L22** | **Tenant data export including history** | A customer asks, or a regulation requires (§12) |
+
+### MUCH LATER — requires legitimate accumulated outcome data
+
+| # | Item | Precondition |
+|---|---|---|
+| **X1** | Learning layer — which recommendations actually worked | Years of decision records with measured outcomes, for the same tenants |
+| **X2** | Cross-product outcome attribution | Two products live for the same tenant, plus §23 discipline |
+| **X3** | Privacy-safe cohort benchmarks | All five §27 gates, in code, before the first statistic |
+| **X4** | Proprietary outcome-trained models | X1 plus explicit, revocable agreements — and never at a provider (§28) |
+| **X5** | Opt-in business network / referral routing | Part I §3.9 plus consent and permissions |
+
+---
+
+## 31. Risks
+
+| Risk | Where it bites | Mitigation in this design |
+|---|---|---|
+| **Premature complexity** | An event bus, a graph database or nine tables built for products that do not exist — slowing the one product that does | Zero NOW items; PREPARE is documentation; every LATER item carries a trigger |
+| **AI inference becoming stored fact** | A guess is learned from as truth, unrecoverably | §20.6, and it is the reason provenance is PREPARE rather than LATER |
+| **Bad causal inference** | Atlas or Pulse claiming "X caused Y" from correlation; a business acts on it and loses money, and trust in the whole layer goes with it | §23 tiers, stored and displayed; versioned attribution; no automatic promotion |
+| **History already being lost** | M1 — every day of real use adds outcomes that cannot be reconstructed | Named, priced, and tied to the first-paying-business trigger |
+| **Data quality** | Voice extraction is imperfect; free-tool inputs are self-reported | Provenance labels the difference; deterministic corrections over model output (`snapToNamedWeekday`) are the existing precedent |
+| **Cross-tenant leakage** | The end of the company | `org_id` on every structure; §27 gates; no cross-tenant raw access at any tier |
+| **Over-coupling products** | Eight products become one monolith with eight names | §24's five prohibitions, especially no cross-product table reads and no cross-product foreign keys |
+| **Provider lock-in of the asset itself** | Provider-hosted memory/threads/vector stores hold the moat | §28's new guardrail; everything rebuildable from NiteOwl's database alone |
+| **Uncontrolled event growth** | Storage cost, unusable corpus, retention exposure | Business-meaningful transitions only; telemetry stays in Sentry/Vercel; classification and retention decided at write time |
+| **False benchmark claims** | A fabricated statistic shown to a customer; reputational and possibly regulatory | §27 gates built before the feature; §26 forbids benchmarking until earned |
+| **Privacy and consent** | Free-tool data becoming permanent business data by default | §26's staged model; consent explicit, scoped, recorded, revocable |
+| **Model drift** | Yesterday's confidence scores incomparable with today's | `model_version`, `policy_version`, `schema_version` and scoring version stored with every result |
+| **Moat framing distracting from the product** | The largest practical risk on this page | §32, and the fact that the moat cannot start accumulating until real businesses book real appointments |
+
+---
+
+## 32. Remy roadmap protection — verified
+
+The current sequence is unchanged by everything above:
+
+```
+Google Calendar connection reliability → OAuth/token handling → timezone correctness
+→ availability checking → booking creation → cancellation → rescheduling
+→ duplicate/conflict prevention → truthful confirmations → end-to-end testing
+```
+
+Checked explicitly against this document:
+
+- **No production code was changed, and none is requested** (§21 rule, §30 NOW = none).
+- **No schema was created or migrated.** Zero new tables are proposed for the current
+  product.
+- **Google Calendar, Vapi, Supabase, Sentry and authentication are untouched**, and §28
+  reinforces rather than revisits Part II's conclusion not to migrate any of them.
+- **The open calendar items are unchanged and keep their existing priority** — chat/widget
+  not consulting the calendar, the `CALENDAR_EVENT_CREATION_ORG_IDS` allowlist rollout,
+  `needs_reauth` being invisible (B1), and the residual check-to-create race (R3).
+- **Reception Intelligence and Dynamic Schedule Recovery remain later features**, behind
+  calendar reliability, exactly as Part I §3.5 placed them. §25 describes what they would
+  eventually accumulate; it does not move them.
+- The **only** intersections with current work are C3 (re-priced, still an owner decision,
+  still deferrable) and P1 (already decided and implemented, and confirmed correct).
+
+**Verdict: the roadmap is unchanged.**
+
+---
+
+## 33. Part III verdict
+
+The competitive review is right that "multiple AI specialists over shared data" is not a
+moat, and the honest reading of this codebase is that **NiteOwl does not yet have the
+asset it wants to defend** — not because the architecture prevents it, but because the
+product has barely any real use yet. That is the correct position for where the company
+is, and the correct response is to finish Remy's calendar work rather than to build an
+intelligence layer for data that does not exist.
+
+Three things are genuinely worth taking from this review:
+
+1. **The moat is history, and history is currently overwritten** (M1). Everything else in
+   this part is downstream of that one sentence. It needs no fix today and it must not be
+   left unfixed when the first real business starts booking.
+2. **The decision record is already computed** (M2). `calendarSync`, `checkBookingSlot`
+   and `bookingOutcome` produce outcome, evidence, alternatives and reason codes at a
+   single choke point and then discard them. When the time comes, this is persistence of
+   known values, not new instrumentation — which is why §30 could keep NOW empty with a
+   clear conscience.
+3. **Inference must never silently become fact** (§20.6). It is free to adopt as a rule
+   today and effectively impossible to retrofit onto an accumulated corpus, and it is the
+   difference between an intelligence asset and a large pile of confident-sounding guesses.
+
+Everything else defaults to PREPARE or LATER, as it should.
 
