@@ -2,6 +2,40 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-19 (Rescheduling — a move is checked against the real calendar, and no longer against itself)
+
+**PR #25 — `fix/reschedule-external-availability`. MERGED AND LIVE** via a normal GitHub merge commit, `4784cfc36ea18e3acadac0232e4a2c9cd33ede19`. Two Phase 1 implementation commits: the original fix `b2e80e7` and the corrective fix `ce48832`. The merge-triggered production deployment `dpl_BciwumDpGX5A6QRQzVicEL4wyPQS` (target `production`, commit `4784cfc`) reached **READY** and serves `niteowlhq.com`; the live `/api/health` returned **HTTP 200** with `{"status":"ok","database":"ok"}`. **1032 tests pass / 0 fail**, 189 suites; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**No schema, RLS, OAuth, Vapi, Twilio, timezone, provider, configuration or environment-variable change.** Six files: three production, one test file, two documentation corrections (`HANDOFF.md`, `CHECKLIST.md`).
+
+### The defect (`b2e80e7`)
+Both reschedule routes — the owner dashboard (`src/app/api/leads/route.ts`) and the customer manage link (`src/app/api/bookings/manage/route.ts`) — still called `isWithinBusinessHours` + `isSlotAvailable`, which are **internal checks only**. Chat and the widget were routed through `checkBookingSlot` on 2026-08-12 (`369b099`); these two were not, so a move could land straight on top of an appointment that exists in the business's own Google Calendar.
+
+The gap was real for organisations **not** on `CALENDAR_EVENT_CREATION_ORG_IDS`. An allowlisted org was already protected by `rescheduleAppointmentOnCalendar`'s pre-write re-check; a write-disabled org gets `no_calendar` from the sync layer, which does nothing, so the move went through. Availability **reads** are gated separately, which is why the calendar can be consulted for those organisations at all.
+
+Both routes now make the same decision every other booking path makes: hours, then capacity, then the external calendar. It also closed a truthfulness gap — a failed hours read, a failed capacity count or an unreadable calendar used to return the untrue "that time is fully booked". They now return **503 "we couldn't confirm that time"** and leave the appointment untouched. **"Cannot check" is never "that time has gone."**
+
+### The self-overlap regression, and its fix (`ce48832`)
+Caught during merge-readiness review, before the merge. Free/busy carries **no event identity** — a busy block is just a span — so a calendar-backed appointment moving 10:00 → 10:30 met its **own** event and was refused `409 "That time is no longer available."` Measured against `b2e80e7`: both routes returned **409** where `main` returned **200**.
+
+The gap was exactly symmetrical with one already closed internally. `excludeLeadId` stops the lead's own row counting against its move in the capacity count; nothing did the same for the calendar. The new `rescheduleExclusion` option on `checkBookingSlot` is that missing half, and both routes pass it via the shared `appointmentBusyWindow()` helper.
+
+**Subtraction, not matching.** Only the span the appointment already occupies is freed, never an event: a genuine 10:45–11:45 booking survives as 11:00–11:45 and still refuses the move, and the single merged 10:00–12:00 block Google returns for two touching events is trimmed to 11:00–12:00 rather than cleared. Dropping whole intervals that merely *overlap* the old window would have waved another customer's appointment through. The rule underneath: the only time a reschedule newly claims is (new window − old window), and subtraction leaves precisely that remainder to be checked against the real calendar.
+
+### Not changed
+Google Calendar creation, reschedule and cancel semantics; feature flags; OAuth; Vapi and Twilio; timezone handling; `appointment_datetime` storage; capacity, business-hours and availability logic for new bookings. Callers that pass no exclusion use the busy list exactly as fetched, so **new bookings are unaffected**.
+
+### Coverage
+`tests/rescheduleExternalAvailability.test.mjs` — 46 tests, 17 of them added by `ce48832`, every case run against **both** routes with the appointment genuinely present in the stubbed free/busy response (the gap that let the regression through): the allowed short move; a genuine second event in the new window; a second event *overlapping the old window*; a merged busy block; an unrelated busy period; the fail-closed 503 on an unreadable calendar; and an unconnected organisation.
+
+**Mutation-verified**: ignoring the exclusion breaks 2 tests, and replacing subtraction with wholesale interval removal breaks 4 — the two "not swept away" and "merged block" cases exist precisely to catch that unsafe design. The original five `b2e80e7` mutations still hold.
+
+### Known limitation
+An event lying **entirely inside** the appointment's own window (e.g. 10:15–10:45 within 10:00–11:00) is subtracted away with it. This is **inherent to Google free/busy**, which exposes no event identity: within the span we already occupy, our event and a coincident one are indistinguishable, and Google merges touching intervals anyway. The internal capacity check (with `excludeLeadId`) runs first and catches any *other lead* in that span, so this requires a Google-only event invisible to our database. It is also strictly more conservative than the previous behaviour, which skipped the external check for overlapping moves entirely. Documented, accepted, and unchanged by this release.
+
+### Voice calendar booking remains off
+`VOICE_CALENDAR_BOOKING_ENABLED` is **absent from the production environment entirely** — verified against the full production variable list after the merge. `isVoiceCalendarBookingEnabled` requires the exact literal `"true"`, so an absent variable reads as **off**: voice calendar booking (PR #23) remains disabled in production.
+
 ## 2026-08-14 (Emails — the appointment time is announced on the business's clock, not London's)
 
 **PR #21 — `fix(email): use business timezone for appointment emails`. MERGED AND LIVE** via a normal GitHub merge commit, `7df5f622ba81bb0a9074fa5273e7aacfea6cee07` (branch commit `d6ef7dcc8d504ff37bf76c0e2d21aac65ca8bfeb`). The merge-triggered production deployment completed **Ready**, and `niteowlhq.com` returned **200**, served by that deployment. **953 tests pass / 0 fail / 0 skipped**, 172 suites; `tsc --noEmit` clean; ESLint clean on all four changed production files.
