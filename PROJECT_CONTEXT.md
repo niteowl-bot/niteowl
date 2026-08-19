@@ -34,6 +34,7 @@ The following features are complete and tested:
 - Dashboard Timezone Correctness (PR #17, merged and live 2026-08-14)
 - Customer Manage-Link Timezone Correctness (PR #19, merged and live 2026-08-14)
 - Email Appointment Timezone Correctness (PR #21, merged and live 2026-08-14)
+- External-Calendar Rescheduling Correctness (PR #25, merged and live 2026-08-19)
 
 Dashboard timezone rule:
 
@@ -64,6 +65,21 @@ Appointment times in emails render in the **business's** timezone. `formatAppoin
 Standing timezone rule (all three surfaces):
 
 Appointment instants are stored as **UTC instants**, always. A business-local timezone is used only to interpret or display a wall-clock time. **Email formatting must never reintroduce a hardcoded tenant timezone.**
+
+Reschedule availability rule (closed by PR #25, merge commit `4784cfc`):
+
+A reschedule is judged by the **same decision every other booking path makes** — business hours, then internal capacity, then the business's real external calendar — and an appointment must never conflict with **itself**.
+
+- both reschedule routes (owner dashboard `/api/leads`, customer manage link `/api/bookings/manage`) go through `checkBookingSlot`; the internal-only `isWithinBusinessHours` + `isSlotAvailable` pair is gone from both (`b2e80e7`)
+- `checkBookingSlot`'s `rescheduleExclusion` is the external counterpart to `excludeLeadId`, built by the shared `appointmentBusyWindow()` helper so the two routes cannot drift (`ce48832`)
+- the exclusion is **subtracted** from the busy list, never matched against it: only the span the appointment already occupies is freed, so a genuine conflict extending into newly claimed time still refuses the move. **Whole busy intervals must never be dropped for merely overlapping the old window** — that would wave another customer's appointment through
+- "we could not check" is never "that time has gone": a failed hours read, a failed capacity count or an unreadable calendar returns **503** and leaves the appointment untouched
+- callers that pass no exclusion use the busy list exactly as fetched, so **new bookings are unaffected**
+- known and accepted: Google free/busy exposes **no event identity**, so an event lying entirely inside the appointment's own window is subtracted with it. The internal capacity check catches any other *lead* in that span, so this needs a Google-only event invisible to our database
+
+Voice calendar booking status:
+
+`VOICE_CALENDAR_BOOKING_ENABLED` is **absent from the production environment** and voice calendar booking (PR #23) is therefore **disabled in production**. The flag requires the exact literal `"true"`, so unset reads as off. PR #25 did not change it.
 
 ---
 
