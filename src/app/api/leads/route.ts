@@ -4,7 +4,7 @@ import {
   cancelAppointmentOnCalendar,
   rescheduleAppointmentOnCalendar,
 } from "@/lib/calendarSync";
-import { isWithinBusinessHours, isSlotAvailable } from "@/lib/availability";
+import { appointmentBusyWindow, checkBookingSlot } from "@/lib/bookingAvailability";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -492,31 +492,80 @@ export async function PATCH(req: NextRequest) {
   // The `requestedIso !== null` repeat is what narrows the type for the
   // block; isRescheduleTransition already implies it.
   if (isRescheduleTransition && requestedIso !== null) {
-    // The helper re-verifies the slot itself, but SKIPS that check when
-    // the move overlaps its own old time (10:00 → 10:30) because
-    // free/busy cannot tell the org's own event apart from anyone
-    // else's. These two run first so an overlapping move is still held
-    // to the business's opening hours and capacity — the same order
-    // /api/bookings/manage uses.
-    const hours = await isWithinBusinessHours(existing.org_id, requestedIso);
-    if (!hours.isAvailable) {
-      return NextResponse.json(
-        { error: "That time is outside business hours.", reason: hours.reason },
-        { status: 422 }
-      );
-    }
+    // ── One authoritative availability decision ────────────────────
+    //
+    // rescheduleAppointmentOnCalendar re-verifies the slot itself, but
+    // SKIPS that check when the move overlaps its own old time
+    // (10:00 → 10:30) because free/busy cannot tell the org's own event
+    // apart from anyone else's — and it does nothing at all for an org
+    // with no calendar connected or no write allowlist entry. So this
+    // runs first, and it is now the SAME decision every other booking
+    // path makes: hours, then capacity, then the external calendar.
+    //
+    // It used to be isWithinBusinessHours + isSlotAvailable, which are
+    // INTERNAL only: an owner could move a customer straight on top of
+    // an appointment that exists in the business's real Google calendar.
+    // checkBookingSlot composes those same two checks, in the same
+    // order, so with no calendar connected nothing about this changes.
+    //
+    // excludeLeadId is preserved verbatim: capacity is an overlap test,
+    // so without it every short reschedule would be refused as a clash
+    // with itself. rescheduleExclusion is the same exemption for the
+    // CALENDAR — a calendar-backed appointment has a real event at its
+    // current time, and free/busy cannot tell that event apart from
+    // anyone else's. Only the span it already occupies is excused; a
+    // genuine conflict anywhere in the new window still refuses the move.
+    const durationMinutes = org.appointment_duration_minutes ?? 60;
+    const decision = await checkBookingSlot(
+      existing.org_id,
+      requestedIso,
+      durationMinutes,
+      {
+        excludeLeadId: existing.id,
+        rescheduleExclusion: appointmentBusyWindow(
+          existing.appointment_datetime,
+          durationMinutes
+        ),
+      }
+    );
 
-    // The lead's OWN booking must not count against its move: capacity
-    // is an overlap test, so without this every short reschedule would
-    // be refused as a clash with itself.
-    const free = await isSlotAvailable(existing.org_id, requestedIso, {
-      excludeLeadId: existing.id,
-    });
-    if (!free) {
-      return NextResponse.json(
-        { error: "That time is already fully booked." },
-        { status: 409 }
-      );
+    if (!decision.available) {
+      // "We could not check" is never "that time has gone" — a failed
+      // hours read, a failed capacity count or an unreadable calendar
+      // must not be reported to the owner as a full diary.
+      if (decision.internalCheckFailed || decision.externalCheckFailed) {
+        return NextResponse.json(
+          {
+            error:
+              "We couldn't confirm that time just now. The appointment is unchanged — please try again shortly.",
+          },
+          { status: 503 }
+        );
+      }
+
+      if (decision.reason === "hours" || decision.reason === "ends_after_close") {
+        return NextResponse.json(
+          { error: "That time is outside business hours.", reason: decision.reason },
+          { status: 422 }
+        );
+      }
+
+      // Internal capacity and an external conflict are the same fact to
+      // the owner: that slot is taken. Each keeps the wording it already
+      // had — the external case matches what the calendar step below has
+      // always returned for a conflict.
+      return decision.reason === "external_conflict"
+        ? NextResponse.json(
+            {
+              error: "That time is no longer available.",
+              suggestedAlternative: decision.suggestedIso,
+            },
+            { status: 409 }
+          )
+        : NextResponse.json(
+            { error: "That time is already fully booked." },
+            { status: 409 }
+          );
     }
 
     const moved = await rescheduleAppointmentOnCalendar(

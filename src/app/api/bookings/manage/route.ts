@@ -3,12 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getOrgOwnerEmail } from "@/lib/leadCapture";
 import { sendBookingSelfServiceChangeNotification } from "@/lib/email";
 import { checkRateLimit } from "@/lib/rateLimit";
-import {
-  isWithinBusinessHours,
-  isSlotAvailable,
-  findNextAvailableSlot,
-  resolveOrgTimezone,
-} from "@/lib/availability";
+import { resolveOrgTimezone } from "@/lib/availability";
+import { appointmentBusyWindow, checkBookingSlot } from "@/lib/bookingAvailability";
 import {
   cancelAppointmentOnCalendar,
   rescheduleAppointmentOnCalendar,
@@ -228,34 +224,87 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid date or time" }, { status: 400 });
     }
 
+    // The appointment length that BOTH the availability decision and the
+    // calendar write need. The same single query that has always run
+    // here, moved above the check that now requires it — a read with no
+    // side effects, so nothing else about the order changes.
+    const { data: org } = await supabase
+      .from("organisations")
+      .select("appointment_duration_minutes")
+      .eq("id", lead.org_id)
+      .maybeSingle();
+    const durationMinutes = org?.appointment_duration_minutes ?? 60;
+
     // No-op reschedule to the same slot the lead already occupies —
     // skip the availability check, which would otherwise count the
     // lead's own existing booking against itself and report the slot
     // as full.
     if (newIso !== lead.appointment_datetime) {
+      // ── One authoritative availability decision ───────────────────
+      //
+      // This used to call isWithinBusinessHours + isSlotAvailable
+      // directly, which are INTERNAL checks only. A slot already taken
+      // on the business's connected Google Calendar was reported free,
+      // and the customer moved straight onto it — the same gap chat and
+      // the widget had before they were routed through here.
+      //
+      // checkBookingSlot composes the SAME two checks, in the same
+      // order, and only then consults the calendar. With no calendar
+      // connected this is exactly what ran before, query for query.
+      //
       // The zone is already resolved for this request, so hand it over
-      // rather than making isWithinBusinessHours read organisations a
-      // second time. Same decision, one query fewer.
-      const hours = await isWithinBusinessHours(lead.org_id, newIso, timezone);
-      if (!hours.isAvailable) {
-        return NextResponse.json(
-          { error: "That time is outside business hours.", reason: hours.reason },
-          { status: 400 }
-        );
-      }
-
-      // The lead's OWN booking must not count against its move. Under
-      // overlap, a 10:00 appointment shifting to 10:30 collides with
-      // itself, so without this every short reschedule would be refused.
-      const available = await isSlotAvailable(lead.org_id, newIso, {
+      // rather than making the engine read organisations again. And the
+      // lead's OWN booking must not count against its move: capacity is
+      // an overlap test, so without excludeLeadId a 10:00 appointment
+      // shifting to 10:30 would be refused as a clash with itself.
+      // rescheduleExclusion is the calendar's counterpart to
+      // excludeLeadId: a calendar-backed booking has a real event at its
+      // current time, and free/busy cannot tell that event apart from
+      // anyone else's, so without this the customer's own appointment
+      // refuses their move. Only the span already occupied is excused —
+      // a genuine conflict anywhere in the new window still refuses it.
+      const decision = await checkBookingSlot(lead.org_id, newIso, durationMinutes, {
         excludeLeadId: lead.id,
+        timezone,
+        rescheduleExclusion: appointmentBusyWindow(
+          lead.appointment_datetime,
+          durationMinutes
+        ),
       });
-      if (!available) {
-        const suggested = await findNextAvailableSlot(lead.org_id, newIso);
+
+      if (!decision.available) {
+        // "We could not check" is never "that time has gone". A failed
+        // hours read, a failed capacity count or an unreadable calendar
+        // leave the booking untouched and ask for a retry, rather than
+        // telling the customer something untrue about the slot.
+        if (decision.internalCheckFailed || decision.externalCheckFailed) {
+          return NextResponse.json(
+            {
+              error:
+                "We couldn't confirm that time just now. Your original time is unchanged — please try again shortly.",
+            },
+            { status: 503 }
+          );
+        }
+
+        if (decision.reason === "hours" || decision.reason === "ends_after_close") {
+          return NextResponse.json(
+            { error: "That time is outside business hours.", reason: decision.reason },
+            { status: 400 }
+          );
+        }
+
+        // Internal capacity and an external conflict are the same fact
+        // to a customer: that time has gone. Each keeps the wording it
+        // already had, and the suggestion now comes from the decision
+        // that was just made rather than a second engine call.
         return NextResponse.json(
           {
-            error: "That time is fully booked.",
-            suggestedAlternative: suggested,
+            error:
+              decision.reason === "external_conflict"
+                ? "That time is no longer available."
+                : "That time is fully booked.",
+            suggestedAlternative: decision.suggestedIso,
           },
           { status: 409 }
         );
@@ -269,18 +318,12 @@ export async function POST(req: NextRequest) {
     // purpose: saying "moved to Thursday" while the event sits on
     // Tuesday is precisely the desync this is here to prevent, and
     // unlike a cancellation the customer loses nothing by trying again.
-    const { data: org } = await supabase
-      .from("organisations")
-      .select("appointment_duration_minutes")
-      .eq("id", lead.org_id)
-      .maybeSingle();
-
     const moved = await rescheduleAppointmentOnCalendar(
       {
         orgId: lead.org_id,
         leadId: lead.id,
         startIso: newIso,
-        durationMinutes: org?.appointment_duration_minutes ?? 60,
+        durationMinutes,
         serviceNeeded: lead.service_needed,
         customerName: lead.name,
         customerEmail: lead.email,

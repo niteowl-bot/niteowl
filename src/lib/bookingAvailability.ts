@@ -138,6 +138,114 @@ export interface BookingSlotOptions {
    * business-hours check and the slot search — never one query each.
    */
   timezone?: string;
+  /**
+   * RESCHEDULES ONLY: the window the appointment being moved ALREADY
+   * occupies on the external calendar.
+   *
+   * The external counterpart to `excludeLeadId`, and needed for the same
+   * reason. Free/busy carries no event identity — a busy block is just
+   * a span — so a calendar-backed appointment moving 10:00 → 10:30 meets
+   * its OWN event and is refused as a clash with itself. `excludeLeadId`
+   * fixes that for the internal capacity count; nothing fixed it for the
+   * calendar.
+   *
+   * This is SUBTRACTED from the busy list, not matched against it. Only
+   * the span itself is freed, never an event: a genuine second booking
+   * at 10:45–11:45 survives as 11:00–11:45 and still refuses the move,
+   * and so does the single merged 10:00–11:45 block Google returns when
+   * two events touch. Dropping whole intervals that merely OVERLAP this
+   * window would do exactly what this must never do — silently wave
+   * another customer's appointment through.
+   *
+   * Put another way: the only time a reschedule newly claims is
+   * (new window − old window), and subtraction is what leaves precisely
+   * that remainder to be checked against the real calendar.
+   *
+   * Optional and absent for every caller that existed before it. With no
+   * exclusion supplied the busy list is used exactly as fetched, so new
+   * bookings are completely unaffected.
+   */
+  rescheduleExclusion?: BusyInterval | null;
+}
+
+/**
+ * The busy window an existing appointment occupies, for
+ * `rescheduleExclusion`.
+ *
+ * Shared by both reschedule routes so the two cannot drift into
+ * different ideas of what "its own event" means. Returns null for a lead
+ * with no appointment yet, or an unparseable instant — an exclusion that
+ * cannot be trusted is simply not applied, which leaves the ordinary
+ * fully-checked behaviour in place.
+ */
+export function appointmentBusyWindow(
+  startIso: string | null | undefined,
+  durationMinutes: number
+): BusyInterval | null {
+  if (!startIso) return null;
+  const start = new Date(startIso).getTime();
+  if (Number.isNaN(start)) return null;
+  const span = Math.max(durationMinutes, 1) * 60_000;
+  return {
+    startIso: new Date(start).toISOString(),
+    endIso: new Date(start + span).toISOString(),
+  };
+}
+
+/**
+ * Removes ONLY the excluded span from each busy interval, keeping every
+ * remaining minute.
+ *
+ * An interval that does not meet the exclusion is passed through
+ * untouched. One that does is trimmed to whatever lies outside it —
+ * which may be a piece on either side, or both. Nothing is dropped for
+ * merely overlapping.
+ *
+ * Half-open throughout, matching `overlapsBusy`: a busy block ending
+ * exactly when the exclusion begins does not meet it.
+ */
+function subtractBusyWindow(
+  busy: BusyInterval[],
+  exclusion: BusyInterval | null | undefined
+): BusyInterval[] {
+  if (!exclusion) return busy;
+
+  const exStart = new Date(exclusion.startIso).getTime();
+  const exEnd = new Date(exclusion.endIso).getTime();
+  // An unusable exclusion is ignored rather than guessed at: the slot is
+  // then checked against the calendar exactly as it always was.
+  if (Number.isNaN(exStart) || Number.isNaN(exEnd) || exEnd <= exStart) {
+    return busy;
+  }
+
+  const kept: BusyInterval[] = [];
+  for (const window of busy) {
+    const start = new Date(window.startIso).getTime();
+    const end = new Date(window.endIso).getTime();
+
+    // Unparseable, or clear of the exclusion entirely — keep verbatim.
+    if (
+      Number.isNaN(start) ||
+      Number.isNaN(end) ||
+      end <= exStart ||
+      start >= exEnd
+    ) {
+      kept.push(window);
+      continue;
+    }
+
+    // The part that starts before the exclusion does.
+    if (start < exStart) {
+      kept.push({ startIso: window.startIso, endIso: new Date(exStart).toISOString() });
+    }
+    // The part that runs on after it — this is what keeps a genuine
+    // second event blocking the new window.
+    if (end > exEnd) {
+      kept.push({ startIso: new Date(exEnd).toISOString(), endIso: window.endIso });
+    }
+  }
+
+  return kept;
 }
 
 function internalDecision(
@@ -273,7 +381,13 @@ export async function checkBookingSlot(
     };
   }
 
-  const conflict = overlapsBusy(isoDatetime, appointmentDurationMinutes, lookup.busy);
+  // A reschedule does not compete with itself. Everything the appointment
+  // does NOT already occupy is still checked in full — see
+  // `rescheduleExclusion`. With no exclusion this is `lookup.busy`
+  // unchanged, so nothing about a new booking differs.
+  const busy = subtractBusyWindow(lookup.busy, options.rescheduleExclusion);
+
+  const conflict = overlapsBusy(isoDatetime, appointmentDurationMinutes, busy);
 
   if (!conflict) {
     return {
@@ -284,7 +398,7 @@ export async function checkBookingSlot(
       internalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: false,
-      externalBusy: lookup.busy,
+      externalBusy: busy,
       externalBusyWindowEndIso: windowEnd,
     };
   }
@@ -304,7 +418,7 @@ export async function checkBookingSlot(
       internalCheckFailed: false,
       externalChecked: true,
       externalConflictObserved: true,
-      externalBusy: lookup.busy,
+      externalBusy: busy,
       externalBusyWindowEndIso: windowEnd,
     };
   }
@@ -316,14 +430,14 @@ export async function checkBookingSlot(
       orgId,
       isoDatetime,
       appointmentDurationMinutes,
-      lookup.busy,
+      busy,
       timezone
     ),
     externalCheckFailed: false,
     internalCheckFailed: false,
     externalChecked: true,
     externalConflictObserved: true,
-    externalBusy: lookup.busy,
+    externalBusy: busy,
     externalBusyWindowEndIso: windowEnd,
   };
 }

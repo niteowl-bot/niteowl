@@ -76,7 +76,22 @@ files unrelated to this work.
 
 ## What remains unfixed
 
-1. **Chat and widget never consult the connected Google Calendar.**
+> **STALE — corrected 2026-08-18.** Items 1 and 3 below were fixed after
+> this handoff was written and are kept only as the record of what was
+> wrong. Read the corrections before acting on anything in this section.
+>
+> - **Item 1 was fixed on 2026-08-12** (commit `369b099`, live in
+>   production). `capturePartialLead` routes through `checkBookingSlot`
+>   (`leadCapture.ts:962`), so chat and the widget do consult the
+>   connected calendar. The same gap remained in the two RESCHEDULE
+>   routes — `/api/bookings/manage` and `/api/leads` — and was closed on
+>   2026-08-18; see `tests/rescheduleExternalAvailability.test.mjs`.
+> - **Item 3 was fixed by the timezone work** (PRs #9–#21).
+>   `resolveAppointmentDatetime` resolves `getOrgTimezone(orgId)`; the
+>   `Europe/London` literal is gone from that path.
+
+1. ~~**Chat and widget never consult the connected Google Calendar.**~~
+   *Fixed 2026-08-12 — see the correction above.*
    `leadCapture.ts:859-862` calls only `isWithinBusinessHours` +
    `checkSlotCapacity` (internal engine). `checkBookingSlot`
    (`bookingAvailability.ts:116`), which adds the external free/busy
@@ -94,10 +109,10 @@ files unrelated to this work.
    every other org `booked` is decided locally with no calendar write.
    The invariant holds where writes are enabled and is vacuous elsewhere.
 
-3. **Hardcoded timezone.** `resolveAppointmentDatetime`
-   (`leadCapture.ts:598`) passes `"Europe/London"` instead of
-   `getOrgTimezone(orgId)`. A business in another timezone has its dates
-   parsed in London time.
+3. ~~**Hardcoded timezone.**~~ *Fixed — see the correction above.*
+   `resolveAppointmentDatetime` (`leadCapture.ts:598`) passes
+   `"Europe/London"` instead of `getOrgTimezone(orgId)`. A business in
+   another timezone has its dates parsed in London time.
 
 4. **`needsClarification` is produced but not consumed.** `leadCapture`
    ignores it, so `"20/08/26"` with no time currently captures no
