@@ -4,7 +4,7 @@ import { getOrgOwnerEmail } from "@/lib/leadCapture";
 import { sendBookingSelfServiceChangeNotification } from "@/lib/email";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { resolveOrgTimezone } from "@/lib/availability";
-import { checkBookingSlot } from "@/lib/bookingAvailability";
+import { appointmentBusyWindow, checkBookingSlot } from "@/lib/bookingAvailability";
 import {
   cancelAppointmentOnCalendar,
   rescheduleAppointmentOnCalendar,
@@ -257,9 +257,19 @@ export async function POST(req: NextRequest) {
       // lead's OWN booking must not count against its move: capacity is
       // an overlap test, so without excludeLeadId a 10:00 appointment
       // shifting to 10:30 would be refused as a clash with itself.
+      // rescheduleExclusion is the calendar's counterpart to
+      // excludeLeadId: a calendar-backed booking has a real event at its
+      // current time, and free/busy cannot tell that event apart from
+      // anyone else's, so without this the customer's own appointment
+      // refuses their move. Only the span already occupied is excused —
+      // a genuine conflict anywhere in the new window still refuses it.
       const decision = await checkBookingSlot(lead.org_id, newIso, durationMinutes, {
         excludeLeadId: lead.id,
         timezone,
+        rescheduleExclusion: appointmentBusyWindow(
+          lead.appointment_datetime,
+          durationMinutes
+        ),
       });
 
       if (!decision.available) {

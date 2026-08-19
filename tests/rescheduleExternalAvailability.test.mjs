@@ -567,9 +567,16 @@ describe("neither route may go back to the internal-only checks", () => {
     );
   };
 
+  // Matches the IMPORT, not its punctuation: the named list also carries
+  // appointmentBusyWindow now, and a guard that breaks when a second name
+  // is added is testing the formatter rather than the rule. The module is
+  // pinned instead, which the original did not check at all.
+  const IMPORTS_ENGINE =
+    /import \{[^}]*\bcheckBookingSlot\b[^}]*\} from "@\/lib\/bookingAvailability"/;
+
   test("the manage route imports checkBookingSlot and not isSlotAvailable", async () => {
     const src = await read("bookings/manage/route.ts");
-    assert.match(src, /import \{ checkBookingSlot \}/);
+    assert.match(src, IMPORTS_ENGINE);
     assert.doesNotMatch(src, /^\s*isSlotAvailable,?$/m);
     assert.doesNotMatch(src, /await isSlotAvailable\(/);
     assert.doesNotMatch(src, /await isWithinBusinessHours\(/);
@@ -577,7 +584,7 @@ describe("neither route may go back to the internal-only checks", () => {
 
   test("the leads route imports checkBookingSlot and not isSlotAvailable", async () => {
     const src = await read("leads/route.ts");
-    assert.match(src, /import \{ checkBookingSlot \}/);
+    assert.match(src, IMPORTS_ENGINE);
     assert.doesNotMatch(src, /await isSlotAvailable\(/);
     assert.doesNotMatch(src, /await isWithinBusinessHours\(/);
   });
@@ -586,4 +593,138 @@ describe("neither route may go back to the internal-only checks", () => {
     assert.match(await read("bookings/manage/route.ts"), /excludeLeadId/);
     assert.match(await read("leads/route.ts"), /excludeLeadId/);
   });
+
+  test("both routes still pass rescheduleExclusion", async () => {
+    // The calendar's counterpart to excludeLeadId. Dropping it on either
+    // route reinstates the self-conflict regression, and only on that
+    // route — which is exactly the asymmetry this file exists to prevent.
+    assert.match(await read("bookings/manage/route.ts"), /rescheduleExclusion/);
+    assert.match(await read("leads/route.ts"), /rescheduleExclusion/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+//  7. A calendar-backed booking must not conflict with ITSELF
+// ══════════════════════════════════════════════════════════════════
+//
+// The regression this section exists for: an org whose appointments ARE
+// written to Google has a real event at the appointment's current time.
+// Free/busy carries no event identity — a busy block is just a span — so
+// the first version of this fix refused every overlapping move as a
+// clash with the customer's own appointment.
+//
+// rescheduleExclusion SUBTRACTS the occupied span. The tests below pin
+// both halves of that: the appointment stops blocking itself, and every
+// other busy minute still blocks. The 09:45 and merged-block cases are
+// the ones that fail if the exclusion is ever "weakened" into dropping
+// whole intervals that merely overlap the old window.
+
+describe("a reschedule does not conflict with its own calendar event", () => {
+  const OWN_EVENT = { start: START_ISO, end: "2026-08-11T10:00:00.000Z" };
+
+  for (const route of ROUTES) {
+    test(`${route.name} — 10:00 → 10:30 is ALLOWED with its own event in free/busy`, async () => {
+      // The exact case that regressed: the only thing Google reports
+      // busy is this appointment, at the time it is moving off.
+      stubs = installStubs({ busy: [OWN_EVENT] });
+      const res = await route.run(SHORT_MOVE_ISO);
+
+      assert.equal(res.status, 200, "an appointment may move within its own hour");
+      assert.equal(
+        stubs.calls.leadUpdates.at(-1).appointment_datetime,
+        SHORT_MOVE_ISO,
+        "and the new time must actually be stored"
+      );
+    });
+
+    test(`${route.name} — a genuine second event in the NEW window still refuses it`, async () => {
+      // 11:00–12:00 London sits inside the 10:30–11:30 window being
+      // claimed, and is nothing to do with this appointment.
+      stubs = installStubs({
+        busy: [OWN_EVENT, { start: "2026-08-11T10:00:00.000Z", end: "2026-08-11T11:00:00.000Z" }],
+      });
+      const res = await route.run(SHORT_MOVE_ISO);
+      const body = await res.json();
+
+      assert.equal(res.status, 409, "someone else's appointment still blocks the move");
+      assert.match(body.error, /no longer available/);
+      assert.equal(stubs.calls.leadUpdates.length, 0, "nothing may be stored");
+      assert.equal(stubs.calls.updates.length, 0, "and no Google event is touched");
+    });
+
+    test(`${route.name} — a second event OVERLAPPING the old window is not swept away`, async () => {
+      // THE TRAP. 10:45–11:45 overlaps the excluded 10:00–11:00 span, so
+      // a fix that dropped whole overlapping intervals would delete a
+      // real appointment and wave the move straight through. Subtraction
+      // leaves 11:00–11:45, which still meets the 10:30–11:30 window.
+      stubs = installStubs({
+        busy: [OWN_EVENT, { start: "2026-08-11T09:45:00.000Z", end: "2026-08-11T10:45:00.000Z" }],
+      });
+      const res = await route.run(SHORT_MOVE_ISO);
+
+      assert.equal(
+        res.status,
+        409,
+        "only the occupied SPAN is excused — never another event"
+      );
+      assert.equal(stubs.calls.leadUpdates.length, 0);
+    });
+
+    test(`${route.name} — a single MERGED busy block is trimmed, not dropped`, async () => {
+      // Google merges touching events on one calendar, so the customer's
+      // 10:00–11:00 and a following 11:00–12:00 arrive as one 10:00–12:00
+      // block. Subtracting the occupied hour must leave 11:00–12:00
+      // blocking, rather than clearing the whole block.
+      stubs = installStubs({
+        busy: [{ start: START_ISO, end: "2026-08-11T11:00:00.000Z" }],
+      });
+      const res = await route.run(SHORT_MOVE_ISO);
+
+      assert.equal(res.status, 409, "the remainder of a merged block still blocks");
+      assert.equal(stubs.calls.leadUpdates.length, 0);
+    });
+
+    test(`${route.name} — an unrelated busy period still blocks a distant move`, async () => {
+      // Nothing to do with the exclusion: 14:00–15:00 never touches the
+      // 10:00–11:00 span, so ordinary external blocking is untouched.
+      stubs = installStubs({
+        busy: [OWN_EVENT, { start: MOVED_ISO, end: "2026-08-11T14:00:00.000Z" }],
+      });
+      const res = await route.run(MOVED_ISO);
+      const body = await res.json();
+
+      assert.equal(res.status, 409);
+      assert.match(body.error, /no longer available/);
+      assert.equal(stubs.calls.leadUpdates.length, 0);
+    });
+
+    test(`${route.name} — a distant move is allowed when only its own event is busy`, async () => {
+      stubs = installStubs({ busy: [OWN_EVENT] });
+      const res = await route.run(MOVED_ISO);
+
+      assert.equal(res.status, 200);
+      assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, MOVED_ISO);
+    });
+
+    test(`${route.name} — an unreadable calendar still fails closed`, async () => {
+      // The exclusion must not turn a lookup failure into a free slot:
+      // it is applied to a busy list that was never obtained.
+      stubs = installStubs({ busy: [OWN_EVENT], freeBusyFail: true });
+      const res = await route.run(SHORT_MOVE_ISO);
+      const body = await res.json();
+
+      assert.equal(res.status, 503, "cannot check is never that time has gone");
+      assert.match(body.error, /couldn't confirm/);
+      assert.equal(stubs.calls.leadUpdates.length, 0, "the appointment is left untouched");
+      assert.equal(stubs.calls.updates.length, 0);
+    });
+
+    test(`${route.name} — an org with no calendar connected is unaffected`, async () => {
+      stubs = installStubs({ busy: [OWN_EVENT], connected: false });
+      const res = await route.run(SHORT_MOVE_ISO);
+
+      assert.equal(res.status, 200, "no calendar, no external check, no change");
+      assert.equal(stubs.calls.leadUpdates.at(-1).appointment_datetime, SHORT_MOVE_ISO);
+    });
+  }
 });

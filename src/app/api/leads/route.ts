@@ -4,7 +4,7 @@ import {
   cancelAppointmentOnCalendar,
   rescheduleAppointmentOnCalendar,
 } from "@/lib/calendarSync";
-import { checkBookingSlot } from "@/lib/bookingAvailability";
+import { appointmentBusyWindow, checkBookingSlot } from "@/lib/bookingAvailability";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -510,12 +510,23 @@ export async function PATCH(req: NextRequest) {
     //
     // excludeLeadId is preserved verbatim: capacity is an overlap test,
     // so without it every short reschedule would be refused as a clash
-    // with itself.
+    // with itself. rescheduleExclusion is the same exemption for the
+    // CALENDAR — a calendar-backed appointment has a real event at its
+    // current time, and free/busy cannot tell that event apart from
+    // anyone else's. Only the span it already occupies is excused; a
+    // genuine conflict anywhere in the new window still refuses the move.
+    const durationMinutes = org.appointment_duration_minutes ?? 60;
     const decision = await checkBookingSlot(
       existing.org_id,
       requestedIso,
-      org.appointment_duration_minutes ?? 60,
-      { excludeLeadId: existing.id }
+      durationMinutes,
+      {
+        excludeLeadId: existing.id,
+        rescheduleExclusion: appointmentBusyWindow(
+          existing.appointment_datetime,
+          durationMinutes
+        ),
+      }
     );
 
     if (!decision.available) {
