@@ -441,6 +441,66 @@ export async function sendSalesLeadNotification(
   }
 }
 
+// ── Owner-facing booking status ───────────────────────────────────
+//
+// What the OWNER is told about an appointment the call produced. Voice
+// settles the calendar AFTER the call ends, so until PR #23 the summary
+// email read identically whether the appointment reached the business's
+// diary or was only ever a request. Once a phone call could genuinely
+// book (proven in production 2026-08-26), that ambiguity became a
+// business risk in the expensive direction: an owner who assumes a
+// booking is a request may ring a customer who is already in the diary,
+// and one who assumes the reverse misses the job entirely.
+export type OwnerBookingStatus =
+  | "booked"
+  | "awaiting_confirmation"
+  | "requires_review";
+
+/**
+ * The owner-facing status for a lead's SETTLED status.
+ *
+ * Deliberately a total function over `string | null | undefined` and
+ * deliberately FAIL CLOSED: only the literal "booked" — the status
+ * settleCalendarBacking writes when the calendar actually accepted the
+ * event — may ever be reported as booked. Every other value, including
+ * one this build does not recognise, a read that failed, and null,
+ * lands on a wording that asks the owner to check.
+ *
+ * This is the same rule the booking engine already runs on ("we could
+ * not check" is never "it is free"), applied to what the owner is told:
+ * an unknown outcome is never a confirmation.
+ */
+export function ownerBookingStatus(
+  leadStatus: string | null | undefined
+): OwnerBookingStatus {
+  if (leadStatus === "booked") return "booked";
+  if (leadStatus === "awaiting_confirmation") return "awaiting_confirmation";
+  // needs_review (which is what a conflict, an unreadable calendar or a
+  // failed create all settle to), anything unrecognised, and null.
+  return "requires_review";
+}
+
+const BOOKING_STATUS_COPY: Record<
+  OwnerBookingStatus,
+  { label: string; note: string; colour: string }
+> = {
+  booked: {
+    label: "BOOKED",
+    note: "Booked in the calendar — no manual confirmation needed.",
+    colour: "#047857",
+  },
+  awaiting_confirmation: {
+    label: "AWAITING CONFIRMATION",
+    note: "This appointment has not been confirmed in the calendar yet.",
+    colour: "#b45309",
+  },
+  requires_review: {
+    label: "REQUIRES REVIEW",
+    note: "The requested appointment was not confirmed in the calendar.",
+    colour: "#b91c1c",
+  },
+};
+
 interface CallSummaryParams {
   businessOwnerEmail: string | null;
   businessName: string;
@@ -454,6 +514,18 @@ interface CallSummaryParams {
   summary: string | null;
   transcript: string | null;
   leadCreated: boolean;
+  /**
+   * The SETTLED outcome of an appointment this call produced, or null
+   * when the call produced no appointment at all (a question, a
+   * callback request, an enquiry with no time).
+   *
+   * Null omits the status block entirely rather than defaulting to a
+   * wording: a callback has no booking to report, and telling its owner
+   * an appointment "requires review" would invent one. Callers must
+   * derive this from the lead's settled status — never from whether an
+   * appointment date exists.
+   */
+  bookingStatus?: OwnerBookingStatus | null;
   /** The organisation's IANA zone — see BookingConfirmationParams. */
   timezone?: string | null;
 }
@@ -487,6 +559,7 @@ export async function sendCallSummaryEmail(
     summary,
     transcript,
     leadCreated,
+    bookingStatus,
     timezone,
   } = params;
 
@@ -524,6 +597,10 @@ export async function sendCallSummaryEmail(
     ? escapeHtml(truncated).replace(/\n/g, "<br/>")
     : null;
 
+  // Absent for every call that produced no appointment, which is what
+  // keeps callbacks and general enquiries reading exactly as before.
+  const statusCopy = bookingStatus ? BOOKING_STATUS_COPY[bookingStatus] : null;
+
   try {
     await sendChecked({
       from: FROM_EMAIL,
@@ -540,7 +617,13 @@ export async function sendCallSummaryEmail(
           safeAlternatePhone ? ["Alternate number", safeAlternatePhone] : null,
           formattedTime ? ["Time", formattedTime] : null,
           formattedDuration ? ["Duration", formattedDuration] : null,
+          statusCopy ? ["Booking status", statusCopy.label] : null,
         ])}
+        ${
+          statusCopy
+            ? `<p style="margin:12px 0 0;color:${statusCopy.colour};"><strong>${statusCopy.note}</strong></p>`
+            : ""
+        }
         <p style="margin:14px 0 0;"><strong>Summary:</strong><br/>${safeSummary}</p>
         ${
           leadCreated
