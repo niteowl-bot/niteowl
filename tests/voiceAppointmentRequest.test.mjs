@@ -247,8 +247,15 @@ describe("a phone appointment never becomes a confirmed booking", () => {
     // for the day that stub changes.
     await processCallEnded(await adminClient(), ORG_ID, APPOINTMENT);
     assert.notEqual(stubs.inserts[0].status, "booked", "the email gate");
+    // Matched on the CUSTOMER confirmation's own subject ("Booking
+    // confirmed with …"), not on the word "confirmed" appearing
+    // anywhere. The owner's call summary now reports the settled
+    // booking status, so its body truthfully contains "has not been
+    // confirmed in the calendar yet" — scanning every email's html for
+    // "confirmed" matched that and reported a customer confirmation
+    // that was never sent.
     const confirmations = stubs.emails.filter((e) =>
-      /confirmed|booking confirmation/i.test(`${e.subject} ${e.html}`)
+      /booking confirmed|booking confirmation/i.test(e.subject ?? "")
     );
     assert.equal(confirmations.length, 0);
   });

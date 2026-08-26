@@ -7,7 +7,11 @@ import {
   type ExtractedLead,
   type LeadIntent,
 } from "@/lib/leadCapture";
-import { sendCallSummaryEmail } from "@/lib/email";
+import {
+  ownerBookingStatus,
+  sendCallSummaryEmail,
+  type OwnerBookingStatus,
+} from "@/lib/email";
 import { isVoiceCalendarBookingEnabled } from "@/lib/integrations/flags";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
@@ -792,6 +796,43 @@ export async function processCallEnded(
     return;
   }
 
+  // ── What the owner is told about the appointment ────────────────
+  //
+  // The SETTLED status, read back from the lead itself. Voice writes the
+  // calendar AFTER the call ends: settleCalendarBacking (inside
+  // capturePartialLead above) promotes the row to "booked" only once
+  // Google has actually accepted the event, and settles it to
+  // "needs_review" on a conflict, an unreadable calendar or a failed
+  // create. The unconfirmed-service branch above may then overwrite the
+  // status again. The row is therefore the ONLY thing that knows the
+  // final answer — which is why this reads it rather than reusing
+  // captureResult, the requested time, or whether an appointment date
+  // exists.
+  //
+  // Only for calls that actually asked for an appointment: a callback or
+  // a general question has no booking to report, and null omits the
+  // block entirely rather than inventing a status for it.
+  //
+  // FAILS CLOSED. A failed read leaves `status` undefined, which
+  // ownerBookingStatus maps to "requires review" — never to "booked".
+  let bookingStatus: OwnerBookingStatus | null = null;
+  if (leadId && isAppointmentRequest) {
+    const { data: settledLead, error: settledError } = await admin
+      .from("leads")
+      .select("status")
+      .eq("id", leadId)
+      .maybeSingle();
+
+    if (settledError) {
+      console.error(
+        "[voice] could not read settled lead status for the owner summary:",
+        settledError.message
+      );
+    }
+
+    bookingStatus = ownerBookingStatus(settledLead?.status);
+  }
+
   const sent = await sendCallSummaryEmail({
     businessOwnerEmail: ownerInfo.email,
     businessName: ownerInfo.businessName ?? "the business",
@@ -803,6 +844,7 @@ export async function processCallEnded(
     summary: event.summary,
     transcript: event.transcript,
     leadCreated: Boolean(leadId),
+    bookingStatus,
     timezone: ownerInfo.timezone,
   });
 
