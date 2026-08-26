@@ -375,6 +375,75 @@ Return ONLY the JSON object — no markdown, no explanation.`;
 // ALL of them in the SAME record; longer requests need at least two
 // thirds — similar-sounding but different services should fail closed,
 // not be waved through on a coincidental word in common.
+// ── Service-term normalisation ────────────────────────────────────
+//
+// A caller asks for a "plumber"; the Knowledge Base says "plumbing".
+// Those are the same trade, and until this existed the booking gate
+// refused the call. Proven in production 2026-08-26: a live caller
+// asking for a plumber was correctly told 10:00 was free, then never
+// reached the calendar-backed booking path at all, because "plumbing"
+// does not CONTAIN "plumber" — the two words diverge at the sixth
+// character.
+//
+// Deliberately MORPHOLOGY ONLY: a fixed, ordered list of ordinary
+// English suffixes, each with its own minimum stem length. No model
+// call, no edit distance, no semantic guessing — the same input always
+// produces the same stem, and the rules are readable in one screen.
+
+/**
+ * Ordered [suffix, minimum stem length]. The FIRST applicable rule
+ * wins, and only when the stem left behind is at least that long.
+ *
+ * The minimums are the safety mechanism, not decoration. They are what
+ * stops a short word being chopped into something that collides with an
+ * unrelated one:
+ *   "er" at 5 turns plumber → plumb, but leaves shower, water and
+ *                             boiler intact ("show" would be a trap).
+ *   "al" at 6 turns electrical → electric, but leaves dental intact.
+ */
+const SERVICE_SUFFIX_RULES: ReadonlyArray<readonly [string, number]> = [
+  ["ian", 5], // electrician → electric
+  ["ing", 4], // plumbing → plumb, leaking → leak
+  ["er", 5], // plumber → plumb, cleaner → clean
+  ["al", 6], // electrical → electric
+  ["y", 4], // leaky → leak
+];
+
+/**
+ * The canonical stem of a single service word.
+ *
+ * Plurals are stripped FIRST so that "plumbers" and "plumber" reach the
+ * same derivational rule and land on the same stem; without that pass
+ * they would settle on "plumber" and "plumb" respectively and still
+ * fail to meet each other.
+ *
+ * Exported for its own tests: the stem table is the entire safety
+ * argument for this change, so it is asserted directly rather than only
+ * through the matcher.
+ */
+export function stemServiceWord(word: string): string {
+  let stem = word;
+
+  // Plural "s", but never "ss" (glass) or "us" (radius), and never when
+  // it would leave less than three characters behind ("gas" → "ga").
+  if (
+    stem.endsWith("s") &&
+    !stem.endsWith("ss") &&
+    !stem.endsWith("us") &&
+    stem.length - 1 >= 3
+  ) {
+    stem = stem.slice(0, -1);
+  }
+
+  for (const [suffix, minStemLength] of SERVICE_SUFFIX_RULES) {
+    if (stem.endsWith(suffix) && stem.length - suffix.length >= minStemLength) {
+      return stem.slice(0, -suffix.length);
+    }
+  }
+
+  return stem;
+}
+
 export async function isServiceConfirmedByKnowledge(
   supabase: DatabaseClient,
   orgId: string,
@@ -409,7 +478,19 @@ export async function isServiceConfirmedByKnowledge(
 
   return data.some((record) => {
     const haystack = `${record.title} ${record.content}`.toLowerCase();
-    const matches = needleWords.filter((w) => haystack.includes(w)).length;
+    // The record's own words, stemmed, so a caller's "plumber" can meet
+    // the KB's "plumbing" without either being a substring of the other.
+    // Whole-token membership, NOT substring: a stem only matches a stem,
+    // so this cannot widen the way a looser `includes` would.
+    const haystackStems = new Set(
+      haystack.split(/\W+/).filter(Boolean).map(stemServiceWord)
+    );
+    // The substring test stays FIRST and unchanged, so every phrase that
+    // matched before this existed still matches. The stem test is purely
+    // additive — it can turn a miss into a hit, never a hit into a miss.
+    const matches = needleWords.filter(
+      (w) => haystack.includes(w) || haystackStems.has(stemServiceWord(w))
+    ).length;
     return matches >= requiredMatches;
   });
 }
