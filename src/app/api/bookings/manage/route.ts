@@ -167,6 +167,7 @@ export async function POST(req: NextRequest) {
     after(() =>
       sendBookingSelfServiceChangeNotification({
         businessOwnerEmail: ownerInfo?.email ?? null,
+        businessName: ownerInfo?.businessName ?? null,
         customerName: lead.name,
         customerEmail: lead.email,
         customerPhone: lead.phone,
@@ -364,6 +365,11 @@ export async function POST(req: NextRequest) {
     after(() =>
       sendBookingSelfServiceChangeNotification({
         businessOwnerEmail: ownerInfo?.email ?? null,
+        businessName: ownerInfo?.businessName ?? null,
+        // The token this request already authenticated with, so the
+        // customer's new email carries a working link and supersedes the
+        // stale one. No second lookup, and no second URL format.
+        manageToken: token,
         customerName: lead.name,
         customerEmail: lead.email,
         customerPhone: lead.phone,

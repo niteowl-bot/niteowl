@@ -7,10 +7,38 @@
 // directly need this shim.
 //
 // `after` deliberately does NOT run the callback: everything handed to
-// it is outbound email, which a test must never send. Nothing under
-// test asserts on that work; if something ever needs to, record the
-// callbacks here and run them explicitly.
-export function after() {}
+// it is outbound email, which a test must never send.
+//
+// The callbacks ARE recorded, because customer cancellation/reschedule
+// emails are scheduled through `after` and a test must be able to prove
+// both that one was scheduled and — more importantly — that one was NOT
+// scheduled on a failed reschedule. Recording is passive: nothing runs
+// unless a test explicitly calls runAfterCallbacks(), so every existing
+// test keeps the previous no-op behaviour.
+const afterCallbacks = [];
+
+export function after(callback) {
+  if (typeof callback === "function") afterCallbacks.push(callback);
+}
+
+/** How many deferred callbacks are queued. */
+export function afterCallbackCount() {
+  return afterCallbacks.length;
+}
+
+/** Drops anything queued, so one test cannot observe another's work. */
+export function resetAfterCallbacks() {
+  afterCallbacks.length = 0;
+}
+
+/**
+ * Runs the queued callbacks and clears the queue. Only call this from a
+ * test that has stubbed every network call the callbacks make.
+ */
+export async function runAfterCallbacks() {
+  const queued = afterCallbacks.splice(0, afterCallbacks.length);
+  for (const cb of queued) await cb();
+}
 
 // src/lib/voice/handler.ts (the voice webhook) additionally needs
 // NextResponse.json and the NextRequest type. Only the pieces the

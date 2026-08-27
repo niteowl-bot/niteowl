@@ -295,6 +295,20 @@ export async function sendNeedsReviewNotification(
 
 interface BookingSelfServiceChangeParams {
   businessOwnerEmail: string | null;
+  /**
+   * For the CUSTOMER's copy, which names the business it is about.
+   * Null when the organisation could not be resolved — the customer
+   * still gets a truthful email, worded without the name rather than
+   * withheld over a missing label.
+   */
+  businessName?: string | null;
+  /**
+   * The manage-link token, so a RESCHEDULED customer gets a working
+   * link again and the new email supersedes the stale one. Deliberately
+   * unused for a cancellation: that lead is no longer "booked", so the
+   * route refuses the link and offering it would be a dead end.
+   */
+  manageToken?: string | null;
   customerName: string | null;
   customerEmail: string | null;
   customerPhone: string | null;
@@ -308,16 +322,33 @@ interface BookingSelfServiceChangeParams {
 }
 
 /**
- * Notifies the business owner when a customer cancels or reschedules
- * their own booking via the self-service manage-booking link, so the
- * owner's calendar change isn't a surprise they only discover by
- * checking the dashboard.
+ * Tells BOTH sides that a customer changed their own booking through the
+ * self-service manage-booking link.
+ *
+ * - the CUSTOMER gets confirmation of what they just did. Until this
+ *   existed they saw an on-screen message and nothing else, and after a
+ *   reschedule the only email they held still stated the OLD time.
+ * - the BUSINESS OWNER gets the same notice as before, so the calendar
+ *   change isn't a surprise they only discover by checking the dashboard.
+ *
+ * THE TWO SENDS ARE INDEPENDENT. Each has its own try/catch, so one
+ * recipient's failure never suppresses the other's — a customer inbox
+ * rejecting mail must not cost the owner their notification, and vice
+ * versa.
+ *
+ * This is a NOTIFICATION, sent after settlement. It is never what makes
+ * a change true: the caller has already persisted the cancellation, or
+ * completed the calendar move and the local write, before calling here.
+ * A send failure is logged and swallowed — it must never roll back
+ * booking or calendar state.
  */
 export async function sendBookingSelfServiceChangeNotification(
   params: BookingSelfServiceChangeParams
-): Promise<boolean> {
+): Promise<{ customer: boolean; owner: boolean }> {
   const {
     businessOwnerEmail,
+    businessName,
+    manageToken,
     customerName,
     customerEmail,
     customerPhone,
@@ -329,12 +360,7 @@ export async function sendBookingSelfServiceChangeNotification(
     timezone,
   } = params;
 
-  if (!businessOwnerEmail) {
-    console.error(
-      "[email] No business owner email available — skipped self-service change notification."
-    );
-    return false;
-  }
+  const result = { customer: false, owner: false };
 
   const displayName = escapeHtml(customerName?.trim() || "A customer");
   const safeEmail = customerEmail ? escapeHtml(customerEmail) : null;
@@ -354,6 +380,78 @@ export async function sendBookingSelfServiceChangeNotification(
           timezone
         )}</strong>.</p>`;
 
+  // ── The customer's copy ──────────────────────────────────────────
+  //
+  // Skipped cleanly when there is no address to send to: a booking taken
+  // by phone often has none, and that is not an error.
+  if (customerEmail) {
+    const greetName = escapeHtml(customerName?.trim() || "there");
+    const safeBusiness = businessName?.trim()
+      ? escapeHtml(businessName.trim())
+      : null;
+    const withBusiness = safeBusiness ? ` with <strong>${safeBusiness}</strong>` : "";
+    const subjectSuffix = safeBusiness ? ` — ${businessName!.trim()}` : "";
+    const formattedNew =
+      action === "rescheduled"
+        ? formatAppointmentDate(newDatetime ?? previousDatetime, timezone)
+        : null;
+
+    // The manage link is offered ONLY on a reschedule. After a
+    // cancellation the lead is no longer "booked" and the route refuses
+    // it (bookings/manage rejects any status but booked), so the link
+    // would be a dead end.
+    const manageUrl =
+      action === "rescheduled" && manageToken
+        ? `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/booking/manage?token=${manageToken}`
+        : null;
+
+    const customerBody =
+      action === "cancelled"
+        ? `
+          <p style="margin:0 0 14px;">Hi ${greetName},</p>
+          <p style="margin:0 0 4px;">Your booking${withBusiness} has been cancelled.</p>
+          ${detailsBlock([
+            ["Cancelled appointment", formattedPrevious],
+            safeService ? ["Service", safeService] : null,
+            ["Reference", bookingReference],
+          ])}
+        `
+        : `
+          <p style="margin:0 0 14px;">Hi ${greetName},</p>
+          <p style="margin:0 0 4px;">Your booking${withBusiness} has been moved. This replaces the time we sent you previously.</p>
+          ${detailsBlock([
+            ["New date & time", formattedNew!],
+            ["Previous time", formattedPrevious],
+            safeService ? ["Service", safeService] : null,
+            ["Reference", bookingReference],
+          ])}
+          ${manageUrl ? emailButton(manageUrl, "Cancel or reschedule") : ""}
+        `;
+
+    try {
+      await sendChecked({
+        from: FROM_EMAIL,
+        to: customerEmail,
+        subject:
+          action === "cancelled"
+            ? `Booking cancelled${subjectSuffix}`
+            : `Booking rescheduled${subjectSuffix} — ${formattedNew}`,
+        html: renderEmailLayout(customerBody),
+      });
+      result.customer = true;
+    } catch (err) {
+      console.error("[email] Failed to send customer self-service change email:", err);
+    }
+  }
+
+  // ── The owner's copy — unchanged behaviour ───────────────────────
+  if (!businessOwnerEmail) {
+    console.error(
+      "[email] No business owner email available — skipped self-service change notification."
+    );
+    return result;
+  }
+
   try {
     await sendChecked({
       from: FROM_EMAIL,
@@ -369,11 +467,12 @@ export async function sendBookingSelfServiceChangeNotification(
         ])}
       `),
     });
-    return true;
+    result.owner = true;
   } catch (err) {
     console.error("[email] Failed to send self-service change notification:", err);
-    return false;
   }
+
+  return result;
 }
 
 interface SalesLeadNotificationParams {
