@@ -11,6 +11,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 import { buildVoiceAssistantConfig } from "@/lib/voice/assistant";
+import { buildVapiAssistantResponse } from "@/lib/voice/vapi";
 
 const ORG = {
   business_name: "Acme Plumbing",
@@ -402,7 +403,10 @@ describe("conversation order — the job comes before the caller", () => {
     // "Perfect." opened BOTH confirmation replies and was pure filler.
     assert.doesNotMatch(prompt, /"Perfect\. I'll pass your details/);
     assert.doesNotMatch(prompt, /"Perfect\. We'll make sure/);
-    assert.match(prompt, /Only once they confirm: "I'll pass your details to our team straight away/);
+    assert.match(
+      prompt,
+      /"I'll pass your details to our team straight away\. Someone will contact you as soon as possible\."/
+    );
     // The recap example no longer contradicts rule 2 by opening on
     // "Just to confirm" — the very phrase SAY LESS bans.
     assert.match(prompt, /NOT opened with "Just to confirm" \(rule 2\)/);
@@ -669,7 +673,9 @@ describe("a requested time is not a booking", () => {
       /Booked or confirmed wording is only ever correct once the business has actually confirmed the appointment/
     );
     // The listed-service path still promises a confirmation to follow.
-    assert.match(prompt, /They'll confirm your appointment shortly/);
+    // It is the confirmation EMAIL now, promised once in the rule 11
+    // closing rather than twice, in two different wordings.
+    assert.match(prompt, /please look out for the confirmation email/);
   });
 
   test("the final recap gives the calendar date, not a bare weekday", () => {
@@ -993,7 +999,7 @@ describe("final confirmation", () => {
     assert.match(prompt, /as its own question, and WAIT for their answer: "Is everything I've summarised correct\?"/);
     assert.match(
       prompt,
-      /Only once they confirm: "I'll pass your details to our team straight away. Someone will contact you as soon as possible."/
+      /Only once they confirm, close with the ONE line that matches what you actually know/
     );
   });
 
@@ -1231,5 +1237,190 @@ describe("the real call: 'as soon as possible' became the callback date AND time
       summary,
       /report it as a callback request — never as a booked or requested appointment/
     );
+  });
+});
+
+// ── The spoken closing claims only what is knowable on the call ─────
+//
+// A live call CANNOT know a booking exists. The calendar event is
+// written after the caller has hung up (voice/calls.ts → processCallEnded
+// → capturePartialLead → settleCalendarBacking), and the live assistant
+// holds no booking tool — only check_availability and endCall. So
+// "available" is the strongest claim the closing may make, and the
+// confirmation email is what tells the customer it actually worked.
+//
+// These pin the wording against the gap the PR #28 verification exposed:
+// a call that really did book was closed with a generic "someone will
+// contact you", under-reporting the result it had actually achieved.
+describe("the spoken closing claims only what is known during the call", () => {
+  const APPOINTMENT_CLOSING =
+    "That time is currently showing as available. After this call, I'll submit your booking request for processing, so please look out for the confirmation email.";
+  const UNCHECKED_CLOSING =
+    "After this call, I'll submit your booking request for processing, so please look out for the confirmation email.";
+
+  /** The rule 11 closing branch — the last thing the caller hears. */
+  function closingSection() {
+    const prompt = promptFor();
+    const start = prompt.indexOf("Only once they confirm,");
+    const end = prompt.indexOf("ANYTHING ELSE —", start);
+    assert.ok(start !== -1, "the closing branch must exist");
+    assert.ok(end > start, "the closing branch must end at ANYTHING ELSE");
+    return prompt.slice(start, end);
+  }
+
+  test("a checked-free appointment gets truthful pending wording", () => {
+    const closing = closingSection();
+    assert.ok(
+      closing.includes(APPOINTMENT_CLOSING),
+      "the checked-free closing must be scripted verbatim"
+    );
+    assert.match(closing, /APPOINTMENT whose time check_availability reported FREE/);
+    // The check really did report FREE, so the result may be reported —
+    // but nothing holds the slot, so it is reported as what it is: a
+    // reading taken a moment ago, not a promise about the future.
+    assert.match(closing, /currently showing as available/);
+    // The flat claim is what would promise the slot stays free.
+    assert.doesNotMatch(closing, /"That time is available\./);
+    assert.ok(
+      !closing.includes("I'll submit your booking request now"),
+      "submission is after the call, not now"
+    );
+  });
+
+  test("the closing says processing happens after the call", () => {
+    const closing = closingSection();
+    // Both appointment branches, because in both the calendar write
+    // happens in post-call processing (processCallEnded → after()).
+    assert.ok(closing.includes(APPOINTMENT_CLOSING));
+    assert.ok(closing.includes(UNCHECKED_CLOSING));
+    assert.equal(
+      closing.split("After this call, I'll submit your booking request for processing").length - 1,
+      2,
+      "both appointment branches defer submission to after the call"
+    );
+  });
+
+  test("the slot is never presented as held or guaranteed to remain free", () => {
+    const closing = closingSection();
+    assert.match(closing, /AVAILABLE IS NOT BOOKED, AND IT IS NOT HELD/);
+    assert.match(
+      closing,
+      /nothing reserves it, so it can still be taken before the request is processed/
+    );
+    // The spoken line itself makes no promise about the future.
+    assert.doesNotMatch(
+      APPOINTMENT_CLOSING,
+      /\b(locked in|guaranteed|still be free|secured|held|reserved)\b/i
+    );
+  });
+
+  test("the closing never claims the booking already exists", () => {
+    // Affirmative claims only. The branch DOES contain these words as
+    // prohibitions ("NEVER upgrade that to booked..."), which is the
+    // point — what must never appear is Remy SAYING them.
+    const closing = closingSection();
+    const forbidden = [
+      /you(?:'re| are) booked/i,
+      /I(?:'ve| have) booked/i,
+      /your appointment is (?:confirmed|booked)/i,
+      /is now (?:confirmed|booked)/i,
+      /your slot is reserved/i,
+      /appointment is set/i,
+      /added it to the calendar/i,
+      /(?:it's|it is|you're|you are) locked in/i,
+    ];
+    for (const pattern of forbidden) {
+      assert.doesNotMatch(closing, pattern);
+    }
+    assert.doesNotMatch(
+      APPOINTMENT_CLOSING,
+      /\b(booked|confirmed|reserved|held|secured)\b/i,
+      "the spoken line itself carries no success word"
+    );
+  });
+
+  test("availability is stated as availability, never as a booking", () => {
+    const closing = closingSection();
+    assert.match(closing, /AVAILABLE IS NOT BOOKED/);
+    assert.match(
+      closing,
+      /NEVER upgrade it to booked, confirmed, reserved, held, secured, locked in or "in the diary"/
+    );
+    // Rule 9's standing invariant is untouched by the new closing.
+    assert.match(
+      promptFor(),
+      /A time it reports as available is still only a REQUEST — never say reserved/
+    );
+  });
+
+  test("the caller is pointed at the confirmation email, without guaranteeing it", () => {
+    const closing = closingSection();
+    assert.match(closing, /please look out for the confirmation email/);
+    // "look out for" is the promise. A guaranteed arrival would be a
+    // claim about a send that has not happened and may never happen.
+    assert.match(closing, /Say "look out for" the email, never "you will receive" it/);
+    assert.doesNotMatch(closing, /you will receive the confirmation email/i);
+  });
+
+  test("an appointment that was not checked says nothing about availability", () => {
+    const closing = closingSection();
+    assert.match(
+      closing,
+      /APPOINTMENT whose time you could NOT check, or that the tool did not report as free/
+    );
+    assert.match(closing, /Say NOTHING about availability — you do not know it/);
+  });
+
+  test("the not-listed-service closing stays distinct", () => {
+    // Rule 9 still owns its own line, and the closing still defers to it
+    // rather than giving an unlisted service the booking-request wording.
+    assert.match(
+      promptFor(),
+      /close with "I'll pass your request to our team\. They'll confirm whether we can provide that service/
+    );
+    assert.match(closingSection(), /If rule 9 gave the not-listed closing line, use that\./);
+  });
+
+  test("a callback never takes the appointment closing", () => {
+    const closing = closingSection();
+    assert.match(
+      closing,
+      /A callback has no booking request to submit and no confirmation email to expect, so it NEVER takes the appointment closing/
+    );
+    assert.match(promptFor(), /A callback is not an appointment/);
+  });
+
+  test("the goodbye is still two sentences, not three", () => {
+    const prompt = promptFor();
+    assert.match(prompt, /close in TWO short sentences, never three/);
+    assert.match(
+      prompt,
+      /A third farewell sentence is what stacks into garbled endings like "Good Goodbye\."/
+    );
+    // The closing branch precedes the goodbye and adds no farewell of its own.
+    assert.doesNotMatch(closingSection(), /Goodbye/);
+  });
+
+  test("no booking tool was introduced — availability and endCall only", () => {
+    const tools = buildVapiAssistantResponse(
+      buildVoiceAssistantConfig(
+        ORG,
+        [],
+        SETTINGS,
+        "https://example.test/api/voice/webhook",
+        CALLER,
+        MONDAY_3_AUG_2026
+      )
+    ).assistant.model.tools;
+
+    assert.equal(tools.length, 2, "exactly endCall and check_availability");
+    const names = tools
+      .map((t) => (t.type === "function" ? t.function.name : t.type))
+      .sort();
+    assert.deepEqual(names, ["check_availability", "endCall"]);
+    // Nothing that could write a booking or a calendar event mid-call.
+    for (const name of names) {
+      assert.doesNotMatch(name, /^(book|create|confirm|schedule)/i);
+    }
   });
 });
