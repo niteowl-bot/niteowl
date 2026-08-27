@@ -35,6 +35,16 @@ The following features are complete and tested:
 - Customer Manage-Link Timezone Correctness (PR #19, merged and live 2026-08-14)
 - Email Appointment Timezone Correctness (PR #21, merged and live 2026-08-14)
 - External-Calendar Rescheduling Correctness (PR #25, merged and live 2026-08-19)
+- Voice Calendar Booking (PR #23, merged 2026-08-18; **verified live end-to-end 2026-08-27**)
+- Owner Call-Summary Booking Status (PR #27, merged and live 2026-08-26)
+- Service-Matcher Morphology (PR #28, merged and live 2026-08-26)
+
+Verified current state through PR #28:
+
+- **PR #27** is merged and deployed. The owner call summary now reports the **final persisted booking status**, not an interim one.
+- **PR #28** is merged and deployed, and the plumber/plumbing morphology fix was **verified successfully in production**: ordinary word forms of the same service now match.
+- **Live voice to Google Calendar booking is verified end-to-end.** The PR #28 production verification produced a genuine `booked` lead together with a synced calendar integration link.
+- The remaining `requiredMatches` false positive is **explicitly deferred** pending a safer service-identity architecture. It is **not** to be closed with a matcher tweak — see the service-matching section below for the approaches already investigated and rejected.
 
 Dashboard timezone rule:
 
@@ -79,7 +89,50 @@ A reschedule is judged by the **same decision every other booking path makes** �
 
 Voice calendar booking status:
 
-`VOICE_CALENDAR_BOOKING_ENABLED` is **absent from the production environment** and voice calendar booking (PR #23) is therefore **disabled in production**. The flag requires the exact literal `"true"`, so unset reads as off. PR #25 did not change it.
+`VOICE_CALENDAR_BOOKING_ENABLED` is **set in the production environment**, so voice calendar booking (PR #23) is **enabled in production**. The flag requires the exact literal `"true"`, so anything else — including unset — still reads as off.
+
+**Verified end-to-end in production (2026-08-27).** A live phone call booked an appointment and the Google Calendar event was created: the PR #28 production verification produced a genuine `booked` lead together with a synced calendar integration link. Voice bookings are no longer local-only.
+
+This supersedes the earlier record that the flag was absent and the feature disabled.
+
+Service matching — one known false positive, DEFERRED (investigated 2026-08-26, against `f05db92`):
+
+`isServiceConfirmedByKnowledge` (`src/lib/leadCapture.ts`, shared by voice, chat **and** widget) can confirm a service the business does not offer.
+
+Reproduction, against a Plumbing-only Knowledge Base:
+
+```
+"electrician for a broken radiator"  →  true   (WRONG)
+   significant tokens: [electrician, broken, radiator]   requiredMatches = 2
+   electrician = miss,  broken = HIT,  radiator = HIT    →  2 of 3, confirmed
+```
+
+Why: every significant token carries **equal weight**, so incidental descriptor words can satisfy the threshold while the token naming the service misses entirely. `requiredMatches` is `n <= 2 ? n : ceil(2n/3)` — non-monotonic, strictest at exactly two words. This **fails open**, which makes it more serious than the PR #28 morphology bug, which failed closed. It has never been observed in production.
+
+**A qualifier/preposition gate was implemented and REJECTED.** The idea was to split the request at the first qualifier preposition and treat the words before it as the requested service. Adversarial testing of 24 phrases against the real matcher proved the invariant "words before the qualifier identify the service" is simply false in ordinary English — English `for` is both purposive ("looking **for** a plumber") and qualifying ("plumber **for** a radiator"). It introduced four genuine false negatives on valid requests:
+
+- `"I need help with a burst pipe"` (before `with` = "help")
+- `"help with a blocked toilet"` (= "help")
+- `"issue with a leaking pipe"` (= "issue")
+- `"need someone for a leaking radiator"` (= "someone")
+
+The experiment was fully reverted; no part of it remains.
+
+**Architectural finding — `extracted.service` is NOT a trusted service identity.** Its extraction contract calls it a *"short summary of what the caller wants"* (voice `extraction.ts`; chat/widget prompt example returns `"Plumber booking"`). One free-text field, model-generated, observed in production holding a trade (`"plumber"`), a family (`"plumbing"`), trade + request (`"plumbing appointment"`), trade + problem, a problem alone, and once an entire call summary paragraph (lead `dbff9272`). `shouldUpdateService` already guards it against model misclassification. `confidence` gates nothing.
+
+**Never make `extracted.service` authoritative for deciding which services a business offers.**
+
+The safer future direction is a distinct upstream signal — conceptually `requested_service` — but that is **DEFERRED and not approved**. It is a proper architecture task across voice, chat and widget requiring: an explicit semantic contract; a clear split between requested service identity and problem description; **constrain-only** semantics (may refuse, may never confirm); fallback to existing behaviour when absent or uncertain; adversarial tests; provider-independent boundaries; identical behaviour across all three surfaces; PR #28 morphology preserved; fail-safe throughout; and no hard-coded trade taxonomy unless separately justified.
+
+**Do not casually retry any of these** — each was investigated and rejected:
+
+- another preposition/qualifier heuristic (proven to cause false negatives)
+- more stop-word tuning (an ever-growing list; breaks on "I require assistance with…")
+- trade-name suffix heuristics (`-er` catches `under`, `water`, `other` — verified to break `"leak under the shower"`)
+- fuzzy matching, edit distance, embeddings, or an LLM call inside the matcher
+- hard-coded trade vocabularies or industry-specific lists
+- cross-record contradiction as the sole fix (never fires on a single-service KB, so it misses this very case)
+- lowering `requiredMatches` or any arbitrary threshold change (amplifies the false positive)
 
 ---
 
