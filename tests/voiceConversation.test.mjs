@@ -1254,7 +1254,9 @@ describe("the real call: 'as soon as possible' became the callback date AND time
 // contact you", under-reporting the result it had actually achieved.
 describe("the spoken closing claims only what is known during the call", () => {
   const APPOINTMENT_CLOSING =
-    "That time is available. I'll submit your booking request now, so please look out for the confirmation email.";
+    "That time is currently showing as available. After this call, I'll submit your booking request for processing, so please look out for the confirmation email.";
+  const UNCHECKED_CLOSING =
+    "After this call, I'll submit your booking request for processing, so please look out for the confirmation email.";
 
   /** The rule 11 closing branch — the last thing the caller hears. */
   function closingSection() {
@@ -1273,6 +1275,43 @@ describe("the spoken closing claims only what is known during the call", () => {
       "the checked-free closing must be scripted verbatim"
     );
     assert.match(closing, /APPOINTMENT whose time check_availability reported FREE/);
+    // The check really did report FREE, so the result may be reported —
+    // but nothing holds the slot, so it is reported as what it is: a
+    // reading taken a moment ago, not a promise about the future.
+    assert.match(closing, /currently showing as available/);
+    // The flat claim is what would promise the slot stays free.
+    assert.doesNotMatch(closing, /"That time is available\./);
+    assert.ok(
+      !closing.includes("I'll submit your booking request now"),
+      "submission is after the call, not now"
+    );
+  });
+
+  test("the closing says processing happens after the call", () => {
+    const closing = closingSection();
+    // Both appointment branches, because in both the calendar write
+    // happens in post-call processing (processCallEnded → after()).
+    assert.ok(closing.includes(APPOINTMENT_CLOSING));
+    assert.ok(closing.includes(UNCHECKED_CLOSING));
+    assert.equal(
+      closing.split("After this call, I'll submit your booking request for processing").length - 1,
+      2,
+      "both appointment branches defer submission to after the call"
+    );
+  });
+
+  test("the slot is never presented as held or guaranteed to remain free", () => {
+    const closing = closingSection();
+    assert.match(closing, /AVAILABLE IS NOT BOOKED, AND IT IS NOT HELD/);
+    assert.match(
+      closing,
+      /nothing reserves it, so it can still be taken before the request is processed/
+    );
+    // The spoken line itself makes no promise about the future.
+    assert.doesNotMatch(
+      APPOINTMENT_CLOSING,
+      /\b(locked in|guaranteed|still be free|secured|held|reserved)\b/i
+    );
   });
 
   test("the closing never claims the booking already exists", () => {
@@ -1288,6 +1327,7 @@ describe("the spoken closing claims only what is known during the call", () => {
       /your slot is reserved/i,
       /appointment is set/i,
       /added it to the calendar/i,
+      /(?:it's|it is|you're|you are) locked in/i,
     ];
     for (const pattern of forbidden) {
       assert.doesNotMatch(closing, pattern);
@@ -1304,7 +1344,7 @@ describe("the spoken closing claims only what is known during the call", () => {
     assert.match(closing, /AVAILABLE IS NOT BOOKED/);
     assert.match(
       closing,
-      /NEVER upgrade that to booked, confirmed, reserved, held, secured or "in the diary"/
+      /NEVER upgrade it to booked, confirmed, reserved, held, secured, locked in or "in the diary"/
     );
     // Rule 9's standing invariant is untouched by the new closing.
     assert.match(
