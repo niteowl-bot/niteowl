@@ -607,6 +607,15 @@ interface CallSummaryParams {
   callerPhone: string | null;
   /** A different number the caller asked to be reached on, if any. */
   alternatePhone?: string | null;
+  /**
+   * What the caller said when asked WHEN to ring them back, in cases
+   * where that answer carried urgency and no usable day or time —
+   * "as soon as possible" and the like. Never a date and never a time:
+   * sanitisePreferredDatetime (voice/callbackTiming.ts) returns either
+   * a real timing OR an urgency phrase, never both, so this is only
+   * ever set when there is no callback time to show.
+   */
+  callbackUrgency?: string | null;
   callerName: string | null;
   startedAt: string | null; // ISO string
   durationSeconds: number | null;
@@ -658,6 +667,7 @@ export async function sendCallSummaryEmail(
     summary,
     transcript,
     leadCreated,
+    callbackUrgency,
     bookingStatus,
     timezone,
   } = params;
@@ -676,6 +686,12 @@ export async function sendCallSummaryEmail(
   const safePhone = callerPhone ? escapeHtml(callerPhone) : null;
   const safeAlternatePhone = alternatePhone?.trim()
     ? escapeHtml(alternatePhone.trim())
+    : null;
+  // The caller's own words, never reinterpreted into a time. Escaped
+  // like every other caller-supplied value: detailsBlock interpolates
+  // raw.
+  const safeCallbackUrgency = callbackUrgency?.trim()
+    ? escapeHtml(callbackUrgency.trim())
     : null;
   const formattedTime = startedAt
     ? formatAppointmentDate(startedAt, timezone)
@@ -714,6 +730,12 @@ export async function sendCallSummaryEmail(
           // both are present.
           safePhone ? ["Caller ID", safePhone] : ["Caller ID", "Withheld"],
           safeAlternatePhone ? ["Alternate number", safeAlternatePhone] : null,
+          // Only present when the caller gave urgency INSTEAD of a
+          // callback time. Labelled as urgency, never as a time, so it
+          // cannot be read as a slot anyone can be rung at.
+          safeCallbackUrgency
+            ? ["Callback urgency", safeCallbackUrgency]
+            : null,
           formattedTime ? ["Time", formattedTime] : null,
           formattedDuration ? ["Duration", formattedDuration] : null,
           statusCopy ? ["Booking status", statusCopy.label] : null,
