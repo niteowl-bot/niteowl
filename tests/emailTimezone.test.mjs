@@ -147,10 +147,15 @@ describe("EMAIL TIMEZONE — the appointment time is the business's, not London'
       timezone: "Asia/Dubai",
     });
 
-    assert.equal(sent.length, 1);
-    assert.match(sent[0].html, /cancelled their booking for <strong>Thursday, 20 August 2026 at 14:00/);
-    assert.match(sent[0].subject, /Thursday, 20 August 2026 at 14:00/);
-    assert.doesNotMatch(sent[0].subject, /11:00/);
+    // Two now go out — the customer's copy and the owner's. This test
+    // owns the OWNER's rendering; the customer's is covered in
+    // customerManageChangeEmails.test.mjs.
+    assert.equal(sent.length, 2);
+    const owner = sent.find((m) => m.to === "owner@example.com");
+    assert.ok(owner, "the owner notification must still be sent");
+    assert.match(owner.html, /cancelled their booking for <strong>Thursday, 20 August 2026 at 14:00/);
+    assert.match(owner.subject, /Thursday, 20 August 2026 at 14:00/);
+    assert.doesNotMatch(owner.subject, /11:00/);
   });
 
   test("reschedule notification renders BOTH times in the business's zone", async () => {
