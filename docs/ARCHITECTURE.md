@@ -1564,6 +1564,30 @@ Conceptual fields, pruned to what §25's learning loops genuinely need:
 | Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version` |
 | Traceability | `model`, `model_version`, `policy_version`, `schema_version` |
 
+**This is the single canonical `DecisionRecord`, and it belongs here.** Every decision
+NiteOwl records — whoever or whatever originated it — is one row of this shape.
+`docs/AGENT_ACCESS_LAYER.md` §6.2 does **not** define a second record: it defines the
+**agent-originated profile**, the additional fields an agent invocation populates on top of
+these (`principal`, `capability_id` + `capability_version`, `deciding_check`,
+`adjudication_outcome`). The access layer governs *who may create, recommend, approve,
+execute or read* a decision; it does not own the definition of one. **One record, one
+store** — a second decision store keyed to agents would fragment the exact history §25 says
+is the only thing that cannot be copied.
+
+Two requirements follow, and both belong to this record rather than to the access layer:
+
+- **Inputs are stored as a digest plus explicitly whitelisted fields, never raw.** Decision
+  inputs carry customer names, phone numbers and email addresses; a decision log that
+  stores them raw becomes the largest PII surface in the product — retained longest and
+  read least.
+- **`authority_level` is what the business granted, not what adjudicating one instance
+  produced.** They are different axes and must not collapse into one another: a capability
+  granted `automatic` authority can still end in "we could not tell" when the governance
+  store is unreadable. A history that cannot separate **"we refused"** from **"we could not
+  tell"** teaches a learner the wrong lesson in exactly the situations that matter most —
+  the same rule that keeps `lookup_failed` distinct from `capacity_full` in
+  `checkBookingSlot`.
+
 Three rules keep this from becoming a research project:
 
 1. **`reason_codes` are enumerated, and the enumeration already exists.**

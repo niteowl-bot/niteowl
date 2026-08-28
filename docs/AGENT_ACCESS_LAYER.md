@@ -25,7 +25,7 @@ Companion documents, which this one does not duplicate:
 | Document | What it holds |
 |---|---|
 | `docs/ARCHITECTURE.md` Parts I–II | The future-compatibility and provider guardrail. §3.3 events, §3.4 permissions, §3.9 Core boundaries, §4 compatibility map |
-| `docs/ARCHITECTURE.md` **Part III** — *not merged; see §21.4* | Compounding moat and outcome intelligence. §20.4 Operating State, §20.5 Outcome Spine, §20.6 provenance, §20.7 Decision & Outcome Memory, §23 causal tiers, §24 Cross-Product Learning Contract, §25 copy test |
+| `docs/ARCHITECTURE.md` **Part III** — *merged into `main` 2026-08-28, merge `2d89980`* | Compounding moat and outcome intelligence. §20.4 Operating State, §20.5 Outcome Spine, §20.6 provenance, **§20.7 the canonical `DecisionRecord`**, §23 causal tiers, §24 Cross-Product Learning Contract, §25 copy test |
 | `PROJECT_CONTEXT.md` | Product definition, development principles, booking rules |
 | `src/lib/integrations/types.ts` | The **egress** capability framework this design deliberately mirrors |
 
@@ -354,18 +354,40 @@ Both fit the table shape `docs/ARCHITECTURE.md` §3.3 already prescribes — `or
 `correlation_id`, `metadata` jsonb, `dedupe_key` — following the durable pattern
 already proven twice in this codebase by `voice_events` and `integration_jobs`.
 
-Decision record contents:
+**The record itself is not defined here.** The canonical `DecisionRecord` belongs to
+NiteOwl Core and is defined once, in `docs/ARCHITECTURE.md` Part III §20.7 — identity,
+subject, content, basis, authority, execution, outcome and traceability. This layer does
+not keep a competing schema. It governs **who may create, recommend, approve, execute or
+read** a decision, and it contributes an **agent-originated profile** to that one record.
 
-- principal (credential id, kind, subject, product context)
-- capability id **and version**
-- outcome: `permit` / `require_approval` / `deny` / `unable_to_authorise`
-- **which of the five checks decided it, and the rule that fired**
-- an argument **digest**, plus explicitly whitelisted fields — never raw arguments
-- `correlation_id` threading adapter → kernel → domain → provider
+The profile — populated only when the decision originated at the AAL:
 
-The argument-digest rule is deliberate. Agent arguments carry customer names, phone
-numbers and email addresses; a decision log that stores them raw becomes the largest
-PII surface in the product, retained longest and read least.
+| Field | Meaning |
+|---|---|
+| `principal` | Credential id, kind, subject, product context (§3.2) |
+| `capability_id` + `capability_version` | Which capability, at which manifest version (§5) |
+| `deciding_check` | Which of the five checks decided it, and the rule that fired (§3) |
+| `adjudication_outcome` | `permit` / `require_approval` / `deny` / `unable_to_authorise` (§3.4) |
+
+`correlation_id` is a base-record field, and this layer threads it adapter → kernel →
+domain → provider.
+
+Two rules govern how this layer writes to the canonical record:
+
+- **`adjudication_outcome` is not `authority_level`.** The base record's
+  `authority_level` is **what the business granted**; the profile's
+  `adjudication_outcome` is **what adjudicating this one invocation produced**. A
+  capability granted `automatic` authority can still return `unable_to_authorise` when
+  the governance store is unreadable — that is §4 working. Both axes must be recorded, and
+  `unable_to_authorise` must survive into the persisted record: a history that cannot
+  tell "we refused" from "we could not tell" is worse than no history in exactly the
+  situations that matter most.
+- **The argument digest is a base-record rule** (§20.7), not an agent-specific one:
+  arguments are stored as a digest plus explicitly whitelisted fields, never raw. Agent
+  arguments carry customer names, phone numbers and email addresses, and a decision log
+  that stores them raw becomes the largest PII surface in the product — retained longest
+  and read least. `auditRequirements` (§16.1) is where a capability declares any
+  whitelisted field it needs beyond the default.
 
 **On the "second consumer" trigger.** `docs/ARCHITECTURE.md` §3.9 defers the events
 table until a second real consumer exists, and that deferral still stands for
@@ -718,15 +740,21 @@ capability yet; each is a product waiting for its rule.
 
 ## 17. One decision record, two profiles — *the real finding of this pass*
 
+> **RESOLVED 2026-08-28.** Part III is merged (`2d89980`) and the unification below has
+> been **applied**: `docs/ARCHITECTURE.md` §20.7 now states that it is the single
+> canonical `DecisionRecord`, and §6.2 of this document references it and contributes the
+> agent-originated profile instead of defining a rival schema. The analysis is kept as
+> written, because it is the reasoning the resolution rests on.
+
 **This is the only defect this review found in the existing documentation, and it is an
 artefact of how the two documents were written.**
 
-`docs/ARCHITECTURE.md` Part III was written 2026-08-18 and **has never been merged** — it
-lives on branch `docs/architecture-part3-compounding-moat` (commit `724f3dd`) and is absent
-from `main`. This document was written eight days later against `d51bd26`, where Part III
-was not in the tree. The consequence is that **§6.2 and Part III §20.7 each define a
-decision record, independently, with different field sets** — two definitions of the single
-artefact both documents call the moat.
+`docs/ARCHITECTURE.md` Part III was written 2026-08-18 and, **at the time of this review,
+had never been merged** — it lived on branch `docs/architecture-part3-compounding-moat`
+(commit `724f3dd`) and was absent from `main`. This document was written eight days
+later against `d51bd26`, where Part III was not in the tree. The consequence is that
+**§6.2 and Part III §20.7 each define a decision record, independently, with different
+field sets** — two definitions of the single artefact both documents call the moat.
 
 Left alone, this resolves itself the worst way available: whichever document the
 implementer reads first becomes the schema, and the other's fields arrive later as a
@@ -761,7 +789,8 @@ Three consequences worth stating plainly:
    cannot tell "we refused" from "we could not tell" will teach a learner the wrong lesson
    in exactly the situations that matter most.
 
-This unification is a **Phase 0 decision** (§10) and is carried into §21.1.
+This unification was a **Phase 0 decision** (§10), carried into §21.1 and **applied on
+2026-08-28** — see §20.7 of `docs/ARCHITECTURE.md` and §6.2 above.
 
 ---
 
@@ -955,16 +984,16 @@ today and both expensive after the first record is written:
 
 | Added | Why now |
 |---|---|
-| **The single `DecisionRecord`, with the agent profile as an extension** (§17) | Two definitions currently exist in two documents. Whichever is implemented first silently wins |
+| **The single `DecisionRecord`, with the agent profile as an extension** (§17) | Two definitions existed in two documents. Whichever was implemented first would silently win. **APPLIED 2026-08-28** — §20.7 is canonical, §6.2 is the profile |
 | **Capabilities declare their emitted events and decision type, validated at registration** (§16.1) | It is what makes "no unattributable agent action" mechanical rather than aspirational |
 
 ### 21.2 Classification of everything this addendum names
 
 | Item | Classification |
 |---|---|
-| Unify the decision record; agent fields as a profile (§17) | **NOW — decision only.** No code, no schema. A Phase 0 item, and Phase 0 has not started |
+| Unify the decision record; agent fields as a profile (§17) | **DONE 2026-08-28 — decision only.** No code, no schema. Applied in `docs/ARCHITECTURE.md` §20.7 and §6.2 above |
 | Capability declaration set, incl. `emitsEvents` / `emitsDecisionType` (§16) | **PREPARE** — contract documented, nothing built |
-| Argument-digest rule promoted to the base decision record (§17) | **PREPARE** |
+| Argument-digest rule promoted to the base decision record (§17) | **DONE 2026-08-28** — adopted as a base-record rule in `docs/ARCHITECTURE.md` §20.7 |
 | Graduated-autonomy bands (§18) | **PREPARE** — vocabulary now; the ladder is built in Phase 2, before any write exists |
 | Protocol adapters kept cheap and deletable (§8, §15) | **PREPARE** — already the stated test |
 | Demand ↔ capacity ↔ commercial reasoning (§19) | **LATER**, behind four dependencies and three unfired triggers |
@@ -991,6 +1020,10 @@ Naming a thing in a review is not a reason to create it.
 | A new architecture document | This extends the two that already exist |
 
 ### 21.4 Open decision — Part III is unmerged
+
+> **RESOLVED 2026-08-28.** Option 1 was taken. Part III was merged into `main` by a normal
+> non-fast-forward merge, `2d89980`, with `724f3dd` preserved as a visible ancestor. The
+> record below is kept as written; it is no longer an open decision.
 
 **This needs an explicit decision and is the one thing here that cannot be resolved without
 the owner.**
@@ -1044,13 +1077,13 @@ Everything in §14–§22 is behind Remy's calendar and phone reliability, witho
 
 **Created:** none. **Production code, schema, flags, environment:** none.
 
-**Pending, and requiring §21.4 to be settled first** — the edits that stitch Part III to
-this document, listed exactly so they can be applied in one pass:
+**§21.4 was settled on 2026-08-28 (Part III merged, `2d89980`).** Of the edits listed below,
+the two §20.7 rows are now **APPLIED**; the rest are superseded by the fuller list in §29.5:
 
 | Target | Edit |
 |---|---|
-| Part III §20.7 | Note that agent-originated decisions add the §6.2 profile fields, and adopt the argument-digest rule for the base record |
-| Part III §20.7 | Distinguish `authority_level` (granted standing) from adjudication outcome, and require `unable_to_authorise` to be representable |
+| Part III §20.7 | ~~Note that agent-originated decisions add the §6.2 profile fields, and adopt the argument-digest rule for the base record~~ **APPLIED 2026-08-28** |
+| Part III §20.7 | ~~Distinguish `authority_level` (granted standing) from adjudication outcome, and require `unable_to_authorise` to be representable~~ **APPLIED 2026-08-28** |
 | Part III §21 diagram | Replace with §20 above, which includes the agent path |
 | Part III §25 copy-test table | Add the §15 row: the access layer is commodity; the record reached through it is not |
 | Part III §30 PREPARE | Add the capability declaration set (§16.1) and the autonomy vocabulary (§18) |
@@ -1150,6 +1183,13 @@ raised is genuinely open (§26), and §20's diagram silently dropped a layer (§
 ---
 
 ## 24. Finding — the canonical architecture set is not in the repository
+
+> **RESOLVED 2026-08-28.** Both gaps are closed. `docs/AGENT_ACCESS_LAYER.md` was committed
+> as `c461214`, and Part III was merged as `2d89980`; the canonical architecture set —
+> `docs/ARCHITECTURE.md` Parts I–III plus this document — is now reachable from `main` in
+> one place. The finding is kept as written because it records why the §17 contradiction
+> arose. **One residual risk remains:** at the time of writing these commits are local and
+> have not been pushed, so the set is durable in this clone only.
 
 **This is the most consequential finding of this pass, and it is not an architecture
 finding. It is a durability one.**
@@ -1572,8 +1612,8 @@ component, no new layer, no new table, no new category of state.
 
 | Item | Classification |
 |---|---|
-| **Commit this document and settle Part III's merge** (§24) | **NOW — decision only, and it needs the owner.** No code, no schema. The output of two reviews is currently outside the repository's history, one of them in no commit at all |
-| Unify the decision record; agent fields as a profile (§17) | **NOW — decision only.** Carried forward from §21.2, **still unresolved** |
+| **Commit this document and settle Part III's merge** (§24) | **DONE 2026-08-28 — decision only.** Committed as `c461214`; Part III merged as `2d89980`. Not yet pushed |
+| Unify the decision record; agent fields as a profile (§17) | **DONE 2026-08-28 — decision only.** Applied: `docs/ARCHITECTURE.md` §20.7 is canonical, §6.2 contributes the agent profile |
 | Free-product run linkage by held token, never by inferred identity (§25.1) | **PREPARE** — a rule, documented. No free product exists |
 | Never match public-form input against `organisations` (§25.1) | **PREPARE** — a prohibition adopted before the feature that would violate it exists |
 | Free-product namespace isolation is structural, not a query discipline (§25.1) | **PREPARE** |
@@ -1587,8 +1627,8 @@ component, no new layer, no new table, no new category of state.
 | Any free product at all | **LATER** — none exists, none is proposed here |
 | Network intelligence, benchmarks, outcome-trained models | **MUCH LATER** — Part III §27's five gates, unmet, now plus §25.2's floor |
 
-**Nothing in this addendum is classified NOW as a build.** The two NOW items are both
-decisions, and one of them has been outstanding since 2026-08-27.
+**Nothing in this addendum is classified NOW as a build.** Both NOW items were decisions, and
+both were taken on 2026-08-28 — the durability commits and the decision-record unification.
 
 ### 29.3 Risks — the delta only
 
@@ -1597,7 +1637,7 @@ pass:
 
 | Risk | Change |
 |---|---|
-| **Architecture documentation lost or ignored** | **New, and it has already fired once.** An untracked file and an unmerged branch produced the §17 contradiction; the same conditions are still in place across three documents (§24) |
+| **Architecture documentation lost or ignored** | **Fired once, now largely closed.** An untracked file and an unmerged branch produced the §17 contradiction. Both were resolved on 2026-08-28 (§24); the residual exposure is that the commits are local and unpushed |
 | **Cross-tenant leakage** | **Re-priced.** Part III named it as the end of the company but located it in aggregation and query discipline. §25.1 identifies a nearer route: an anonymous public form matched against real tenant records, which arrives disguised as a helpful feature |
 | **Fake benchmark confidence** | **Re-priced.** Part III gated it on tenant data. §25.2 shows the free-product path reaches the same failure over *less* trustworthy inputs, and it will be tempting sooner because free-tool volume arrives before tenant volume |
 | **Moat framing distracting from the product** | **Unchanged and still the largest practical risk.** This is the third such review. The product still has zero paying businesses, and the correct response to all three remains a reliable phone call |
@@ -1646,13 +1686,15 @@ Everything in §23–§30 sits behind Remy's phone and calendar reliability, wit
 
 **Created:** none. **Production code, schema, flags, environment, providers:** none.
 
-**Pending, and requiring §24 to be settled first.** This extends §21.6's table rather than
-replacing it — the earlier rows are unchanged and still pending:
+**§24 was settled on 2026-08-28.** The decision-record rows below are now **APPLIED**, as is
+the `CHECKLIST.md` signpost. The remaining rows are deliberately **still pending**: they add
+Addendum II material into Part III, which is expansion rather than consistency, and they wait
+on a separate decision:
 
 | Target | Edit | Source |
 |---|---|---|
-| Part III §20.7 | Agent-originated decisions add the §6.2 profile fields; adopt the argument-digest rule for the base record | §21.6 |
-| Part III §20.7 | Distinguish `authority_level` (granted standing) from adjudication outcome; require `unable_to_authorise` to be representable | §21.6 |
+| Part III §20.7 | ~~Agent-originated decisions add the §6.2 profile fields; adopt the argument-digest rule for the base record~~ **APPLIED 2026-08-28** | §21.6 |
+| Part III §20.7 | ~~Distinguish `authority_level` (granted standing) from adjudication outcome; require `unable_to_authorise` to be representable~~ **APPLIED 2026-08-28** | §21.6 |
 | Part III §20.7 | Note that a pending approval is `action_status: proposed` and **reserves nothing** | **§26.1, new** |
 | Part III §20.4 | Add the placement table: skills/resources/territories are Graph; uncertainty is an attribute, not a category | **§26, new** |
 | Part III §21 diagram | Replace with **§27** above — not §20, which had dropped the free-product layer | **§27, revised** |
@@ -1660,8 +1702,8 @@ replacing it — the earlier rows are unchanged and still pending:
 | Part III §26 | Add §25.1's run-linkage rule, the no-inferred-identity prohibition, and §25.2's provenance floor | **§25, new** |
 | Part III §30 PREPARE | Add the capability declaration set (§16.1), the autonomy vocabulary (§18), and the §29.2 PREPARE rows | §21.6, extended |
 | Part III §32 | Restate phone-fix protection at `5cf097e` | §21.6, revised |
-| `PROJECT_CONTEXT.md` | One line recording that the canonical architecture set is `docs/ARCHITECTURE.md` Parts I–III plus `docs/AGENT_ACCESS_LAYER.md` | §21.6 |
-| `CHECKLIST.md:3` | The architecture-map signpost points at the 2026-08-08 document only, and should name all three | **§24, new** |
+| `PROJECT_CONTEXT.md` | One line recording that the canonical architecture set is `docs/ARCHITECTURE.md` Parts I–III plus `docs/AGENT_ACCESS_LAYER.md` | §21.6 — **still pending**, deliberately: the file contains no architecture reference to contradict, so this is an addition, not a correction |
+| `CHECKLIST.md:3` | ~~The architecture-map signpost points at the 2026-08-08 document only, and should name all three~~ **APPLIED 2026-08-28** | **§24** |
 
 ---
 
@@ -1674,11 +1716,11 @@ harder framings. **The strategic conclusions of §14–§22 and of Part III stan
 
 Three things are worth taking from this pass:
 
-1. **The canonical architecture set is not in the repository** (§24). Two of the three
-   documents are outside `main`, and this one is in no commit at all. That condition has
-   already produced one defect (§17's duplicate decision record), it is one ordinary git
-   command from destroying two reviews' output, and it is the only item here that cannot
-   wait — while also being the only one that cannot be resolved without the owner.
+1. **The canonical architecture set was not in the repository** (§24) — **now resolved.** Two
+   of the three documents sat outside `main`, and this one was in no commit at all. That
+   condition had already produced one defect (§17's duplicate decision record). Both were
+   made durable on 2026-08-28 (`c461214`, `2d89980`), and the duplicate decision record was
+   consolidated at the same time. The commits are local and unpushed, so one step remains.
 
 2. **Free products are a distribution architecture, and *repeat* is the word that carries
    the weight** (§25). Linking a visitor's runs without creating an identity has exactly one
