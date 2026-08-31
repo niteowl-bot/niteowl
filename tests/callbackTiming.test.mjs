@@ -14,7 +14,7 @@
 // an urgency-only phrase never reaches the lead's preferred_datetime,
 // and a genuine answer — however vague — is never thrown away.
 
-import { test, describe, afterEach } from "node:test";
+import { test, describe, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 import "./stubs/env.mjs"; // must precede any "@/lib" import
@@ -24,6 +24,7 @@ import {
   sanitisePreferredDatetime,
 } from "@/lib/voice/callbackTiming";
 import { sendCallSummaryEmail } from "@/lib/email";
+import { processCallEnded } from "@/lib/voice/calls";
 
 describe("urgency is not a time", () => {
   const URGENCY_ONLY = [
@@ -332,6 +333,300 @@ describe("the leads dashboard shows it too, and never as a time", () => {
       src,
       /preferred_datetime:\s*datetime\.trim\(\)\s*\|\|\s*null/,
       "the saved timing must come from the input, not from metadata"
+    );
+  });
+});
+
+// ── The live 2026-08-31 call — the OBEDIENT-model path ─────────────
+//
+// Everything above this point tests the sanitiser and the email
+// renderer in isolation, and all of it passed while production quietly
+// failed. That is the lesson worth keeping: those tests hand
+// sendCallSummaryEmail a callbackUrgency value and check it renders.
+// Nothing exercised the step that DECIDES that value.
+//
+// The live call:
+//   User: "As soon as possible. It's urgent."
+//   AI:   "Is there a particular day or time?"
+//   User: "I don't have a specific time. Just as soon as possible, please."
+//
+// The owner's email showed "Callback date: Not provided. Callback time:
+// Not provided." — right — and no Callback urgency row at all.
+//
+// Why: extraction.ts instructs the model "NEVER record one of them
+// here; set urgent true instead", so an obedient model returns
+// preferred_datetime: null and urgent: true. calls.ts read urgency
+// ONLY out of preferred_datetime, so there was nothing to read.
+//
+// These drive the REAL processCallEnded with the HTTP layer stubbed,
+// so they fail if the decision is wrong, not merely if the template is.
+
+const URGENT_CALLBACK = {
+  kind: "call-ended",
+  provider: "vapi",
+  dedupeKey: "vapi:urgent-callback:end-of-call-report",
+  providerCallId: "aaaaaaaa-7777-4777-8777-aaaaaaaaaaaa",
+  businessPhone: "+353212345678",
+  callerPhone: "+353861234567",
+  direction: "inbound",
+  startedAt: "2026-08-31T15:00:00.000Z",
+  endedAt: "2026-08-31T15:04:00.000Z",
+  durationSeconds: 240,
+  endedReason: "customer-ended-call",
+  summary:
+    "Michael asked for the team to ring him back as early as they can. Callback date: Not provided. Callback time: Not provided.",
+  transcript:
+    "AI: When would suit for a callback?\nUser: As soon as possible. It's urgent.\nAI: Is there a particular day or time?\nUser: I don't have a specific time. Just as soon as possible, please.",
+  recordingUrl: null,
+  costUsd: null,
+  costBreakdown: null,
+  extracted: {
+    intent: "question",
+    name: "Michael Ryan",
+    email: null,
+    phone: null,
+    service: null,
+    // The model OBEYING extraction.ts: urgency never goes here.
+    preferred_datetime: null,
+    service_address: null,
+    urgent: true,
+  },
+};
+
+/** The same caller, but the model disobeyed and wrote the phrase in. */
+const URGENT_CALLBACK_DISOBEDIENT_MODEL = {
+  ...URGENT_CALLBACK,
+  dedupeKey: "vapi:urgent-callback-2:end-of-call-report",
+  providerCallId: "bbbbbbbb-8888-4888-8888-bbbbbbbbbbbb",
+  extracted: {
+    ...URGENT_CALLBACK.extracted,
+    preferred_datetime: "as soon as possible",
+  },
+};
+
+/** A caller who DID name a time. Urgency must not compete with it. */
+const URGENT_WITH_A_REAL_TIME = {
+  ...URGENT_CALLBACK,
+  dedupeKey: "vapi:urgent-callback-3:end-of-call-report",
+  providerCallId: "cccccccc-9999-4999-8999-cccccccccccc",
+  extracted: {
+    ...URGENT_CALLBACK.extracted,
+    preferred_datetime: "Thursday afternoon",
+    urgent: true,
+  },
+};
+
+function installCallStubs() {
+  const realFetch = globalThis.fetch;
+  const inserts = [];
+  const updates = [];
+  const emails = [];
+  const json = (body) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  globalThis.fetch = async (input, init = {}) => {
+    const url = typeof input === "string" ? input : input.url;
+    const method = (init.method ?? "GET").toUpperCase();
+    const headers = new Headers(init.headers ?? {});
+    const wantsObject = (headers.get("accept") ?? "").includes("pgrst.object");
+    const body = init.body ? JSON.parse(init.body) : null;
+
+    if (url.includes("api.resend.com")) {
+      emails.push(body);
+      return json({ id: `email-${emails.length}` });
+    }
+    // No datetime to parse on a callback; answer safely if asked.
+    if (url.includes("api.openai.com")) {
+      return json({ choices: [{ message: { content: "NONE" } }] });
+    }
+    if (url.includes("/rest/v1/voice_calls")) {
+      const row = { id: "call-row-1" };
+      return wantsObject ? json(row) : json([row]);
+    }
+    if (url.includes("/rest/v1/business_knowledge")) return json([]);
+    if (url.includes("/rest/v1/business_hours")) {
+      return json(
+        [0, 1, 2, 3, 4, 5, 6].map((day_of_week) => ({
+          day_of_week,
+          is_closed: false,
+          open_time: "09:00",
+          close_time: "17:00",
+          lunch_start: null,
+          lunch_end: null,
+        }))
+      );
+    }
+    if (url.includes("/rest/v1/organisations")) {
+      const row = {
+        id: CALL_ORG_ID,
+        owner_id: "22222222-2222-4222-8222-222222222222",
+        business_name: "Acme Plumbing",
+        notification_email: "owner@example.com",
+        appointment_duration_minutes: 60,
+        emergency_mode_enabled: false,
+        max_concurrent_bookings: 1,
+        timezone: "Europe/London",
+      };
+      return wantsObject ? json(row) : json([row]);
+    }
+    if (url.includes("/rest/v1/conversations")) {
+      return wantsObject ? json(null) : json([]);
+    }
+    if (url.includes("/rest/v1/leads")) {
+      if (method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-range": "*/0" },
+        });
+      }
+      if (method === "POST") {
+        const stored = { id: "lead-1", ...body };
+        inserts.push(stored);
+        return wantsObject ? json({ id: stored.id }) : json([{ id: stored.id }]);
+      }
+      if (method === "PATCH") {
+        updates.push(body);
+        return json([]);
+      }
+      if (url.includes("select=metadata")) {
+        const row = { metadata: {}, appointment_datetime: null };
+        return wantsObject ? json(row) : json([row]);
+      }
+      return wantsObject ? json(null) : json([]);
+    }
+    if (url.includes("/rest/v1/voice_events")) return json([{ id: "evt-1" }]);
+    if (url.includes("/rest/v1/integration_connections")) {
+      return wantsObject ? json(null) : json([]);
+    }
+    throw new Error(`Unstubbed fetch in test: ${method} ${url}`);
+  };
+
+  return {
+    inserts,
+    updates,
+    emails,
+    /** The owner's call-summary email — the one carrying the details block. */
+    summaryHtml() {
+      const sent = emails.find((e) =>
+        String(e.html ?? "").includes("Caller ID")
+      );
+      return String(sent?.html ?? "");
+    },
+    /** Metadata written by the read-merge in recordLeadCallDetails. */
+    metadata() {
+      return updates.find((u) => u.metadata)?.metadata ?? null;
+    },
+    restore() {
+      globalThis.fetch = realFetch;
+    },
+  };
+}
+
+const CALL_ORG_ID = "11111111-1111-4111-8111-111111111111";
+
+async function adminClient() {
+  const { createClient } = await import("@supabase/supabase-js");
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  );
+}
+
+describe("the live urgent callback reaches the owner, end to end", () => {
+  let stubs;
+  beforeEach(() => {
+    stubs = installCallStubs();
+  });
+  afterEach(() => stubs.restore());
+
+  test("the owner's email carries a Callback urgency row", async () => {
+    await processCallEnded(await adminClient(), CALL_ORG_ID, URGENT_CALLBACK);
+    assert.match(
+      stubs.summaryHtml(),
+      /Callback urgency/,
+      "the row the 2026-08-31 call was missing"
+    );
+  });
+
+  test("the callback date and time stay unset", async () => {
+    await processCallEnded(await adminClient(), CALL_ORG_ID, URGENT_CALLBACK);
+    const lead = stubs.inserts[0];
+    assert.equal(lead.preferred_datetime, null, "no callback time is invented");
+    assert.ok(
+      lead.appointment_datetime == null,
+      "urgency never becomes an appointment instant"
+    );
+  });
+
+  test("urgency is never rendered under a date or a time label", async () => {
+    await processCallEnded(await adminClient(), CALL_ORG_ID, URGENT_CALLBACK);
+    const html = stubs.summaryHtml();
+    assert.ok(
+      !/Callback date[\s\S]{0,80}Urgent/i.test(html),
+      "must never appear under a date label"
+    );
+    assert.ok(
+      !/>\s*Time\s*<[\s\S]{0,120}Urgent/i.test(html),
+      "must never appear under a time label"
+    );
+  });
+
+  test("the urgency is persisted so the leads drawer can show it too", async () => {
+    await processCallEnded(await adminClient(), CALL_ORG_ID, URGENT_CALLBACK);
+    const meta = stubs.metadata();
+    assert.ok(meta, "the call detail write-back should have run");
+    assert.ok(
+      typeof meta.callback_urgency === "string" &&
+        meta.callback_urgency.length > 0,
+      "callback_urgency must be preserved on the lead"
+    );
+  });
+
+  test("no booking confirmation is produced by an urgent callback", async () => {
+    await processCallEnded(await adminClient(), CALL_ORG_ID, URGENT_CALLBACK);
+    const lead = stubs.inserts[0];
+    assert.notEqual(lead.status, "booked", "a callback is never a booking");
+    const confirmations = stubs.emails.filter((e) =>
+      /booking (is )?confirmed|your appointment is confirmed/i.test(
+        String(e.subject ?? "") + String(e.html ?? "")
+      )
+    );
+    assert.equal(confirmations.length, 0, "no false confirmation may be sent");
+  });
+
+  test("a disobedient model still yields the caller's own words", async () => {
+    await processCallEnded(
+      await adminClient(),
+      CALL_ORG_ID,
+      URGENT_CALLBACK_DISOBEDIENT_MODEL
+    );
+    assert.match(stubs.summaryHtml(), /Callback urgency/);
+    assert.match(
+      stubs.summaryHtml(),
+      /as soon as possible/i,
+      "when the model gives the phrase, the caller's words win"
+    );
+    assert.equal(stubs.inserts[0].preferred_datetime, null);
+  });
+
+  test("a real timing wins — urgency must not compete with it", async () => {
+    await processCallEnded(
+      await adminClient(),
+      CALL_ORG_ID,
+      URGENT_WITH_A_REAL_TIME
+    );
+    assert.equal(
+      stubs.inserts[0].preferred_datetime,
+      "Thursday afternoon",
+      "the caller's timing is kept exactly as given"
+    );
+    assert.ok(
+      !/Callback urgency/.test(stubs.summaryHtml()),
+      "no urgency row when the caller actually named a time"
     );
   });
 });

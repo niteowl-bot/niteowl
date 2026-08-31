@@ -2,9 +2,50 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-31 (Voice — PR #34 shipped, but urgency-only owner visibility still failed end-to-end in production; the urgency was read from the wrong field)
+
+**`fix/callback-urgency-production-regression`, branched from `main` at `7eff6ec`. NOT MERGED, NOT DEPLOYED, NOT LIVE-TESTED.** 1136 tests pass / 0 fail, 204 suites; focused `callbackTiming` 61 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**No schema, migration, RLS, Vapi configuration, provider, auth, calendar, booking-logic, lead-classification or deployment-configuration change.** Six files: four production, two test files.
+
+### What the live call showed
+A real production call on 2026-08-31. The caller said *"As soon as possible. It's urgent."*, and when asked again, *"I don't have a specific time. Just as soon as possible, please."*
+
+The owner's call-summary email correctly showed **Callback date: Not provided. Callback time: Not provided.** — and carried **no "Callback urgency" row at all.** The principal behaviour PR #34 was merged to deliver did not occur.
+
+### Root cause
+Extraction produced **`urgent: true` with `preferred_datetime: null`**, which is exactly what it is instructed to produce. `src/lib/voice/extraction.ts` tells the model: *"URGENCY IS NOT A TIME … NEVER record one of them here; set urgent true instead. Null if no day or time was mentioned, including when urgency was all the caller gave."*
+
+But `calls.ts` derived the value from **one** source:
+
+```ts
+const callbackUrgency = sanitisePreferredDatetime(details?.preferred_datetime).urgency;
+```
+
+So **PR #34 read a field that the prompt above it is designed to leave empty.** `sanitisePreferredDatetime` is a backstop for a model that *disobeys* and writes the phrase into `preferred_datetime`; when the model **obeys** — the normal case, and what happened on this call — there is nothing to read, and the `urgent: true` sitting beside it goes unused. `metadata.callback_urgency` was never written either, so the leads drawer was blank for the same reason.
+
+### Why 54 passing tests did not catch it
+The PR #34 email tests called `sendCallSummaryEmail` **directly**, passing a `callbackUrgency` value and asserting it rendered. The sanitiser tests fed the phrase in via `preferred_datetime` — the shape a *disobedient* model produces. **Nothing exercised the step that decides the value, against the shape production actually emits.** A test that supplies the value under test cannot prove the pipeline that produces it, and that is the transferable lesson here.
+
+### The fix
+- **`src/lib/voice/callbackTiming.ts`** — new `resolveCallbackUrgency()`: the caller's own phrase when the model gave one, the extracted `urgent` flag when it did not, and **null whenever a real timing exists**, so urgency can never compete with a field that means WHEN. New `URGENT_WITHOUT_TIMING` constant for the fallback wording.
+- **`src/lib/voice/calls.ts`** — reads both signals through that resolver. One expression; no change to capture, sanitisation or storage.
+- **`src/app/(dashboard)/leads/LeadsTable.tsx`** — wording only. The drawer renders `Callback urgency: …` plainly instead of quoting it as the caller's words: on the fallback path the value is NiteOwl's own wording, and presenting it as a quotation would be a fabrication.
+- **`src/lib/voice/assistant.ts`** — one scripted phrase. Rule 6 told Remy to answer urgency with *"I'll note that any time suits"*, which asserts indifference — the opposite of what the caller said. It now reads *"I'll note that and ask the team to ring you as early as they can"*, true for both urgency and genuine no-preference, and 15 characters shorter (the prompt is over budget). No tool-surface, booking or calendar change.
+
+### Coverage
+Seven end-to-end tests added to `tests/callbackTiming.test.mjs` (61 in that file), driving the **real `processCallEnded`** with the live extraction shape: the email carries the row; callback date and time stay unset; urgency never renders under a date or time label; the value is persisted for the drawer; no false booking confirmation; a disobedient model still yields the caller's own words; and a genuine timing wins with no urgency row. One pin in `tests/voiceConversation.test.mjs` updated for the corrected phrase.
+
+**Mutation-verified:** reverting the one-expression fix fails 2 of the 7. The pre-existing tests still pass either way — which is precisely how the defect shipped.
+
+### Still open
+**Not live-tested.** Closing this needs one real urgency-only call showing the row in the owner's email. PR #34 was closed without that check, and this is what it cost.
+
 ## 2026-08-28 (Voice — the callback urgency the caller gave now reaches the owner)
 
-**`fix/callback-urgency-owner-visibility`, implementation commit `9bdfaf3`, rebased onto `e785942` as `f9ed564`. PR NOT YET RAISED — not merged, not deployed.** 1129 tests pass / 0 fail, 203 suites; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+**`fix/callback-urgency-owner-visibility`, implementation commit `9bdfaf3`, rebased onto `e785942` as `f9ed564`. MERGED as PR #34 (merge commit `7eff6ec`, a normal two-parent merge) and DEPLOYED on 2026-08-31** — production deployment `dpl_9WhkwnRC6XAhg8HQ8q741VBz1bDj` reached READY, carried the `git-main` alias, served `niteowlhq.com`, and `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1129 tests passed / 0 fail, 203 suites; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file. *(Status line corrected 2026-08-31: it originally read "PR NOT YET RAISED — not merged, not deployed", which was accurate when written and stale within hours, once the PR was raised and merged the same day.)*
+
+> **Correction, 2026-08-31 — this entry's headline claim did not hold in production.** A live urgency-only call the same day proved the behaviour did not work end to end: the owner's email carried no "Callback urgency" row. **The merge, deployment and test facts recorded here stand; the "now reaches the owner" claim did not.** The failure, its root cause and the corrective work are the 2026-08-31 entry above. This entry is corrected in place rather than rewritten, so a later reader can see what was believed and why it was wrong.
 
 **No schema, RLS, Vapi prompt, two-tool voice surface, booking, calendar, availability, lead-capture, provider or configuration change.** Four files: three production, one test file.
 

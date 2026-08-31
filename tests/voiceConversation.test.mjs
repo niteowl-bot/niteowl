@@ -1185,7 +1185,7 @@ describe("the real call: 'as soon as possible' became the callback date AND time
     assert.match(prompt, /never a day and never a time/);
     assert.match(
       prompt,
-      /I'll note that any time suits and ask the team to ring you as early as they can/
+      /I'll note that and ask the team to ring you as early as they can/
     );
   });
 
