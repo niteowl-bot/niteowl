@@ -261,8 +261,9 @@ function toExtractedLead(
     // It must never become the lead's preferred_datetime: it is not a
     // slot anyone can be booked into and it is not a time anyone can be
     // rung at. The phrase itself is kept on the lead's metadata by
-    // recordLeadCallDetails, so the caller's urgency still reaches the
-    // owner — just not in a field that means WHEN.
+    // recordLeadCallDetails. From there it reaches the owner in the
+    // call-summary email and the lead drawer as "Callback urgency" —
+    // never in a field that means WHEN.
     preferred_datetime: sanitisePreferredDatetime(details.preferred_datetime)
       .preferredDatetime,
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
@@ -838,6 +839,10 @@ export async function processCallEnded(
     businessName: ownerInfo.businessName ?? "the business",
     callerPhone: event.callerPhone,
     alternatePhone,
+    // Already computed above and already kept off preferred_datetime.
+    // Passed through so the owner actually sees the urgency the caller
+    // gave; it is null whenever a real callback time was given.
+    callbackUrgency,
     callerName: details?.name ?? null,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,

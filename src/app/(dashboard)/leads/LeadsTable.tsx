@@ -477,6 +477,19 @@ function EditPanel({
                     Required to mark this lead as Booked — this is what appears on your calendar.
                   </p>
                 )}
+                {/* What the caller said when asked WHEN to ring them
+                    back, in the cases where that answer was urgency and
+                    not a usable day or time. Read-only and deliberately
+                    OUTSIDE the input above: it is the caller's own words,
+                    it is not a time, and it must never be saveable into
+                    preferred_datetime. Set only when no callback time was
+                    given, so it never competes with a real one. */}
+                {metadataString(lead, "callback_urgency") && (
+                  <p className="mt-1.5 text-xs text-amber-400/90">
+                    Caller&rsquo;s urgency: “{metadataString(lead, "callback_urgency")}” —
+                    no specific day or time was given.
+                  </p>
+                )}
               </div>
 
               {/* Notes */}
