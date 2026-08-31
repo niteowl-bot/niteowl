@@ -15,6 +15,17 @@ outcome-intelligence review: business operating state, the outcome spine, decisi
 outcome memory, provenance, the cross-product learning contract, the free-product
 assessment layer, and what NiteOwl must own rather than rent. Part III likewise does not
 repeat Parts I and II; it references their labels (C3, P1, L1, L2, L4, L5, R3, B3).
+**Part IV** (§34–39, added 2026-08-31) is the fourth competitive review — *outcome
+intelligence, governed agent architecture and resource control*. It found the existing
+architecture sufficient for almost everything that review named. Its substantive work is
+therefore twofold: it **applies the stitching set** that `docs/AGENT_ACCESS_LAYER.md`
+§29.5 left pending, folding the two agent-access addenda into Part III **in place**, and
+it adds three genuinely new findings, **M7–M9**. Part IV does not restate Part III — the
+new material is applied where it belongs, and Part IV records the pass.
+**Part V** (§40–46, added 2026-08-31) is a **targeted addendum**, not a full review:
+operational sovereignty — what happens when a provider changes the terms rather than merely
+going down — and diagnostic intelligence, the step between *what happened* and *what we
+decided*. It adds three findings, **M10–M12**, and changes nothing else.
 
 Governing principle for every recommendation below:
 
@@ -662,6 +673,15 @@ answers to be worth a contract *eventually*, and neither scores enough to be wor
 replaceable capability.
 
 ### 6.1 Provider risk matrix
+
+> **Extended by Part V §41.3–§41.4, 2026-08-31.** This table models **technical** failure —
+> outage, account loss, replace difficulty. It does **not** cover commercial or policy risk
+> (terms changes, acceptable-use restrictions on automated or agent-driven use, new
+> certification requirements, a provider entering NiteOwl's market), and its `P0–P3` column
+> mixes likelihood with consequence. §41.3 adds the **REPLACEABLE / DEGRADABLE / CRITICAL**
+> consequence bands and the documentation set a CRITICAL dependency must carry; §41.4 names
+> the commercial axis to add when this table is next revised. **No new provider and no
+> redundancy is proposed** — proportionality governs.
 
 | Provider | Scope | 5-min outage | Multi-hour outage | Account loss | Replace difficulty | Current fallback | Target level | Priority |
 |---|---|---|---|---|---|---|---|---|
@@ -1355,6 +1375,191 @@ convention rather than by mechanism is how tenant and personal boundaries erode.
 mechanism is not needed until the second product exists; the *rule* is needed before the
 first cross-product read, and is stated in §24.
 
+### M7 — An append-only history has no erasure model, and personal data is about to be copied into it
+
+*Added by Part IV (§34), 2026-08-31.*
+
+M1 says the moat is history and history must stop being overwritten. §20.5 says the spine is
+**append-only**. Both are right, and together they collide with something neither states: a
+customer may ask to be erased, and a business is obliged to comply.
+
+Nothing in Parts I–III names that tension. Searching the canonical set for erasure, deletion
+rights or data-subject handling returns nothing beyond L22 (export) and a single retention
+mention. So the architecture currently specifies a corpus that (a) must never change and
+(b) will hold customer names, phone numbers, email addresses and appointment details — and
+gives no account of what happens when one of those people asks to be removed.
+
+Answering it late leaves only two options, and they are both bad:
+
+- **Delete the rows.** The counts, the intervals between transitions, the acceptance rate of
+  offered alternatives all silently change. Last quarter's numbers stop reconciling, and a
+  learner trained before and after the deletion cannot be compared. This is precisely the
+  damage §23 forbids re-attribution from doing.
+- **Refuse to delete.** Not an option, and a corpus that cannot honour erasure is a
+  liability rather than an asset — the exact inverse of the resource-control objective,
+  which is explicitly conditioned on respecting customer data ownership and privacy.
+
+**The cost of not deciding now is not the deletion feature.** It is that today's shape
+invites personal data to be *copied* into event payloads and decision inputs, and once it
+has been copied into a hundred thousand immutable rows, only the two bad options remain. The
+resolution is a write-time rule, it is free today, and it is stated in §20.5. This is the P9
+argument — *cheaper to assign at write time than to retrofit across an accumulated corpus* —
+applied to identity rather than to classification.
+
+**Nothing must change today.** No spine exists, no decision store exists, and no real
+customer history has accumulated. The rule must exist before the first row does.
+
+### M8 — Attribution cannot say "we looked and found nothing"
+
+*Added by Part IV (§34), 2026-08-31.*
+
+§23 defines four link tiers — `caused_by`, `attributed_to`, `correlated_with`,
+`hypothesised`. Every one of them asserts *some* relationship. There is no way to record the
+commonest honest result of an attribution attempt: **we examined this outcome and
+established no link.**
+
+So the absence of a link is overloaded. It means both *"nobody has looked"* and *"we looked
+and found nothing"*, and those are different facts with different consequences. A learner
+reading the corpus cannot tell an unexamined decision from an examined one that produced
+nothing, and will read the first as evidence of the second — quietly scoring every decision
+nobody got round to measuring as a decision that did not work.
+
+This codebase already refuses that conflation everywhere else, and does so as its single
+strongest doctrine:
+
+| Domain | Refusal to conflate |
+|---|---|
+| Booking | `lookup_failed` is not `capacity_full` — *"we could not check" is never "it is free"* |
+| Reschedule | A failed hours or capacity read returns 503, never *"that time has gone"* |
+| Governance | `unable_to_authorise` is not `deny` (`docs/AGENT_ACCESS_LAYER.md` §3.4, §4) |
+| Decisions | §20.7 — a history that cannot separate *"we refused"* from *"we could not tell"* teaches the wrong lesson |
+| **Attribution** | **Missing.** *"unattributed"* and *"unexamined"* are the same absence |
+
+The fix is one further tier and one rule, both free, and both stated in §23.
+
+### M9 — The outcome half of a decision record carries no provenance of its own
+
+*Added by Part IV (§34), 2026-08-31.*
+
+§20.7's third rule is unambiguous: *"A decision with a guessed outcome is corruption."* The
+field list cannot express it. The Basis group carries `confidence` and `provenance` — but
+those describe **how the decision was reached**, not how the outcome attached to it three
+months later was established. The Outcome group is `outcome_refs`, `outcome_measured_at`,
+`outcome_quality` and `attribution_model_version`, and none of them says whether the outcome
+was *observed*, *derived deterministically*, or *predicted by a model*.
+
+That matters because the two halves of the record are written at different times, by
+different processes, from different evidence — and the second half is by far the easier one
+to fill in with a model when the real signal is missing. `outcome_quality` in particular
+reads as a judgement, and a judgement with no source type is indistinguishable from a
+measurement. That is M4 arriving through the one door §20.6 did not cover.
+
+The consequence is specific and terminal. The Learning Layer's entire job is to read
+outcomes. If it cannot tell a measured outcome from a predicted one, it learns from its
+predecessor's predictions, and §20.9's rule — *"a learner that can edit the facts it learns
+from will eventually launder its own predictions into the record"* — is defeated without
+anyone editing anything.
+
+The fix is that the Outcome group carries its own provenance from §20.6's nine types, plus
+one standing rule about which values are learnable. Stated in §20.7.
+
+### M10 — Diagnosis has no artefact, and the Cross-Product Learning Contract already promises to exchange one
+
+*Added by Part V (§40), 2026-08-31.*
+
+The architecture models **what happened** (§20.5, an event), **what we decided** (§20.7, a
+decision) and **what followed** (the outcome group). It does not model the step between
+them: **what we think is wrong, and why.**
+
+That gap is not hypothetical, because §24 has already committed to trading the missing
+artefact. Its permitted exchange type 3 is *"permissioned derived claims — **a finding**, a
+score, a recommendation, always carrying provenance, confidence, model version and the tier
+from §23."* **A finding is nowhere defined.** The contract governs the transport of an
+artefact that has no shape, which means the first product to produce one defines it, and the
+second product to consume one gets whatever the first happened to write — the identical
+failure mode as the duplicate `DecisionRecord` (`docs/AGENT_ACCESS_LAYER.md` §17), caught
+this time before either end exists.
+
+The gap has a second consequence that matters more than the naming. A diagnosis is an
+**inference** — usually a model's — about a business condition. §20.6's rule is that an
+inference may drive an action and may never silently become a fact. With no artefact to
+carry `confidence`, `provenance`, contradicting evidence and alternative explanations, a
+diagnosis has nowhere to put any of them, and the path of least resistance is to write the
+conclusion into a product table as though it were observed. *"This customer is at risk"* and
+*"missed calls are driving the revenue drop"* are exactly the assertions §20.6 classifies as
+`ai_predicted` — **never** promotable to fact — and exactly the ones a dashboard renders as a
+plain sentence.
+
+**What is *not* missing is a store.** §20.7 is already the right shape: subject, content,
+alternatives, reason codes, evidence refs, confidence, provenance, authority, outcome,
+traceability. A finding is a judgement NiteOwl made, on evidence, with confidence — which is
+what that record is for. The resolution in §42 is therefore a **third profile of the one
+canonical record**, not a third store, for the reason §17 gives: a second judgement store
+fragments the exact history §25 says is the only thing that cannot be copied.
+
+### M11 — A recommendation cannot be graded, because it never states what success would look like
+
+*Added by Part V (§40), 2026-08-31.*
+
+§20.7's Outcome group can record `outcome_quality` and, since Part IV, `outcome_provenance`.
+Neither says **what the recommendation was trying to achieve**, by **when**, or **how anyone
+would know.** So the question the entire moat rests on — *which recommendations actually
+worked?* — is settled after the fact, by whoever is grading, against a target nobody wrote
+down.
+
+That is not a measurement. It is a retrospective, and retrospectives grade generously:
+
+- the metric that moved is selected once the result is known, so something always improved
+- the review window is chosen to contain the improvement
+- a recommendation that changed nothing is scored "inconclusive" rather than "did not work",
+  because no threshold was ever set that it could fail
+- the Learning Layer, reading this corpus, concludes that most recommendations work
+
+**Part IV's M9 fixed the wrong half of this.** It stopped a *predicted* outcome being read as
+a *measured* one. It does not help when the outcome was genuinely measured but the target was
+invented afterwards — an honestly observed metric, compared against a goal chosen to fit it,
+is still an unfalsifiable claim.
+
+The fix is one rule, and it is the standard scientific one: **the success criterion and the
+review period are part of the recommendation, written before the outcome is known.** A
+recommendation that cannot state how it would be judged is not yet a recommendation; it is an
+opinion, and §43 says to record it as one. This costs a field and a date today, and it is the
+difference between a learning loop and a machine for confirming its own advice.
+
+### M12 — The provider risk matrix models failure, not commercial or policy risk
+
+*Added by Part V (§40), 2026-08-31.*
+
+§6.1 assesses eight providers across outage, account loss, replace difficulty and fallback.
+Every column is a **technical** failure. None of them covers the ways a provider relationship
+actually ends for a company like this one:
+
+- terms, pricing or minimum-commitment changes that make the dependency uneconomic
+- an acceptable-use policy that restricts automated or agent-driven use — **the live category
+  for both a model provider and an AI-telephony provider**, and the one most likely to move
+  without warning
+- certification, verification or compliance requirements newly imposed on the integration
+- API deprecation or access tiers that reduce what an integrator may read
+- **the provider entering NiteOwl's market**, at which point access is a commercial decision
+  rather than an engineering one
+
+These differ from outages in the property that matters: an outage ends, and the correct
+response is truthful degradation, which this codebase already does well (§11). A policy or
+commercial change **does not end**, gives little notice, and the correct response is a
+migration that must have been designed beforehand.
+
+Two things follow, and both are documentation rather than engineering. First, §6.1 needs the
+commercial and policy axis. Second — and this is the larger omission — **there is no shared
+vocabulary for how much a given dependency actually matters.** "Priority P1" mixes likelihood
+with consequence, and nothing states, per provider, what functionality dies, what data is
+stranded, what NiteOwl keeps, and how the product behaves in the meantime. §41 supplies the
+three-band classification and the documentation set that a **CRITICAL** dependency must
+carry.
+
+**No new provider is recommended, and no redundancy is proposed.** Proportionality is the
+governing rule: the point of classifying a dependency is to know what would be lost, not to
+buy a second one against a risk that has not materialised.
+
 ---
 
 ## 20. Recommended architecture
@@ -1463,6 +1668,53 @@ The relationship, stated once:
 > **The Graph is what changes when the business changes. Operating State is what changes
 > when the day changes. History (§20.5) is what never changes at all.**
 
+**Placement of the fuller Operating State list.** *Applied by Part IV from
+`docs/AGENT_ACCESS_LAYER.md` §26, 2026-08-31.* Successive reviews have proposed a wider set
+of things Operating State should represent. The four categories above absorb essentially all
+of it **without amendment**, and the temptation the reviews themselves warn against — *"do
+not build one giant mutable state object"* — is best resisted by *placing* each item rather
+than by adding categories. Placing them is the whole exercise; every row below that reads
+"Graph, not State" is a row that would otherwise have grown the mutable object.
+
+| Proposed item | Where it belongs | Note |
+|---|---|---|
+| Appointments, current commitments, jobs in progress, outstanding work | **Commitment** | The record itself. `leads` today |
+| Current demand, available capacity, next free slot, service coverage | **Derived** | Recomputed per query. Never stored authoritatively |
+| Running late, travel/buffer state, blocked capacity, temporary closure, staff off sick, van off the road | **Observation** | And §20.4's rule that *every observation expires* matters most here |
+| Uncertain job duration | **Observation or derived, with `confidence`** | The uncertainty is an attribute (below), not the thing itself |
+| Staff, roles, skills/capabilities, resources, territories, locations, service list | **Graph, not State** | These change when the *business* changes, not when the *day* changes. Filing them as State is the first step towards the giant mutable object |
+| Open opportunities, customer state, customer priority, commercial priority | **Derived, and cross-product** | Scout/Beacon-shaped claims. Under §24 they arrive as **permissioned derived claims carrying provenance**, never as a column on a lead |
+| Current cash, financial/margin constraints | **Ledger's, read-only here** | And subject to a prohibition — see below |
+| Pending decisions and approvals | **A projected Decision record, not a commitment** | See below. This is the one placement that reaches production behaviour |
+| **Uncertainty** | **Not a category at all** | It is `confidence` + `provenance` on whichever assertion carries it (§20.6). Uncertainty is an attribute of a fact, never a class of fact |
+
+**Pending approvals — proposed reserves nothing; held reserves something.** A queued
+approval is not a durable fact, not an observation and not derived. It *looks* like a
+commitment, and modelling it as one is wrong in a way that reaches booking behaviour:
+
+> A pending approval is a **Decision record with `action_status: proposed`** (§20.7),
+> *projected* into Operating State read-only. It is **not** a commitment, because **a queued
+> approval reserves nothing.**
+
+If a pending reschedule approval were counted as a commitment, the slot it proposes would be
+treated as occupied and `checkBookingSlot` would refuse a time that is genuinely free —
+reintroducing, from a new direction, the same class of error as Part I C1 and Part II R3.
+The converse error is worse and must be named alongside it: a slot that genuinely *is* held
+is a **commitment**, and demoting it to "merely pending" gets it sold twice. The two look
+identical in a queue and are opposites in the availability calculation.
+
+**Financial constraints must never gate the live path.** §24 already forbids a synchronous
+cross-product call on a customer-facing path; the expanded list makes the violating feature
+easy to imagine, so it is named while it is still hypothetical:
+
+> **Remy must never wait on Ledger to answer a caller.** A financial constraint may shape a
+> *recommendation*; it must never gate a booking in the live path.
+
+*"Don't take unprofitable jobs"* is a reasonable thing for a business to want and an
+unreasonable thing to put between a caller and an answer. Under §24 it is a permissioned
+derived claim read from what Core already holds, or it is absent — and if it is absent, the
+booking proceeds. Same posture as the calendar's *"not connected is not an error"* (§1.5).
+
 ### 20.5 The Outcome Spine — canonical events
 
 One append-only, tenant-scoped record of business-meaningful things that happened.
@@ -1506,6 +1758,43 @@ no consumer. Part III does not overturn that — it only names what the table wo
 Sentry's and Vercel's job, and duplicating it here is the "uncontrolled event growth" risk
 in §31. The spine records **business-meaningful transitions only**, which for Remy today
 would be well under ten types (§22) and a handful of rows per booking.
+
+**Erasure discipline — history holds references, never copies.** *Added by Part IV (§34),
+2026-08-31, closing M7.* An append-only corpus and a customer's right to be erased are only
+in conflict if the corpus **copies** personal data into itself. It need not, and the rule
+that keeps them compatible costs nothing before the first row is written:
+
+> **A spine row stores canonical entity references and non-identifying detail. It never
+> stores a person's name, phone number, email address, or free text that may contain them.**
+
+Five consequences, each with a reason:
+
+- **Erasure redacts the referenced entity, never the history row.** The customer record is
+  redacted; the events that reference it remain, with their timestamps, transitions, reason
+  codes and correlations intact. Counts still reconcile, intervals are unchanged, and a
+  learner trained before and after the erasure is still comparable — which deleting rows
+  would destroy, for exactly the reason §23 forbids re-attribution from rewriting history.
+- **This is the argument-digest rule (§20.7), generalised.** That rule already forbids
+  storing raw decision inputs, for the same reason: *a decision log that stores them raw
+  becomes the largest PII surface in the product — retained longest and read least.* The
+  spine has the identical exposure and needs the identical rule; having it on only one of
+  the two stores was an accident of the order they were written in.
+- **Free text is the hazard, and it stays out.** A transcript, a summary or a customer
+  message cannot be redacted by reference, because the identifier is inside the prose. Such
+  content stays where it already lives — `voice_calls`, `messages`, `leads` — under those
+  tables' own lifecycle, and the spine references it. **No transcript or message body on the
+  spine, ever.**
+- **The payload whitelist is declared, not discovered.** A row's non-reference fields are
+  named in the event type's definition, the same way `auditRequirements` names a
+  capability's whitelisted fields (`docs/AGENT_ACCESS_LAYER.md` §16.1). What may be stored is
+  a property of the type, decided once, not a per-call judgement.
+- **The spine is append-only in *structure* and redactable in *identity*.** Those two are
+  compatible. "Append-only" was never a claim that a person cannot be removed from it — only
+  that what happened cannot be made not to have happened.
+
+This also improves L22: an export that carries history as references plus a separately
+resolved entity set is both more portable and easier to scope than one that has inlined a
+customer's details into ten thousand rows.
 
 ### 20.6 Provenance and confidence — the rule that protects everything else
 
@@ -1561,7 +1850,7 @@ Conceptual fields, pruned to what §25's learning loops genuinely need:
 | Basis | `evidence_refs` (events, records, provider responses), `confidence`, `provenance` |
 | Authority | `authority_level` (observe / recommend / approval-required / automatic), `approval_required`, `approved_by`, `approved_at` |
 | Execution | `action_status`, `resulting_event_ids` |
-| Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version` |
+| Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version`, **`outcome_provenance`** (§20.6 source type — *added by Part IV, M9*), **`outcome_link_tier`** (§23 — *added by Part IV, M8*) |
 | Traceability | `model`, `model_version`, `policy_version`, `schema_version` |
 
 **This is the single canonical `DecisionRecord`, and it belongs here.** Every decision
@@ -1601,6 +1890,74 @@ Three rules keep this from becoming a research project:
    A decision with no outcome is normal and honest. A decision with a *guessed* outcome is
    corruption.
 
+Three further rules were added by later passes and belong to this record rather than to any
+document that consumes it:
+
+4. **`action_status: proposed` reserves nothing.** *Applied by Part IV from
+   `docs/AGENT_ACCESS_LAYER.md` §26.1, 2026-08-31.* A decision that has been proposed but
+   not approved is a real row here, and it is projected read-only into Operating State
+   (§20.4). It is **not** a commitment and must never be counted as one in an availability
+   calculation. **Proposed reserves nothing; held reserves something** — they look identical
+   in a queue and are opposites in the booking decision.
+
+5. **The outcome carries its own provenance, and only some values are learnable.** *Added
+   by Part IV, closing M9.* The Basis group's `confidence` and `provenance` describe how the
+   *decision* was reached. They say nothing about how the outcome attached to it later was
+   established, and the two are written at different times by different processes from
+   different evidence. So the Outcome group carries `outcome_provenance`, drawn from the
+   same nine source types as everything else (§20.6), and one standing rule:
+
+   > **Only `observed` and `derived_deterministic` outcomes are learnable.** An outcome
+   > marked `ai_inferred` or `ai_predicted` may be displayed, with its label, and may never
+   > be treated as a measured result by the Learning Layer.
+
+   This is what makes rule 3 enforceable rather than merely stated: without a source type on
+   the outcome, "a decision with a guessed outcome" is indistinguishable from a measured one,
+   and §20.9's prohibition on a learner laundering its own predictions is defeated with
+   nobody editing anything. **Learning eligibility is derived from this field and is never a
+   separate mutable flag** — a flag that can be flipped to "eligible" is the laundering path
+   reopened under a different name.
+
+6. **Absence is recorded, not inferred.** *Added by Part IV, with M8.* An outcome that was
+   sought and not established is `outcome_link_tier: unattributed` (§23) — which is a
+   different fact from a decision nobody has examined, and the corpus must be able to tell
+   them apart.
+
+7. **A recommendation states, in advance, what would count as success.** *Added by Part V,
+   closing M11.* A record whose `decision_type` is a recommendation must carry a
+   **`success_criterion`** — the named metric, the direction and the threshold that would
+   make this recommendation right — and a **`review_at`** date, both written **before the
+   outcome is known**. The rule:
+
+   > **If it cannot be stated in advance how the recommendation would be judged, it is an
+   > opinion, and it is recorded as one** — `decision_type: observation`, never as a
+   > recommendation with an outcome slot waiting to be filled in generously.
+
+   Without this, `outcome_quality` is graded after the fact against a target chosen to fit
+   the result, and the Learning Layer concludes that most recommendations work. Part IV's
+   M9 stopped a *predicted* outcome being read as a *measured* one; this stops a *measured*
+   outcome being read against an *invented* target. Both are needed, and neither substitutes
+   for the other.
+
+   `review_at` also gives *"no outcome yet"* an honest meaning. Before the date, an empty
+   outcome is expected; after it, an empty outcome is itself a result — the review did not
+   happen — and the two must not look identical.
+
+8. **One record, four profiles.** *Added by Part V, closing M10.* Every judgement NiteOwl
+   makes is one row of this shape. Four profiles add fields on top of it, and **none of them
+   is a second store**:
+
+   | Profile | `decision_type` family | Adds | Defined in |
+   |---|---|---|---|
+   | **Base** | any | The groups above | §20.7 |
+   | **Agent-originated** | any | `principal`, `capability_id` + `capability_version`, `deciding_check`, `adjudication_outcome` | `docs/AGENT_ACCESS_LAYER.md` §6.2 |
+   | **Diagnosis (Finding)** | `diagnosis.*` | `condition`, `time_window`, `affected_entities`, `hypotheses[]` (each with a §23 tier), `contradicting_evidence`, `assumptions` | **§42** |
+   | **Recommendation** | `recommendation.*` | `addresses_finding_id`, `success_criterion`, `review_at`, `priority`, `expected_effect`, `effort`, `risks`, `dependencies`, `reversibility` | **§43** |
+
+   A second judgement store keyed to diagnoses would fragment the exact history §25 says is
+   the only thing that cannot be copied — the same argument that produced the single
+   `DecisionRecord` in the first place.
+
 ### 20.8 Permissions and classification
 
 No mechanism is recommended now (M6/L5 stand). Three rules are, because they are free
@@ -1629,83 +1986,116 @@ edit the facts it learns from will eventually launder its own predictions into t
 
 ## 21. Data flow
 
+> **This is the canonical NiteOwl architecture diagram.** *Consolidated by Part IV,
+> 2026-08-31.* It supersedes the earlier copies at `docs/AGENT_ACCESS_LAYER.md` §20 and §27,
+> which are retained as records of the passes that produced them and are marked superseded
+> in place. There is **one** current diagram, for the same reason there is one
+> `DecisionRecord`: two copies of the same picture in two documents is how §17's duplicate
+> decision record and §27's dropped free-product layer both happened. Any future change to
+> the architecture picture is made here.
+
 ```mermaid
 flowchart TB
-    subgraph Providers["Providers — capabilities only, never the record"]
+    subgraph Ext["External agents — replaceable, never the record"]
+        AG["Claude · ChatGPT · Copilot<br/>a business&#39;s own · a customer&#39;s own"]:::none
+    end
+
+    subgraph Proto["Protocol adapters — commodity, cheap to delete (AAL §8, §15)"]
+        MCP[MCP adapter<br/>JSON-RPC · tool naming]:::future
+        OTHER[REST / A2A / whatever follows]:::none
+    end
+
+    subgraph AAL["Agent Access Layer — AAL §2, §3"]
+        KERNEL[Governance kernel · deterministic · no LLM<br/>1 tenant → 2 identity → 3 permission<br/>4 authority → 5 quota]:::future
+        REG[Capability Registry AAL §16<br/>effect · authority class · tenant scope<br/>classification · emitted events · decision type]:::future
+        CRED[Agent credentials AAL §9<br/>org-scoped · hashed · revocable]:::future
+    end
+
+    subgraph Product["Remy — product domain, permanently Remy&#39;s"]
+        CHOKE[Existing choke points<br/>checkBookingSlot · capturePartialLead · calendarSync]:::own
+        ENG[Booking engine · availability · capacity · hours]:::own
+    end
+
+    subgraph Human["Human ingress — exists today"]
+        DASH[Dashboard · widget · booking page · phone]:::own
+    end
+
+    subgraph Core["NiteOwl Core — conceptual, NOT extracted"]
+        ID[Business Identity<br/>organisations.id]:::core
+        GRAPH[Business Graph<br/>durable structure · §20.2<br/>staff · skills · resources · territories]:::core
+        STATE[Business Operating State<br/>read model · §20.4 — M5<br/>durable · commitment · observation · derived]:::future
+        SPINE[(Outcome Spine · §20.5<br/>canonical events, append-only<br/>references only — never PII copies)]:::future
+        DEC[(Decision &amp; Outcome Memory · §20.7<br/>ONE record, agent profile is an extension<br/>proposed approvals live here)]:::future
+        PROVEN[Provenance · confidence · classification<br/>§20.6 — incl. outcome provenance]:::future
+        MEM[Business Memory<br/>business_knowledge]:::core
+        LEARN[Learning Layer — MUCH LATER<br/>reads observed outcomes only]:::future
+    end
+
+    subgraph Free["Free products — distribution · separate namespace, NO org_id until consent"]
+        TOOL[Public tool UI]:::free
+        SESS[Temporary assessment session<br/>TTL · anonymous · runs linked by a<br/>bearer token the visitor holds]:::free
+        DIAG[Diagnostic engine → findings<br/>self-reported = business_provided,<br/>NEVER verified]:::free
+        PROMO{{Explicit consent<br/>= the ONLY promotion path}}:::gate
+    end
+
+    subgraph Prov["Providers — capabilities only, never the record"]
         GC[Google Calendar]:::prov
-        VAPI[Vapi telephony]:::prov
+        VAPI[Vapi]:::prov
         AI[OpenAI]:::prov
         RS[Resend]:::prov
     end
 
-    subgraph Adapters["NiteOwl adapters — provider terms in, NiteOwl terms out"]
-        CAP[CalendarCapability<br/>integrationFetch · IntegrationError]:::own
-        VAD[lib/voice/vapi.ts]:::own
-        MAIL[lib/email.ts]:::own
+    subgraph Other["Other products — NONE BUILT"]
+        P2[Scout · Ledger · Atlas · Pulse<br/>Forge · Nova · Beacon]:::none
     end
 
-    subgraph Product["Remy — product domain, permanently Remy's"]
-        CH[Channels: widget · chat · booking page · phone]:::own
-        ENG[Booking engine<br/>availability · capacity · hours]:::own
-        SYNC[calendarSync — the write choke point]:::own
-        CAPTURE[capturePartialLead — the booking choke point]:::own
-    end
+    AG -.-> MCP
+    AG -.-> OTHER
+    MCP -.-> KERNEL
+    OTHER -.-> KERNEL
+    CRED -.-> KERNEL
+    REG -.-> KERNEL
+    KERNEL -. "permit only" .-> CHOKE
+    KERNEL -. "every outcome, incl. refusals" .-> DEC
 
-    subgraph Core["NiteOwl Core — conceptual, NOT extracted today"]
-        ID[Business Identity<br/>organisations.id]:::core
-        GRAPH[Business Graph<br/>what the business IS]:::core
-        STATE[Business Operating State<br/>read model — what is TRUE NOW]:::future
-        SPINE[(Outcome Spine<br/>append-only canonical events)]:::future
-        DEC[(Decision &amp; Outcome Memory)]:::future
-        PROV[Provenance · Confidence · Classification]:::future
-        PERM[Permissions · least privilege]:::future
-        MEM[Business Memory<br/>business_knowledge]:::core
-        LEARN[Learning Layer — MUCH LATER]:::future
-    end
+    DASH --> CHOKE --> ENG
+    ENG --> GC
+    ENG --> AI
+    CHOKE --> RS
+    DASH --> VAPI
 
-    subgraph Free["Free products — separate namespace, no org_id until consent"]
-        TOOL[Public tool UI]:::free
-        SESS[Temporary assessment session<br/>TTL · anonymous]:::free
-        DIAG[Diagnostic engine → findings]:::free
-        PROMO{{Explicit consent<br/>= the ONLY promotion path}}:::gate
-    end
-
-    GC <--> CAP
-    VAPI <--> VAD
-    AI --> ENG
-    MAIL --> RS
-
-    CH --> CAPTURE --> ENG
-    ENG --> SYNC --> CAP
-    CAPTURE --> MAIL
-
-    CAPTURE -. emit .-> SPINE
-    SYNC -. emit .-> SPINE
-    SYNC -. "reason codes already computed" .-> DEC
-    VAD -. emit .-> SPINE
-
+    CHOKE -. emit .-> SPINE
+    CHOKE -. "reason codes already computed — M2" .-> DEC
     ID --> GRAPH
     GRAPH --> STATE
-    SPINE --> STATE
-    SPINE --> DEC
-    PROV -.governs.-> SPINE
-    PROV -.governs.-> DEC
-    PROV -.governs.-> GRAPH
-    PERM -.governs.-> DEC
-    PERM -.governs.-> GRAPH
-    DEC --> LEARN
+    SPINE -.-> STATE
+    SPINE -.-> DEC
+    DEC -. "proposed ≠ held" .-> STATE
+    PROVEN -.governs.-> SPINE
+    PROVEN -.governs.-> DEC
+    PROVEN -.governs.-> GRAPH
+    DEC -. "observed outcomes only" .-> LEARN
     LEARN -. "proposals only — never writes facts" .-> DEC
     MEM --> ENG
 
     TOOL --> SESS --> DIAG --> PROMO
-    PROMO -->|consent recorded| GRAPH
-    PROMO -->|consent recorded| SPINE
+    PROMO -.->|consent recorded| GRAPH
+    PROMO -.->|consent recorded| SPINE
     PROMO -.->|"no consent → expires"| SESS
 
-    subgraph Other["Other products — NONE BUILT"]
-        P2[Scout · Ledger · Atlas · Pulse<br/>Forge · Nova · Beacon]:::none
-    end
     SPINE <-. "canonical events + permissioned<br/>derived claims ONLY" .-> P2
+
+    BYPASS["NO BYPASS PATH<br/>an agent never reaches the domain,<br/>the database or a provider<br/>except through the kernel"]:::gate2
+    AG -.->|forbidden| BYPASS
+    BYPASS -.->|forbidden| CHOKE
+
+    NOJOIN["NEVER: match a name typed into a<br/>public form against organisations"]:::gate2
+    SESS -.->|forbidden| NOJOIN
+    NOJOIN -.->|forbidden| GRAPH
+
+    NOCOPY["NEVER: a name, phone, email or free text<br/>copied into a spine or decision row.<br/>Erasure redacts the entity, not the history — M7"]:::gate2
+    SPINE -.->|forbidden| NOCOPY
+    DEC -.->|forbidden| NOCOPY
 
     classDef prov fill:#fde8e8,stroke:#c53030,color:#1a202c
     classDef own fill:#e6f4ea,stroke:#2f855a,color:#1a202c
@@ -1713,11 +2103,16 @@ flowchart TB
     classDef future fill:#f7fafc,stroke:#718096,stroke-dasharray:4 3,color:#1a202c
     classDef free fill:#fffaf0,stroke:#b7791f,color:#1a202c
     classDef gate fill:#fefcbf,stroke:#975a16,color:#1a202c
+    classDef gate2 fill:#fed7d7,stroke:#c53030,color:#1a202c
     classDef none fill:#ffffff,stroke:#cbd5e0,stroke-dasharray:2 2,color:#4a5568
 ```
 
 Solid arrows exist today. **Dashed arrows and dashed boxes do not exist and are not to be
-built now.**
+built now.** The three red gates are the properties the picture exists to make visible:
+an agent reaches the domain **only** through the kernel; the free-product surface reaches
+the Graph **only** through recorded consent, never through an inferred match; and personal
+data is **never copied** into the append-only stores, so erasure redacts an entity rather
+than deleting history (M7).
 
 ---
 
@@ -1819,7 +2214,7 @@ The temptation is to store this as one causal graph. **That would be the most da
 possible form of overreach**, because a stored claim of causation is indistinguishable
 from a measured one once it is a row in a table.
 
-Four link tiers, each with a different evidential standard, and **no automatic promotion
+**Five** link tiers, each with a different evidential standard, and **no automatic promotion
 between them**:
 
 | Tier | Meaning | Standard | Example |
@@ -1828,6 +2223,7 @@ between them**:
 | `attributed_to` | A stated rule assigned it | Explicit attribution window + `attribution_model_version` recorded | Revenue attributed to a campaign within a 30-day window |
 | `correlated_with` | Observed together, above a threshold | Sample size and time window stored with the claim | "Same-day callbacks correlate with higher booking rates" |
 | `hypothesised` | A model proposed it | Never displayed as fact; requires evidence to move tiers | "Thursday cancellations may be weather-driven" |
+| `unattributed` | **We looked, and established nothing** | An attribution attempt ran, its method and window are recorded, and it produced no link | *Added by Part IV (M8), 2026-08-31* |
 
 Rules:
 
@@ -1843,6 +2239,82 @@ Rules:
   influenced by a Pulse campaign, a Remy interaction and a Beacon intervention. The
   honest representation is several `attributed_to` links with a stated model, not one
   winner.
+- **"We looked and found nothing" is a recorded result, not an empty field.** *Added by
+  Part IV, closing M8.* `unattributed` is a fifth tier and the only one that asserts no
+  relationship. It exists because the absence of a link would otherwise mean two different
+  things — *nobody has looked* and *we looked and found nothing* — and a learner that cannot
+  separate them will score every unexamined decision as one that did not work. An
+  `unattributed` link records the method and the window that were used, exactly as
+  `attributed_to` does, so the negative result is as reproducible as a positive one.
+
+  This is the same refusal the booking engine already makes when it holds `lookup_failed`
+  apart from `capacity_full`, and the same one the governance kernel makes when it holds
+  `unable_to_authorise` apart from `deny` (`docs/AGENT_ACCESS_LAYER.md` §4). It is worth
+  stating as the general rule those three now share:
+
+  > **Not knowing is a finding. It is recorded as one, and it is never rendered as its
+  > nearest confident neighbour.**
+
+  `unattributed` promotes like any other tier — on evidence, never automatically — and it
+  is not a terminal state: a later attribution run with a different window may establish a
+  link the first did not.
+- **`caused_by` for a business condition carries a high evidential threshold — not a
+  prohibition.** *Added by Part V with M10; **revised 2026-08-31** — the original wording made
+  it an absolute bar, which was wrong in the one direction that matters: it would have made a
+  properly run experiment unrepresentable.* The default remains conservative, and four
+  defaults do **not** move on their own:
+
+  > **Correlation is not causation. AI inference alone is not causation. Temporal sequence
+  > alone is not causation. Several correlated signals do not compose into causation.**
+
+  Absent one of the admissible bases below, a diagnosis of a revenue decline, a churn risk or
+  a conversion drop sits at `attributed_to`, `correlated_with` or `hypothesised`, however
+  confident the model sounds. **The tier is earned by the evidence, never by the strength of
+  the claim.**
+
+  A causal claim about a business condition is admissible when it rests on at least one of:
+
+  | Admissible basis | What it means |
+  |---|---|
+  | **Deterministic causal mechanism** | The mechanism is known and the link follows from it, not from data — *the calendar was unreadable for six days, so no external conflict could be detected in that window* |
+  | **A directly controlled intervention** | NiteOwl or the business made the change, deliberately, and the change is what is being reasoned about |
+  | **A designed experiment or A/B test** | Assignment, control group, and the comparison specified in advance |
+  | **An isolated before/after with controls** | A stated window, a stated control for the obvious confounders, and the confounders that were *not* controlled named as assumptions |
+  | **A robust domain-defined basis** | A product may define one for its own domain, in writing, in advance. It may not be invented per claim |
+
+  Every `caused_by` link about a business condition stores, without exception: its
+  `evidence_refs`, its `provenance`, its `confidence`, the **intervention or context** that
+  makes it admissible, its `contradicting_evidence`, its `assumptions`, and its **time
+  window**. A causal claim missing any of these is not a stronger claim than an
+  `attributed_to` one — it is an unauditable one, and it is refused.
+
+  The rule, restated so it does not have to be re-argued per product:
+
+  > **NiteOwl asserts causation about its own actions freely, because it performed them, and
+  > about the business only on a named admissible basis it can show. Everywhere else it
+  > asserts attribution, correlation, hypothesis — or nothing.**
+
+  Two guards survive from the original wording, because they are what the prohibition was
+  really protecting. **Promotion to `caused_by` is never automatic** — accumulating
+  correlation does not eventually become cause (§42.3). And **every surface that displays a
+  causal claim displays its basis**, not merely its tier: a `caused_by` from a controlled
+  experiment and one from an uncontrolled before/after are not the same statement, and §31
+  already prices the cost of a business acting on the difference.
+
+**The states a diagnosis needs, and the tiers that already carry them.** Successive reviews
+have asked for observed fact, correlation, contributing factor, hypothesis, likely cause,
+supported causal relationship and unknown cause. They need no new vocabulary:
+
+| Needed state | Carried by |
+|---|---|
+| Observed fact | Not a link at all — an event, with `provenance: observed` (§20.6) |
+| Correlation | `correlated_with`, with sample size and window stored |
+| Contributing factor / likely cause | `attributed_to`, with the attribution model and window recorded. **This is the default ceiling for a business condition**, and the honest home for most diagnoses |
+| **Supported causal relationship** | `caused_by`, **only** on one of the admissible bases above, with the full evidence set stored |
+| Hypothesis | `hypothesised` — never displayed as fact |
+| Unknown cause, having looked | `unattributed` (Part IV, M8) |
+| Unknown cause, not having looked | The absence of a link — deliberately distinct from the row above |
+
 
 ---
 
@@ -1857,7 +2329,10 @@ no work now.**
 2. **Canonical entity references** — `org_id` plus `subject_type`/`subject_id`. A
    reference, never a copy of the row.
 3. **Permissioned derived claims** — a finding, a score, a recommendation, always carrying
-   provenance, confidence, model version and the tier from §23.
+   provenance, confidence, model version and the tier from §23. **A finding and a
+   recommendation are the diagnosis and recommendation profiles of the canonical
+   `DecisionRecord` (§20.7 rule 8, §42, §43)** — *defined by Part V, closing M10, which found
+   this clause trading an artefact no document had shaped.*
 4. **Approved operating state** — a projection, read-only, with its freshness stated.
 
 ### The five prohibitions
@@ -1909,6 +2384,40 @@ all — most businesses will buy one.
 | **Forge** | **Operational Process Intelligence** — task → resources → constraints → exceptions → intervention → outcome | as stated | **Yes**, but slowest to accumulate and most dependent on honest exception recording |
 | **Nova** | **Personal Execution Model** | personal signal → intervention → completion | **Weakest as a moat, strongest as a privacy risk.** Value it for retention, not defensibility, and hold the §20.8 boundary absolutely |
 | **Beacon** | **Customer Relationship Memory + Retention Outcome Intelligence** — which interventions actually retained customers | intervention → response → retained/churned | **Yes.** Requires measured churn over years, which is precisely what cannot be back-filled |
+
+**The same test, applied to the two layers Part III did not cover.** *Applied by Part IV
+from `docs/AGENT_ACCESS_LAYER.md` §15 and §28, 2026-08-31.* The product table above answers
+*"which products are defensible?"*. Two later reviews asked the question of the **access
+layer** and of **distribution**, and both separate the same way — a commodity half that must
+exist and a compounding half that is easily dropped for schedule reasons because nothing
+visibly breaks when it is missing.
+
+| Component | Time for a funded competitor | Verdict |
+|---|---|---|
+| **Agent access** — an MCP server over existing endpoints | **Days** | Commodity. Build it cheaply, replace it freely |
+| Tool schemas and descriptions | Days | Commodity |
+| A capability registry with input/output contracts | Weeks | Commodity — everyone will have one |
+| Per-tenant permission and authority policy | Months | **Table stakes**, not a moat. Necessary and insufficient |
+| Approval queues and graduated autonomy | Months | Table stakes |
+| **The accumulated record of what agents proposed, what was permitted or refused and why, and what followed** | **Cannot be back-filled** | **The moat** — this part's asset, reached through that layer |
+| **Distribution** — a free diagnostic tool: scanner, score, assessment | **Weeks** | Commodity |
+| Its scoring rules, report layout, copy | Weeks | Commodity |
+| SEO, content, paid acquisition | Buyable — **and the incumbent buys it better** | **Not contestable.** Do not compete here |
+| An installed base reached by bundling AI free | **Cannot be matched at all** | **The incumbent's moat.** Competing on price against it is a losing race by construction |
+| A relationship with a business that ran a tool three times over eighteen months and acted on the findings | **Cannot be back-filled** | Candidate |
+| **The corpus of recommendation → action → measured re-assessment change** (§26) | **Cannot be bought** | **The asset** |
+| **Diagnosis** — an LLM explaining why revenue fell | **Days** | Commodity. Any model does this today, plausibly and unverifiably |
+| A recommendation engine, however sophisticated | Weeks | Commodity |
+| Prioritisation scoring | Weeks | Commodity |
+| **The record of which recommendations were followed, under what conditions, and whether the metric they named in advance actually moved** | **Cannot be back-filled** | **The asset** — and it exists only if §43's success criterion was written before the outcome (M11) |
+
+Both produce the same resource-allocation rule, and it is worth stating once for both:
+
+> **Spend as little as possible on the protocol, the registry and the tool. Refuse to
+> compromise on the decision record, on run-linkage integrity, and on provenance.** The first
+> three are commodities NiteOwl must have and a competitor reproduces in weeks. The last
+> three are the only parts that compound, and they are the parts that cannot be started
+> retroactively.
 
 Applying the copy test honestly to the whole line:
 
@@ -1973,6 +2482,89 @@ recommendations actually improved things*. Architecturally it needs only three t
 all of which the model above already provides: a stable assessment identity, comparable
 scoring across runs (so **the scoring version must be stored with every result**), and
 consent to link runs to the same business.
+
+### Free products as distribution — *repeat* is the word that carries the weight
+
+*Applied by Part IV from `docs/AGENT_ACCESS_LAYER.md` §25, 2026-08-31.* The staged model
+above is a **product** architecture. It is also a **distribution** architecture, and that
+matters strategically: large incumbents can give AI away because they already own the
+customer relationship, so NiteOwl's answer cannot be a better or cheaper agent — it has to
+be a reason for a business to be in contact with NiteOwl **before it is shopping for AI at
+all.** The loop:
+
+```
+useful free tool → immediate standalone result → voluntary repeat usage
+  → a persistent relationship → optional product adoption → measured improvement
+  → stronger diagnostic intelligence → a better free tool
+```
+
+Every arrow up to *"immediate standalone result"* is designed above. The new word is
+**repeat**, and it opens two seams.
+
+**Seam one — linking runs without creating an identity.** Two rules above pull against each
+other the moment repeat usage matters: assessment data has **no `org_id`** and **expires by
+default**, yet a measured improvement requires run *N* to be comparable with run *N−1*. The
+resolution keeps both, and it is a rule rather than a mechanism:
+
+> **A series of assessments is linked by a bearer token the visitor holds, never by an
+> identity NiteOwl infers.**
+
+- **The token shape already exists here.** The manage-link token at `/api/bookings/manage` is
+  single-subject, single-purpose and carries no account — exactly the trust profile a
+  returnable assessment link needs. Reuse that discipline; do not invent a second one, and do
+  not reach for a session cookie.
+- **Holding the token links runs. It does not create a Business Identity.** Promotion into
+  the Graph remains the explicit, recorded, revocable consent step. A visitor who returns
+  four times has granted nothing.
+- **Expiry still applies — to the token and to the data.** A lapsed series is gone. That is
+  the honest price of not holding an account, and a tool that quietly extends retention to
+  improve its own metrics has broken the first rule above.
+- **Identity is never inferred.** Not from IP, not from a device fingerprint, and — the
+  dangerous one — **never by matching a business name typed into a public form against an
+  existing `organisations` row.** That is a cross-tenant join performed on unauthenticated,
+  self-reported text, letting an anonymous visitor's form reach a real tenant's record. It is
+  the most plausible accidental route to cross-tenant leakage in this architecture, precisely
+  because it arrives disguised as a helpful feature — *"we found your business!"*.
+  **Forbidden outright.**
+
+One structural note follows, and it is why the free-product platform needs its own namespace
+rather than a flag on existing tables:
+
+> The free-product surface is **the only NiteOwl surface that legitimately has no
+> `org_id`.** Every other protection in this architecture is ultimately a variation on
+> *"every query carries an explicit `org_id`"* (§1.4). That rule cannot protect a surface
+> that has no tenant. Its isolation must therefore be **structural — a separate namespace —
+> and not a query discipline**, because the query discipline has nothing to bind to here.
+
+**Seam two — the last arrow learns from the least trustworthy data NiteOwl holds.**
+*Stronger diagnostic intelligence → a better free tool* is cross-visitor learning, and its
+input is already labelled the lowest-trust thing in the architecture: a number typed into a
+public form by an unauthenticated visitor, promoted as `business_provided` and **never**
+`verified`. Two rules govern it:
+
+- **It is a §27 network-intelligence activity and inherits all five of §27's gates.**
+  Nothing about a statistic being computed over free-tool data rather than tenant data
+  relaxes any of them.
+- **A provenance floor, which §27 did not need to state because it assumed tenant data:** a
+  cohort statistic may never be computed over inputs nobody verified. *"Businesses like yours
+  report X"* is a claim about what people typed into a form, and displaying it as a claim
+  about what is true is the *"sales figure, not a finding"* failure arriving through a
+  different door.
+
+Which leaves the honest version of what this loop can defensibly accumulate, and it is not
+the benchmark:
+
+> What compounds is **not** what businesses reported. It is **which recommendations were
+> acted on, and what measurably changed between two runs by the same holder.**
+
+The reported figures stay unverified forever. The *delta between two runs of the same
+scoring version by the same token-holder* is an **observation** in §20.6's sense — something
+that happened — and it is an action-to-outcome record. That is the same asset §17 identified,
+reached from a completely different direction, and it is the only part of the free-product
+platform that survives the copy test. Both mechanical requirements it needs are already
+implied by *"the scoring version must be stored with every result"*: the version is stored
+per run, and **a change of scoring version breaks comparability and must be visible** rather
+than silently producing an improvement that is really a re-weighting.
 
 **No benchmarking until it is earned.** A "you rank in the bottom 30% of plumbers"
 statement made before enough legitimate data exists is a fabrication with a chart on it.
@@ -2054,13 +2646,16 @@ posture is already correct and merely needs to survive the next eight products.
 | Least privilege | **Adequate today, insufficient for eight products** | M6/L5 — needed at the first cross-product read, not before |
 | Data ownership & portability | **Adequate, gap known** | No export feature; clean `org_id` scoping makes it a query set (§12). Part III raises the bar: an export must include the tenant's *history*, not just current state |
 | Privacy | **Adequate today** | Classification at write time (§20.8) is the cheap step; the pilot's sales-chat PII logging remains a known, owner-accepted item (§3.7) |
+| **Erasure / deletion rights against history** | **Was absent — rule now adopted (M7)** | *Part IV.* An append-only corpus and a deletion right are compatible **only** if history stores references and never copies. The write-time rule is in §20.5 and costs nothing before the first row; retrofitting it after a hundred thousand immutable rows leaves only two bad options |
 | Auditability | **Weak — M1** | State is overwritten with no history on `leads`. The single biggest gap in this part |
 | Idempotency | **Strong** | Five independent guards (§13). Any event emitter must inherit `dedupe_key` |
 | Failure isolation | **Strong** | §11. §24's degradation rule extends it to products |
 | Graceful degradation | **Strong** | Truthful everywhere except R1's path |
-| Provider independence | **Strong** | §3.8, §14, plus §28's memory guardrail |
+| Provider independence | **Strong** | §3.8, §14, plus §28's memory guardrail. *Part V §41.2 re-verified the coupling provider by provider: Google isolated, Vapi adapter-isolated with a provider-neutral config built in our code, OpenAI still the one real coupling at nine call sites* |
+| **Dependency criticality and provider policy risk** | **Vocabulary added (M12)** | *Part V.* §6.1 modelled outage and account loss but not terms, acceptable-use restrictions on agent-driven use, or a provider entering the market. §41.3 adds REPLACEABLE / DEGRADABLE / CRITICAL and the CRITICAL documentation set |
+| **Diagnosis and recommendation** | **Contract added (M10, M11)** | *Part V.* §24 was already trading a "finding" no document had shaped. §42 defines it as a third profile of the canonical record; §43 adds the success criterion and review date, without which a recommendation can only be graded after the fact |
 | Event schema evolution | **N/A — nothing to evolve** | `schema_version` from the first event is what keeps it that way |
-| Provenance | **Weak outside the Knowledge Base — M4** | The pattern exists and is proven; it is simply not applied elsewhere |
+| Provenance | **Weak outside the Knowledge Base — M4** | The pattern exists and is proven; it is simply not applied elsewhere. *Part IV extends the vocabulary's reach to the outcome half of a decision (M9) and to the negative attribution result (M8)* |
 | Model/version traceability | **Absent** | Model ids are hardcoded at nine call sites (L11). No stored record of which model produced which value |
 | Business continuity & recoverability | **Adequate, restore unproven** | B6, plus the `INTEGRATION_TOKEN_ENCRYPTION_KEY` custody gap (§11) |
 | Product independence | **N/A today, contracted for later** | §24 |
@@ -2070,6 +2665,8 @@ posture is already correct and merely needs to survive the next eight products.
 providers and zero new abstractions for the current product. Every recommendation is
 either a decision, a naming convention, or a documented seam. That is the correct ratio
 for a product whose next milestone is booking reliability for its first paying customer.
+**Part IV changes that ratio by nothing**: three new findings, three new write-time rules,
+one new enumeration value, one new field, zero tables, zero services, zero abstractions.
 
 ---
 
@@ -2082,6 +2679,14 @@ for a product whose next milestone is booking reliability for its first paying c
 No code change, no schema change, no migration, no flag, no new table is required now, and
 none is requested. The §21 rule holds: **default is no production code change**, and
 nothing found in this review meets the bar of "cannot safely wait."
+
+**Part IV adds no NOW item either** (2026-08-31). Its three findings (M7–M9) are all
+write-time rules for stores that do not exist yet, and its remaining work was applying the
+stitching set that `docs/AGENT_ACCESS_LAYER.md` §29.5 had left pending. The one NOW item the
+previous pass raised — the canonical architecture set not being reachable from `main` — is
+**closed**: `main` is at `f1cb427`, `origin/main` is at the same commit, and all three
+documents are pushed. The residual "local and unpushed" exposure recorded in AAL §24 and
+§29.2 no longer applies.
 
 Two items are re-priced rather than promoted, and both remain owner decisions already on
 the checklist:
@@ -2108,6 +2713,17 @@ the checklist:
 | **P8** | **Causal-tier vocabulary** (§23) | Written before any product can display a claim it cannot support |
 | **P9** | **Data classification on new stored assertions** | Retrofitting classification across an accumulated corpus is a quarter of work |
 | **P10** | **Free-product staging rule** (§26) — separate namespace, no `org_id` until explicit consent | Must exist before the first free tool ships, not after |
+| **P11** | **Erasure discipline** (§20.5, M7) — history stores references and non-identifying detail; **no name, phone, email or free text on the spine or in a decision row**; erasure redacts the referenced entity, never the history row; the payload whitelist is declared per event type | *Part IV.* Free before the first row exists. After a hundred thousand immutable rows the only options are deleting history or refusing a lawful request, and both are unacceptable |
+| **P12** | **Outcome provenance and the learnability rule** (§20.7 rule 5, M9) — the Outcome group carries `outcome_provenance`; only `observed` and `derived_deterministic` outcomes are learnable; eligibility is derived from it and is never a separate mutable flag | *Part IV.* This is what makes "a decision with a guessed outcome is corruption" enforceable rather than merely stated |
+| **P13** | **The `unattributed` tier** (§23, M8) — a recorded negative attribution result, distinct from an unexamined one, carrying the method and window it used | *Part IV.* Free now; unrecoverable later, because the corpus will already have conflated "nobody looked" with "we looked and found nothing" |
+| **P14** | **Capability declaration set** (`docs/AGENT_ACCESS_LAYER.md` §16.1) — including `emitsEvents`, `emitsDecisionType` and `dataClassification`, validated at registration | *Applied from AAL.* It is what makes "no unattributable agent action" a boot failure rather than an intention |
+| **P15** | **Graduated-autonomy vocabulary** (`docs/AGENT_ACCESS_LAYER.md` §18) — six bands of granted standing, default `observe`, granted per `(org, credential, capability)` | *Applied from AAL.* Vocabulary now; the ladder is built in Phase 2, before any write it governs exists |
+| **P16** | **Free-product distribution rules** (§26) — runs linked by a bearer token the visitor holds; **never** match public-form input against `organisations`; namespace isolation is structural, not a query discipline; provenance floor on any cohort statistic | *Applied from AAL.* Adopted before the feature that would violate them exists. No free product exists today |
+| **P17** | **Pending approvals are proposed decisions, not commitments** (§20.4, §20.7 rule 4) | *Applied from AAL.* Free now; a booking-availability defect if discovered later |
+| **P18** | **The Finding profile** (§42.2, M10) — condition enumeration, time window, ranked hypotheses each with a §23 tier, contradicting evidence, assumptions | *Part V.* §24 already trades findings. Defining the shape before either producer or consumer exists is free; afterwards it is a migration across two products |
+| **P19** | **`success_criterion` + `review_at` on every recommendation** (§20.7 rule 7, M11) | *Part V.* The one field the recommendation-to-outcome moat rests on. Retrofitted, the earliest recommendations — those with the longest measured history — are the ones that can never be graded |
+| **P20** | **Dependency-criticality bands and the CRITICAL documentation set** (§41.3, M12) | *Part V.* Written when a CRITICAL dependency is next deepened. Prevents "how bad would this be?" being answered under pressure |
+| **P21** | **The commercial and policy axis on the §6.1 risk matrix** (§41.4, M12) | *Part V.* An outage ends; a policy change does not, and gives less notice |
 
 ### LATER — build when the trigger fires
 
@@ -2120,6 +2736,9 @@ the checklist:
 | **L20** | **Business Operating State as a materialised projection** (M5) | Dynamic Schedule Recovery — which itself depends on L1/L2 |
 | **L21** | **Permission model** | Part I L5's trigger (first withholdable action) **or** the first cross-product read, whichever comes first |
 | **L22** | **Tenant data export including history** | A customer asks, or a regulation requires (§12) |
+| **L23** | **Entity redaction — the mechanism behind P11** | The first erasure request, or the first real customer history. The rule (P11) must precede the corpus; the mechanism need not |
+| **L24** | **Findings and recommendations persisted as decision records** | The first product feature that diagnoses rather than reports. For Remy that is Reception Intelligence, which sits behind calendar reliability (§32) |
+| **L25** | **A model/provider gateway recording `model_version` per stored value** | L11's trigger, unchanged — sharpened by §41.2's finding that nine hardcoded call sites make a forced migration worse than it needs to be |
 
 ### MUCH LATER — requires legitimate accumulated outcome data
 
@@ -2151,6 +2770,26 @@ the checklist:
 | **Model drift** | Yesterday's confidence scores incomparable with today's | `model_version`, `policy_version`, `schema_version` and scoring version stored with every result |
 | **Moat framing distracting from the product** | The largest practical risk on this page | §32, and the fact that the moat cannot start accumulating until real businesses book real appointments |
 
+**Part IV delta, 2026-08-31.** The table above stands unchanged. Four entries are added or
+re-priced, and each corresponds to a finding rather than to a speculation:
+
+| Risk | Change |
+|---|---|
+| **An append-only corpus that cannot honour erasure** | **New — M7.** A history that must never change will hold customer names, phone numbers and appointment details, and someone will eventually ask to be removed. Deleting rows destroys reconciliation; refusing is not an option. Mitigated by the write-time rule in §20.5, which is free only while the corpus is empty |
+| **A learner reading its own predecessor's predictions** | **New — M9.** §20.9 forbids a learner editing the facts it learns from, but without provenance on the *outcome* the prohibition is defeated with nobody editing anything: a predicted outcome is indistinguishable from a measured one. Mitigated by `outcome_provenance` and the learnability rule (§20.7 rule 5) |
+| **Silent false negatives in attribution** | **New — M8.** An unexamined decision and an examined one that produced nothing are the same empty field, so a learner scores everything nobody measured as a failure. Mitigated by the `unattributed` tier (§23) |
+| **Cross-tenant leakage** | **Re-priced.** Previously located in aggregation and query discipline. §26 identifies a nearer route: an anonymous public form matched against real tenant records — a cross-tenant join that arrives disguised as a helpful feature. Now forbidden outright |
+| **Architecture documentation lost or divergent** | **Fired twice, now closed.** An untracked file and an unmerged branch produced the duplicate decision record; two documents holding two copies of one diagram produced the dropped free-product layer. All three documents are now on `main` and pushed, and §21 is the single canonical diagram |
+| **Moat framing distracting from the product** | **Unchanged, and still the largest practical risk.** This is the fourth such review. The product still has zero paying businesses, and the correct response to all four remains a reliable phone call |
+
+**Part V delta, 2026-08-31.** Three further entries, each tied to a finding:
+
+| Risk | Change |
+|---|---|
+| **A recommendation grading itself** | **New — M11.** With no success criterion written in advance, the metric and the window are chosen once the result is known, and the Learning Layer concludes that most recommendations work. Mitigated by §20.7 rule 7. Distinct from Part IV's M9, which stops a *predicted* outcome being read as a *measured* one; this stops a *measured* outcome being read against an *invented* target |
+| **Diagnosis presented as cause** | **New — M10.** A diagnostic surface is where §23's tiers are most tempting to drop, because *"missed calls caused the revenue drop"* reads better than the truthful attribution. Mitigated by §23's causal-evidence standard — `caused_by` for a business condition requires a named admissible basis with its full evidence set, promotion is never automatic, and every surface displaying a causal claim must display the basis as well as the tier |
+| **Provider policy or commercial change** | **New — M12.** §6.1 modelled outages, which end and are answered by truthful degradation. A terms or acceptable-use change does not end, gives little notice, and is answered only by a migration designed beforehand. Mitigated by §41.3's bands and §41.4's axis — **not** by buying a redundant provider |
+
 ---
 
 ## 32. Remy roadmap protection — verified
@@ -2181,6 +2820,33 @@ Checked explicitly against this document:
 
 **Verdict: the roadmap is unchanged.**
 
+**Restated and re-verified by Part IV at `9bdfaf3`, 2026-08-31** — checked, not assumed. The
+active engineering work is now the **phone-call reliability work**, on branch
+`fix/callback-urgency-owner-visibility`:
+
+- `git status --porcelain` reports exactly two entries: `supabase/.temp/cli-latest` (a
+  Supabase CLI version cache, already modified before this pass began and not touched by it)
+  and the documentation files listed in §38. **Nothing under `src/`, `tests/`,
+  `supabase/migrations` or `docs/sql/` was modified or opened for edit.**
+- The live assistant tool surface is unchanged and still pinned by regression tests. The
+  suite was **run**, not merely cited: `tests/voiceAvailability.test.mjs` and
+  `tests/voiceConversation.test.mjs` together report **156 passing, 0 failing**, including
+  `tools.length === 2`, `["check_availability", "endCall"]`, and *"no booking tool was
+  introduced — availability and endCall only"*. **No third tool, no mid-call booking path.**
+- The PR #30 voice-closing rule is untouched: `src/lib/voice/assistant.ts` rules 9 and 11 are
+  unmodified and the truthful *"currently showing as available"* closing stands.
+- `src/lib/leadCapture.ts`, `bookingAvailability.ts`, `availability.ts`, `calendarSync.ts` and
+  `calendarService.ts` are unmodified.
+- No Vapi, Google Calendar, Supabase, OpenAI or Resend behaviour was changed; no provider was
+  added, replaced or reconfigured; no voice prompt was edited.
+- **No schema, migration, environment variable or feature flag was touched.**
+  `VOICE_CALENDAR_BOOKING_ENABLED` and `CALENDAR_EVENT_CREATION_ORG_IDS` are as they were.
+- The deferred service-matching false positive in `PROJECT_CONTEXT.md` is unchanged, and none
+  of its rejected approaches was retried.
+- No branch was created, checked out, merged or pushed, and no commit was made.
+
+**Verdict: the roadmap is unchanged, and the phone-call work was not touched.**
+
 ---
 
 ## 33. Part III verdict
@@ -2208,3 +2874,889 @@ Three things are genuinely worth taking from this review:
 
 Everything else defaults to PREPARE or LATER, as it should.
 
+---
+---
+
+# Part IV — Outcome Intelligence, Governed Agents and Resource Control
+
+**Added 2026-08-31 against commit `9bdfaf3`.** Same rules as Parts I–III: **documentation
+only.** No schema, no migration, no route, no flag, no environment variable, no working
+code. Nothing below was implemented and nothing below asks for implementation now. The files
+this pass modified are listed in §38.
+
+This is the **fourth** competitive review to reach this architecture. The first (§17) tested
+*"AI agents plus proprietary native data is a moat"* and found it false. The second
+(`docs/AGENT_ACCESS_LAYER.md` §14) found competitors had stopped trying to own the agent and
+started trying to be the substrate underneath it. The third (AAL §23) found the agent had
+become a **free** attachment to a customer relationship somebody else already owns, making
+distribution the contested layer. The fourth asks the whole question again — intelligence
+layers, governed agents, capability registry, resource control — and the honest headline is
+that **it changes very little, which is the expected result for a design that has already
+absorbed three harder framings.**
+
+That is worth stating plainly rather than dressing up, because a review whose main output is
+*"this was already handled"* is easily mistaken for a review that was not done. §35 places
+every concept the fourth review named against what already exists, one row each, and the
+three rows marked **GAP** are the whole of the new material.
+
+**It deliberately does not restate** the nine intelligence layers, the Operating State
+categories, the canonical event shape, the provenance vocabulary, the Cross-Product Learning
+Contract, the product moat map, the free-product staging model, the network-intelligence
+gates, the provider-boundary table, the governance kernel, the five checks, the capability
+contract, the autonomy ladder or the protocol-replaceability test. All of them exist, and
+§35 says where.
+
+---
+
+## 34. What the fourth review actually adds
+
+Three findings, and nothing else. Each is recorded in full in §19 as **M7**, **M8** and
+**M9**, and each is applied where it belongs rather than described twice.
+
+| # | Finding | Applied in | Why it survived a review that found nothing else |
+|---|---|---|---|
+| **M7** | An append-only history has no erasure model, and personal data is about to be copied into it | §20.5, §21 diagram, §29, §30/P11, L23 | Parts I–III contain **no** account of deletion rights. The corpus is specified as immutable and is specified to hold appointments, callers and contact details. Those two facts had never been put side by side |
+| **M8** | Attribution cannot say *"we looked and found nothing"* | §23, §20.7 rule 6, §30/P13 | The four causal tiers all assert *some* link. The commonest honest result of an attribution attempt has no representation, so a learner reads "unexamined" as "did not work" |
+| **M9** | The outcome half of a decision record carries no provenance of its own | §20.7 rule 5, §30/P12 | §20.7 already forbids a guessed outcome. Its field list cannot express the prohibition, so the rule was unenforceable as written |
+
+What connects all three is that each is the **same refusal this architecture already makes
+everywhere else**, arriving at three places nobody had checked:
+
+> *"We could not check" is never "it is free."* — `src/lib/bookingAvailability.ts:40`
+>
+> `lookup_failed` ≠ `capacity_full`. `unable_to_authorise` ≠ `deny`. *"We refused"* ≠ *"we
+> could not tell."* And now: an **unexamined** outcome ≠ an **unattributed** one, a
+> **predicted** outcome ≠ a **measured** one, and an **erased person** ≠ a **deleted
+> history**.
+
+Three write-time rules, one enumeration value, one field. That is the entire delta, and each
+is free only while the stores it governs are still empty — which they are, because none of
+them exists.
+
+**What the review named that is genuinely still unanswered:** nothing. Every remaining item
+it raised is either already specified (§35) or already classified LATER or MUCH LATER behind
+a trigger that has not fired.
+
+---
+
+## 35. Concept-by-concept placement — the fourth review's list against what exists
+
+Following the standing rule that *naming a thing in a review is not a reason to create it*,
+each concept is placed rather than built. **Sections cited without a document are in this
+file; `AAL` is `docs/AGENT_ACCESS_LAYER.md`.**
+
+| Concept named by the review | Verdict | Where it lives |
+|---|---|---|
+| Business Graph — entities, relationships, tenant isolation | **SUFFICIENT** | §20.2; Part I §3.1; §1.4, verified against production |
+| Business Operating State — durable / temporal / derived, expiry, reconstructability | **SUFFICIENT, STRENGTHENED** | §20.4, plus Part IV's placement table for the expanded list |
+| Outcome Spine — canonical events, both timestamps, idempotency, versioning, provenance, classification | **SUFFICIENT, STRENGTHENED** | §20.5, §22, plus **M7's erasure discipline** |
+| Decision & Outcome Memory | **SUFFICIENT, STRENGTHENED** | §20.7, one canonical record, plus **M9's outcome provenance** and the `proposed` rule |
+| Action-to-outcome intelligence; correlation vs. causation | **SUFFICIENT, STRENGTHENED** | §23's tiers, plus **M8's fifth tier `unattributed`** |
+| Provenance and confidence; inference never becoming fact | **SUFFICIENT** | §20.6, nine source types. Reach extended by M8 and M9 |
+| Governed Agent Access Layer — identity → tenant → permission → authority → capability → event → decision | **SUFFICIENT** | AAL §1–§13: five checks, fail-closed doctrine, no-bypass rule |
+| Capability / Skill Registry and its declaration set | **SUFFICIENT** | AAL §6.1, §16.1. It is `agentCapabilities`, not a new component (AAL §16.2) |
+| Open protocols / MCP as adapter, never a dependency | **SUFFICIENT** | AAL §8, §15, with a falsifiable deletion test |
+| Governed autonomy — observe → recommend → approve → execute → record → measure → learn | **SUFFICIENT** | AAL §18: six bands, deliberately governing an empty set |
+| Demand ↔ capacity ↔ commercial state | **SUFFICIENT** | AAL §19; §20.4's placement table. Four dependencies deep, three unfired triggers |
+| Cross-Product Learning Contract | **SUFFICIENT** | §24 — four permitted exchanges, five prohibitions, degradation rule |
+| Product-specific compounding moats, all eight | **SUFFICIENT** | §25 |
+| Free Products Platform — staged consent, standalone value, provenance on self-reported input | **SUFFICIENT, STRENGTHENED** | §26, plus the distribution rules applied from AAL §25 |
+| Free products as a distribution moat | **SUFFICIENT** | §26's run-linkage and no-inferred-identity rules; §25's distribution copy test |
+| Privacy-safe network intelligence | **SUFFICIENT** | §27's five gates, plus §26's provenance floor. MUCH LATER, gates unmet |
+| Provider independence — NiteOwl owns identity, graph, events, decisions, memory | **SUFFICIENT** | §28, Part II §14, plus the provider-memory guardrail |
+| Resource control without artificial lock-in | **SUFFICIENT** | §17, §33; portability at Part II §12 and L22 |
+| The copy test | **SUFFICIENT, EXTENDED** | §25 — products, plus the access-layer and distribution rows applied by Part IV |
+| Updated architecture diagram | **CONSOLIDATED** | **§21 is now the single canonical diagram.** AAL §20 and §27 are superseded historical copies, marked in place |
+| **Erasure / deletion against append-only history** | **GAP — closed here** | **M7 → §20.5, P11, L23** |
+| **"Examined and nothing found" as a distinct attribution result** | **GAP — closed here** | **M8 → §23, §20.7 rule 6, P13** |
+| **Provenance on the outcome half of a decision** | **GAP — closed here** | **M9 → §20.7 rule 5, P12** |
+
+**Nothing new was created merely because the review named it.** No new document, no new
+component, no new layer, no new table, no new state category, and no new product.
+
+One placement is worth calling out because it is the commonest way this list goes wrong. The
+review's illustrative capability list — create invoice, send approved communication, create
+opportunity, update approved state, retrieve a business metric — describes **capabilities of
+products that do not exist.** AAL §6.1's seven remain the whole realistic surface, because
+each maps onto a choke point that already exists, and AAL §16.3's rule governs the rest: *if
+a capability needs a rule that does not exist yet, the rule is built in the domain first and
+exposed second.* `create invoice` has no domain. `send approved communication` has
+`src/lib/email.ts` but no approval model. Each is a product waiting for its rule, not a
+capability waiting for a registry.
+
+---
+
+## 36. Classification
+
+The four bands are unchanged in meaning. **NOW** is reserved for what prevents an immediate
+dead end, a security or tenant-isolation problem, or an irreversible design mistake.
+
+### NOW
+
+**None as a build.** One item is closed as a fact rather than as work:
+
+| Item | Status |
+|---|---|
+| The canonical architecture set must be reachable from `main` (AAL §24) | **CLOSED, verified 2026-08-31.** `main` and `origin/main` are both at `f1cb427`; `docs/ARCHITECTURE.md` Parts I–III and `docs/AGENT_ACCESS_LAYER.md` are all committed and pushed. The residual "local and unpushed" exposure recorded in AAL §24 and §29.2 no longer applies |
+
+No code change, no schema change, no migration, no flag and no new table is required now, and
+none is requested.
+
+### PREPARE — define now, build nothing
+
+| Item | Where |
+|---|---|
+| Erasure discipline: references not copies; redact the entity, not the history | §30 **P11**, §20.5 |
+| Outcome provenance and the learnability rule | §30 **P12**, §20.7 rule 5 |
+| The `unattributed` attribution tier | §30 **P13**, §23 |
+| Capability declaration set, including `emitsEvents` / `emitsDecisionType` | §30 **P14**, AAL §16.1 |
+| Graduated-autonomy vocabulary, default `observe` | §30 **P15**, AAL §18 |
+| Free-product distribution rules: held token, no inferred identity, structural namespace, provenance floor | §30 **P16**, §26 |
+| Pending approvals are proposed decisions, not commitments | §30 **P17**, §20.4, §20.7 rule 4 |
+| Everything P3–P10 already carried | §30, unchanged |
+
+Every one of these is a rule, a vocabulary or a placement. **None of them is code**, and each
+is free precisely because the store it governs is empty.
+
+### LATER — build when the trigger fires
+
+Unchanged, plus one: **L23**, the entity-redaction mechanism behind P11, triggered by the
+first erasure request or the first real customer history. The *rule* must precede the corpus;
+the *mechanism* need not. L16–L22 keep their existing triggers, and none has fired.
+
+### MUCH LATER
+
+Unchanged: X1–X5. The Learning Layer, cross-product attribution, cohort benchmarks,
+outcome-trained models and any opt-in network all require accumulated outcome data that does
+not exist. **Part IV adds one precondition to X1:** a learner may consume only outcomes whose
+`outcome_provenance` is `observed` or `derived_deterministic` (§20.7 rule 5), which means the
+provenance field has to exist before the first outcome is written, not before the first
+learner is built.
+
+### The ratio
+
+| Band | Part IV items |
+|---|---|
+| NOW | 0 builds, 1 closed fact |
+| PREPARE | 7 |
+| LATER | 1 |
+| MUCH LATER | 0 new, 1 precondition tightened |
+
+That is the correct shape, and it is the same shape the previous three passes produced.
+
+---
+
+## 37. Decisions requiring explicit owner approval
+
+Only two, and neither is new work.
+
+1. **Whether to commit this documentation change, and on which branch.** The current branch
+   is `fix/callback-urgency-owner-visibility`, which carries the active phone-call work. These
+   edits touch only documentation and no source file, but folding them into a phone-fix branch
+   mixes two unrelated changes. **Recommendation: a separate documentation branch off `main`.**
+   No commit, branch or push was made by this pass.
+
+2. **C3 remains an owner decision with an approved deadline.** A returning customer's second
+   booking overwrites their first, which is both a correctness bug and the clearest instance
+   of M1. Its deadline is already owner-approved for **before the first paying business**, and
+   Part IV does not move it, re-price it or ask for it now. M7 adds one detail worth knowing
+   when it is settled: whatever history mechanism closes C3 should carry references rather
+   than copies from its first row, because that is the moment the corpus starts.
+
+**No approval is requested for any code, schema, flag, provider or configuration change,
+because none is proposed.**
+
+---
+
+## 38. Documentation changes made by this pass
+
+**Modified:**
+
+| File | Change |
+|---|---|
+| `docs/ARCHITECTURE.md` | Header records Part IV. **§19** gains M7–M9. **§20.4** gains the Operating State placement table, the pending-approval rule and the financial-constraint prohibition. **§20.5** gains the erasure discipline. **§20.7** gains rules 4–6 and two Outcome fields. **§21** becomes the single canonical diagram. **§23** gains the `unattributed` tier and its rule. **§25** gains the access-layer and distribution copy-test rows. **§26** gains the distribution material. **§29** gains an erasure row and updates two others. **§30** gains P11–P17, L23 and the NOW note. **§31** gains the risk delta. **§32** is re-verified at `9bdfaf3`. **New §34–§38** |
+| `docs/AGENT_ACCESS_LAYER.md` | Header records the fourth pass; §20 and §27 diagrams marked superseded by §21; §24 and §29.2 durability residual closed; §29.5's pending stitching rows marked applied |
+| `PROJECT_CONTEXT.md` | One line naming the canonical architecture set — the still-pending row from AAL §29.5 |
+| `CHECKLIST.md` | Architecture-map signpost updated to name Parts I–IV |
+
+**Created:** none. A fourth architecture document was considered and rejected for the reason
+AAL §21.3 already gives: extending the two that exist is what stops the set fragmenting, and
+fragmentation is what produced the only two defects any of these reviews has found.
+
+**Production code, schema, migrations, flags, environment, providers, prompts:** **none.**
+
+---
+
+## 39. Part IV verdict
+
+The fourth review is right about the strategy and finds almost nothing wrong with the
+architecture, and both halves of that sentence matter. Agents are commodities; the substrate
+is contested; distribution is the incumbent's weapon; the only asset that cannot be bought is
+the accumulated record of what was decided, on what evidence, under whose authority, and what
+followed. **All four of those conclusions were already written down here, and none of them
+changed.**
+
+Three things are worth taking from this pass:
+
+1. **Not knowing is a finding, and this architecture had three places where it was not
+   recorded as one.** An unexamined outcome read as a failure (M8), a predicted outcome read
+   as a measurement (M9), and — the sharpest one — an erasure request that could only be
+   answered by destroying history or refusing a lawful request (M7). The product's own
+   strongest doctrine already had the answer in all three cases; nobody had carried it that
+   far.
+
+2. **The stitching mattered more than the findings.** Two of the three defects these four
+   reviews have found were caused by documents that could not see each other, not by bad
+   design. The pending stitching set is now applied, §21 is the single canonical diagram, and
+   the whole set is on `main` and pushed. The conditions that produced the duplicate decision
+   record no longer hold.
+
+3. **Everything remains PREPARE.** Seven rules, one deferred mechanism, no NOW build, and the
+   moat still cannot begin accumulating until real businesses book real appointments. This is
+   the fourth document in a row to end by saying the next milestone is a reliable phone call,
+   and it is still true.
+
+---
+---
+
+# Part V — Operational Sovereignty and Diagnostic Intelligence
+
+**Added 2026-08-31 against commit `9bdfaf3`.** Same rules as Parts I–IV: **documentation
+only.** No schema, no migration, no route, no flag, no environment variable, no working code.
+Nothing below was implemented and nothing below asks for implementation now. Files modified
+are listed in §46.
+
+This is a **targeted addendum**, not a fifth full review. It extends two areas and touches
+nothing else: **operational sovereignty** (what happens when a provider changes the terms
+rather than merely going down) and **diagnostic intelligence** (the step between *what
+happened* and *what we decided*, which no earlier part modelled).
+
+**It deliberately does not restate** the nine intelligence layers, the Operating State
+categories, the canonical event shape, the provenance vocabulary, the Cross-Product Learning
+Contract, the free-product platform, the network-intelligence gates, the governance kernel,
+the five checks, the capability contract or the autonomy ladder. Part IV §35 places all of
+them, and none of that placement changes.
+
+---
+
+## 40. What this addendum adds
+
+Three findings, recorded in full in §19 as **M10**, **M11** and **M12**.
+
+| # | Finding | Resolved in | Kind |
+|---|---|---|---|
+| **M10** | Diagnosis has no artefact, and §24 already promises to exchange one | §42; §20.7 rule 8; §23; §24 | A missing contract, caught before either end exists |
+| **M11** | A recommendation never states what success would look like, so it can only be graded afterwards | §43; §20.7 rule 7 | A missing field, and the one the learning loop rests on |
+| **M12** | The provider risk matrix models failure, not commercial or policy risk, and no dependency-criticality vocabulary exists | §41 | A missing axis and a missing classification |
+
+Everything else the addendum asked about is already specified, and §45 places it.
+
+Two results are worth stating up front because they are the opposite of what a sovereignty
+review usually finds.
+
+**First, Remy is not a thin layer on anybody's platform, and this was verified rather than
+assumed** (§41.2). The reception intelligence — prompt, tool surface, greeting, structured
+extraction schema, summary instructions — is built in NiteOwl code per call, as a
+provider-neutral value, and mapped to the telephony provider's shape at the last step. The
+calendar is fully isolated behind a capability contract. **The one genuine coupling is
+OpenAI**, at nine direct call sites, and that was already recorded as L11/§8.
+
+**Second, no new provider is recommended and no redundancy is proposed.** Classifying a
+dependency is how you learn what would be lost; it is not a reason to buy a second one
+against a risk that has not materialised. Proportionality governs §41 throughout.
+
+---
+
+## 41. Operational sovereignty
+
+### 41.1 The principle
+
+Part III §28 established that NiteOwl owns the identity, the graph, the event schema, the
+decision history and the memory, while providers supply capabilities — and added the
+provider-memory guardrail, *never let a provider hold NiteOwl's memory.* Part V adds the
+sentence that generalises it beyond memory:
+
+> **No provider may become the sole representation of a NiteOwl business concept.** An
+> external system may remain authoritative for its own domain — Google owns its calendar,
+> Stripe owns its subscriptions — but the **customer, appointment, appointment intent,
+> opportunity, job state, capacity, business rule, decision, recommendation, action and
+> outcome** are NiteOwl's canonical concepts, and NiteOwl holds a representation of each that
+> survives the provider.
+
+The direction is the one the calendar layer already proved:
+
+```
+provider → adapter → canonical NiteOwl representation → Graph / Operating State / Spine → product
+```
+
+and the direction to avoid is provider-shaped fields spreading into product logic, which is
+how an integration becomes a migration project.
+
+Two limits, so this does not turn into mirroring:
+
+- **Do not duplicate provider data.** NiteOwl holds the canonical *concept* and a reference —
+  `integration_links` already does exactly this. It does not hold a shadow copy of the
+  provider's records, which would be stale, larger, and a data-protection surface with no
+  owner.
+- **Retain only what is legitimate, necessary and permitted.** Sovereignty is not a reason to
+  keep more personal data; Part IV's M7 rule applies unchanged — references, not copies.
+
+### 41.2 Verified coupling state, 2026-08-31
+
+Checked against the tree at `9bdfaf3`, not carried forward from the 2026-08-08 reading:
+
+| Provider | Verified state | Sovereignty verdict |
+|---|---|---|
+| **Google Calendar** | Provider identifiers appear in `src/lib/integrations/providers/google.ts` and nowhere else in `src/` (the only other hit is a marketing privacy page naming Google in prose) | **Isolated.** The `CalendarCapability` contract holds |
+| **Vapi** | `buildVoiceAssistantConfig()` returns a **provider-neutral** `VoiceAssistantConfig` — prompt, first message, language, voice, structured-data schema, summary instructions — built in our code per call from our own org profile, knowledge and settings. `buildVapiAssistantResponse()` maps it to the provider's shape as the **last** step, in `vapi.ts`. `src/lib/voice/types.ts` names Vapi only in comments and one `VoiceProvider` union value; it carries no provider schema. Outside `src/lib/voice/`, one cron route imports one flag helper | **Adapter-isolated.** The reception intelligence is NiteOwl's, not the provider's. This is the single most important sovereignty fact in the product and it is currently true |
+| **OpenAI** | **9 direct `fetch` call sites** across chat, widget, sales chat, voice extraction, knowledge import, FAQ generation, lead capture and datetime parsing. Model ids hardcoded at each | **The real coupling.** Already recorded as L11 and Part II §8. Unchanged, and still not urgent |
+| **Supabase** | System of record, by design | **Not a coupling — it is the record.** Part II §12's assessment stands |
+| **Resend, Stripe, Sentry, Vercel** | Single seam / provider indirection / thin / thin | Adequate, unchanged |
+
+**No current integration represents dangerous lock-in.** The one worth watching is OpenAI,
+and the reason is not replaceability — it is that nine call sites with hardcoded models mean
+a forced migration touches nine files under time pressure, and that no record exists of which
+model produced which stored value (Part III §29, *model/version traceability: absent*).
+
+### 41.3 Dependency criticality — the classification M12 asked for
+
+Three bands. The band is about **consequence of loss**, not likelihood, and it is
+deliberately separate from §6.1's `P0–P3` priority, which mixes the two.
+
+| Band | Meaning |
+|---|---|
+| **REPLACEABLE** | Loss is absorbed with ordinary engineering. No customer-visible capability disappears for long, and no NiteOwl intelligence is at risk |
+| **DEGRADABLE** | Loss removes real functionality while the product keeps delivering meaningful value. Degradation must be **truthful** — §11's rule, unchanged |
+| **CRITICAL EXTERNAL DEPENDENCY** | Loss materially disables important functionality. Requires the documentation set below **before** the dependency deepens, not after it fails |
+
+Applied to today's providers:
+
+| Provider | Band | Why |
+|---|---|---|
+| **Supabase** | **CRITICAL** | It is the system of record. Loss is existential, and Part II already classifies it P0 with an unproven restore |
+| **OpenAI** | **CRITICAL** | Every channel needs it to answer or extract. No second provider is wired, and the failure is silent-to-the-business rather than loud |
+| **Vapi** | **CRITICAL for the phone channel; DEGRADABLE for the product** | The phone line is down and the number and assistant configuration live there. Web, widget, dashboard and calendar continue. The distinction matters: the *channel* is critical, the *company* is not |
+| **Vercel** | REPLACEABLE | The repository is the application; Part II §12 found only one platform-shaped line |
+| **Google Calendar** | DEGRADABLE | Verified truthful degradation: unreadable calendar → `lookup_failed` → the phone stops confirming rather than confirming wrongly. One org affected, contract already exists |
+| **Resend** | DEGRADABLE — **with a known gap** | Confirmations go undelivered **and are not retried or recorded** (Part II §6.1). That is a degradation the business cannot see, which is the part that needs fixing eventually, not the provider |
+| **Stripe** | DEGRADABLE | Commercially severe, operationally invisible: granted access continues |
+| **Sentry** | REPLACEABLE | Monitoring blind; operations verified unaffected (§10) |
+
+**For every CRITICAL dependency, the architecture record must eventually carry:** why it is
+critical; the functionality that depends on it; the data that depends on it; the provider's
+restrictions and policy risk; the failure mode; the truthful degradation path; the customer
+impact; the export and recovery strategy; an alternative-provider route where one is feasible;
+what NiteOwl retains; and **what NiteOwl intelligence survives the loss.** That set is
+**PREPARE** (§45): it is written when a CRITICAL dependency is next deepened, and it is not a
+reason to open three documents today.
+
+### 41.4 The commercial and policy axis M12 found missing
+
+§6.1's columns are outage, account loss, replace difficulty and fallback — all technical. The
+axis to add, per provider, when that table is next revised:
+
+**terms and pricing change · acceptable-use restrictions on automated or agent-driven use ·
+new certification or verification requirements · access-tier or deprecation changes · the
+provider entering NiteOwl's market.**
+
+The distinction that makes this worth writing down: **an outage ends and truthful degradation
+is the whole answer; a policy change does not end, and the answer is a migration that had to
+be designed beforehand.** The two providers where this is a live rather than theoretical
+category are the model provider and the AI-telephony provider, because both operate
+acceptable-use policies over exactly the behaviour Remy performs.
+
+**This is a documentation requirement, not a mitigation programme.** Nothing here proposes a
+second model provider, a second telephony provider, or any redundancy.
+
+### 41.5 What survives losing a provider
+
+The test, stated so it can be applied to any future integration:
+
+> **Advanced functionality may degrade. Accumulated NiteOwl intelligence must survive.**
+
+Against today's providers, and this is a genuine strength rather than an aspiration: losing
+Google Calendar loses external busy-time and event creation, and keeps every appointment,
+every lead, every decision and the whole booking history, because `integration_links` holds a
+reference and `leads` holds the appointment. Losing Vapi loses the phone channel and keeps
+`voice_calls`, `voice_events` and every lead the phone produced. Losing Resend loses delivery
+and keeps the record of what was sent and why.
+
+The eventual stores inherit the same test by construction, and it is worth stating once: the
+Outcome Spine, Decision & Outcome Memory, Business Memory, learned rules and reception
+intelligence are **NiteOwl-resident by definition** (§28), so provider loss cannot reach them.
+The rule that keeps that true is the one already adopted: **no provider-hosted memory,
+threads, vector stores or resident fine-tunes over tenant data**, and any index rebuildable
+from NiteOwl's database alone.
+
+### 41.6 Governed capabilities never expose provider operations
+
+*Extending `docs/AGENT_ACCESS_LAYER.md` §6.1's binding rule to the provider direction.* That
+rule says a capability handler calls an existing domain choke point and contains no booking,
+availability or hours logic. The sovereignty corollary:
+
+> **An agent capability is named and shaped in NiteOwl's terms, never a provider's.** There
+> is no `google.calendar.insert` capability and never will be. An agent asks NiteOwl to book;
+> NiteOwl decides, and its adapter chooses the provider call.
+
+Three things this buys, all of which the calendar layer already demonstrates: no
+provider-specific logic accumulates inside agent handlers; swapping a provider does not
+invalidate a published capability contract held by third-party agents NiteOwl does not
+deploy; and the canonical event records `appointment.booked`, not a provider's verb, so the
+history survives the swap (§20.5's naming convention, unchanged).
+
+---
+
+## 42. The Finding — diagnosis as a profile, not a layer
+
+### 42.1 Diagnosis is not a layer of Core
+
+The tempting move is a tenth layer: a NiteOwl Diagnostic Engine that reads everything and
+explains it. **That would be the wrong shape**, and the addendum's own §14 says why: one
+generic diagnosis engine replaces the product expertise that is supposed to be the
+differentiator. It is also the mistake `docs/AGENT_ACCESS_LAYER.md` §19 already refused for
+demand↔capacity reasoning, and the answer is the same one:
+
+> **Diagnosis is a *consumer* of Core and a *producer* of records. The Finding is a Core
+> contract; the rules that produce one are product domain logic.**
+
+The split, stated once so it cannot drift:
+
+| Core owns | Products own |
+|---|---|
+| The **shape** of a Finding and a Recommendation (§20.7 rule 8) | The **rules** that detect a condition and rank its causes |
+| Evidence references, provenance, confidence, causal tiers | What counts as *deteriorating*, *abnormal* or *material* in this domain |
+| Authority, approval, action linkage, outcome measurement | Which remedy to propose, and how to prioritise it (§43.3) |
+| The event and decision stores | Domain thresholds, seasonality, and what a good week looks like |
+
+So Remy owns reception diagnosis, Ledger owns margin diagnosis, Beacon owns relationship
+deterioration. None of them owns the *definition* of a finding, and none reads another's
+tables to build one.
+
+### 42.2 The Finding profile
+
+A Finding is a `DecisionRecord` with a `diagnosis.*` `decision_type` and `action_taken: none`
+— a judgement NiteOwl made, on evidence, with confidence, which is exactly what that record
+already carries. On top of the base fields:
+
+| Field | Why |
+|---|---|
+| `condition` | The named thing observed to be wrong, from a **product-owned enumeration** — not prose. Only codes are learnable (§20.7 rule 1) |
+| `time_window` | The period the claim is about. A finding without one cannot be reproduced, re-run, or compared with its own re-assessment |
+| `affected_entities` | Canonical references (§24), never copies (Part IV M7) |
+| `hypotheses[]` | Each a candidate cause with its **own** §23 tier, confidence and evidence refs. **A ranked list, not a winner** |
+| `contradicting_evidence` | Evidence pointing away from the conclusion. §20.6 already asks for it; nowhere else has a slot for it |
+| `assumptions` | What had to be taken as true. `assumed` is a §20.6 source type and must remain visible as one |
+| `alternatives_considered` | Base field, reused — the conditions examined and rejected |
+
+Four rules:
+
+- **A Finding records how it was actually derived.** *Revised 2026-08-31 — the original
+  wording said a Finding "is an inference, and is labelled as one", which was wrong: it would
+  have forced a deterministic threshold evaluation to be filed as AI inference, and a false
+  provenance label is the very thing §20.6 exists to prevent.* A Finding's `provenance` is
+  drawn from the **full §20.6 vocabulary**, and it must be the accurate one:
+
+  | How the Finding was reached | `provenance` |
+  |---|---|
+  | The owner told us — *"we keep losing jobs to the van breaking down"* | `business_provided` |
+  | A provider reported the condition — the calendar connection is revoked | `provider_reported` |
+  | Something happened and the happening *is* the finding — six days with no successful calendar read | `observed` |
+  | A deterministic rule or computation over recorded data — *missed-call rate exceeded its threshold in this window* | `derived_deterministic` |
+  | A statistical or machine-learned model asserting something about the past | `ai_inferred` |
+  | A model asserting something about the future — *this customer is likely to churn* | `ai_predicted` |
+  | A default standing in for a real value | `assumed`, and it must stay visible as one |
+  | Confirmed by a human who could know | `verified` |
+
+  Two rules govern the label, and they point in opposite directions on purpose:
+
+  > **A deterministic or evidence-derived Finding must never be labelled as AI inference; and
+  > an AI-inferred Finding must never silently become observed or verified.** Both are
+  > misreporting, and a corpus cannot be corrected for either after the fact.
+
+  **A Finding's provenance is that of the weakest step in its derivation.** A deterministic
+  rule evaluated over model-extracted data is `ai_inferred`, not `derived_deterministic` —
+  the arithmetic is exact but the input was a guess, and the conclusion inherits the guess.
+  This is the one place the labelling is easy to get flatteringly wrong.
+
+  Regardless of provenance, a Finding keeps its `evidence_refs` and its `confidence`, and
+  §20.6's promotion path is unchanged: `ai_inferred → verified` **only** on confirmation,
+  never by age, repetition or downstream use. `ai_predicted` never promotes at all.
+
+  *(A note on the enumeration's names, deliberately not renamed here. `ai_inferred` and
+  `ai_predicted` cover **any** model-derived result — a seasonal baseline and a language model
+  alike — with `model` and `model_version` recording which produced it (§20.6). The names read
+  narrower than the concept. Renaming them would touch §20.6, §20.7, Part IV rule 5 and every
+  reference between, so it is left as a candidate for whenever the vocabulary is next revised
+  rather than done as a side effect of this correction.)*
+- **Hypotheses are ranked, and the ranking is visible.** The addendum's own framing is the
+  test: *identify which factors appear materially relevant rather than listing every metric
+  that changed.* A finding that lists nine equally-weighted candidates has not diagnosed
+  anything; it has produced a dashboard with sentences.
+- **A hypothesis reaches `caused_by` only on an admissible basis** (§23, as revised
+  2026-08-31). The default ceiling for a business condition is `attributed_to`; a controlled
+  intervention, a designed experiment, a known deterministic mechanism, a controlled
+  before/after, or a domain basis defined in advance can carry it further, with the full
+  evidence set stored. **Promotion is never automatic**, and never a reward for confidence.
+- **Every surface that displays a hypothesis displays its tier.** §23's existing rule, and
+  the diagnostic layer is where it will be most tempting to drop.
+
+### 42.3 Cross-product diagnosis, without coupling
+
+A revenue decline may have evidence in demand, reception, capacity, margin and repeat
+behaviour — five products. §24 already forbids the shortcut, and the mechanism it permits is
+sufficient without amendment:
+
+```
+each product  →  its own Finding (its domain, its rules, its confidence)
+                        │
+                        ▼
+        canonical events + permissioned derived claims  (§24 types 1–4)
+                        │
+                        ▼
+   a synthesising product  →  a Finding whose evidence_refs are OTHER findings
+```
+
+Three properties make this work, and all three already exist:
+
+- **A finding's evidence may be another finding**, by reference. That is what makes synthesis
+  possible without a shared schema, and it is why `evidence_refs` was specified as references
+  rather than values.
+- **Provenance and confidence survive the hop** — §24's fifth prohibition, which exists
+  precisely so a confidence-0.4 claim does not arrive somewhere else as a bare fact.
+- **Degradation is additive-only.** A synthesis missing three of its five inputs produces a
+  weaker finding with fewer evidence refs and lower confidence. It does not produce a
+  confident one, and it does not block. §24's degradation rule, unchanged.
+
+And the prohibition that keeps it honest, which follows from §23 rather than being new:
+**synthesis does not raise a tier.** Five `correlated_with` inputs do not compose into an
+`attributed_to` conclusion. Combining weak evidence produces more evidence, not better
+evidence.
+
+---
+
+## 43. The Recommendation — a proposed decision that says how it would be judged
+
+### 43.1 It needs no new artefact
+
+A recommendation is already fully expressible: a `DecisionRecord` with
+`action_status: proposed`, which `docs/AGENT_ACCESS_LAYER.md` §18 defines as exactly what the
+`recommend` band produces, and which Part IV's rule 4 already governs — **proposed reserves
+nothing.** The recommendation profile (§20.7 rule 8) adds the fields that make it actionable
+and gradeable, and `addresses_finding_id` is what links it to the Finding that motivated it.
+
+### 43.2 The rule that makes it a moat rather than advice
+
+Stated in §20.7 as rule 7, and repeated here because it is the point of the whole section:
+
+> **The success criterion and the review date are written before the outcome is known.** A
+> recommendation that cannot say in advance what would count as success is an opinion, and is
+> recorded as one.
+
+`expected_effect` is where false precision is most tempting. The rule: **state a range, a
+direction, or "unknown" — never a fabricated number.** *"We estimate £2,400/month"* with
+invented assumptions is worse than *"we expect missed-call recovery to be the largest single
+factor; we cannot size it until two weeks of data exist"*, because the first is unfalsifiable
+in a way that looks rigorous. Part III §26's rule for free-tool findings — *the assumptions
+must be visible or it is a sales figure, not a finding* — applies identically here.
+
+### 43.3 Prioritisation stays product-specific
+
+The factors are known — impact, confidence, urgency, effort, cost, operational risk,
+reversibility, business priority, dependencies, current capacity, authority required — and
+the architecture decision is to **name them and refuse to combine them centrally**:
+
+> **No universal NiteOwl priority score.** Each product ranks in its own domain terms and
+> stores the ranking with the **scoring version** that produced it.
+
+A single cross-product scorer would need a common unit for a delayed job, a margin point and
+a churn risk, and inventing one is exactly the false precision §43.2 forbids. Storing the
+scoring version is the same requirement Part III §26 places on free-tool scoring, for the same
+reason: **a change of scoring version breaks comparability and must be visible**, or a
+re-weighting looks like an improvement.
+
+### 43.4 Recommending is not authorising
+
+> **Generating a recommendation never grants authority to execute it.** They are two
+> decisions, adjudicated separately, and the second one is the access layer's business.
+
+The chain, composed from parts that all already exist:
+
+```
+Finding (§42)
+  → Recommendation — a proposed decision, reserving nothing (§20.7 rules 4, 7)
+  → Authority check — the granted band for (org, credential, capability) (AAL §18)
+  → Human approval where the band requires it — approver recorded (§20.7)
+  → Governed capability — the kernel's five checks (AAL §3)
+  → Domain choke point — Remy's own rules re-run, never bypassed (AAL §6.1)
+  → Provider adapter, where a provider is involved (§41.6)
+  → Canonical event (§20.5)
+  → Outcome measured at review_at, against the criterion written in advance (§20.7 rule 7)
+  → Decision & Outcome Memory
+```
+
+Two properties worth naming because they are easy to lose. **The domain choke point re-runs
+its own rules**: an approved recommendation to reschedule still goes through
+`checkBookingSlot`, and is still refused if the slot is gone. Approval authorises an *attempt*,
+never an *outcome*. And **a refused or rejected recommendation is retained** — AAL §6.2
+already requires decision records on refusals, and the reason applies with more force here: a
+corpus containing only recommendations that were accepted is selection-biased, and a learner
+reading it cannot tell a good recommendation from an agreeable one.
+
+### 43.5 What the learning loop may and may not conclude
+
+MUCH LATER, and gated by everything above. The guardrails, so the loop is not built without
+them:
+
+- **Only outcomes whose `outcome_provenance` is `observed` or `derived_deterministic` are
+  learnable** (Part IV rule 5), and only against a `success_criterion` written in advance
+  (rule 7).
+- **Rejections and non-actions are evidence**, and a recommendation whose `review_at` passed
+  with no outcome is a *result*, not a gap (rule 7).
+- **Small samples, confounding and changing conditions are stated with the conclusion**, at
+  the standard §23's `correlated_with` already sets — sample size and window stored with the
+  claim.
+- **Contradictory results lower confidence; they are never discarded** for disagreeing with
+  the prevailing conclusion. `contradicting_evidence` exists for this.
+- **Human overrides are signal, not noise.** A business that consistently rejects a
+  recommendation class has told NiteOwl something about its domain that the model did not
+  know.
+- **Model, policy and scoring versions are stored**, so drift is visible rather than silently
+  re-baselining the corpus.
+- **The learner proposes; it never writes facts.** §20.9, unchanged, and the reason Part IV
+  made learning eligibility a derived property rather than a mutable flag.
+
+---
+
+## 44. Solutions, not just reports — the product principle
+
+Adopted as a NiteOwl product rule:
+
+> **A NiteOwl specialist should not stop at identifying a meaningful problem when the
+> evidence it already holds supports a useful recommendation for resolving it.**
+
+With the qualifier that keeps it honest, and which is the whole reason §42 and §43 come
+first:
+
+> **…and it must stop at the point its evidence stops.** A recommendation made past the edge
+> of the evidence is a guess with a confident voice, and it costs more trust than the silence
+> it replaced.
+
+The two halves are the same rule. What makes "recommend, don't just report" safe rather than
+reckless is that a recommendation carries its finding, its hypotheses with tiers, its
+confidence, its contradicting evidence and its success criterion — so a weak one is *visibly*
+weak instead of sounding like a strong one.
+
+Per product, the eventual shape. **None of these is built, and none is proposed here**; the
+column that matters is the last one, which is the same in every row:
+
+| Product | Not just | Eventually | Accumulates |
+|---|---|---|---|
+| **Remy** | *"Missed-call performance deteriorated"* | Diagnose the handling and scheduling factors, recommend the correction, execute authorised remedies, measure bookings kept | Which reception corrections actually recovered bookings, for this business |
+| **Ledger** | *"Margin declined"* | Identify likely drivers, explain them, recommend a response, measure margin and cash | Which financial responses moved margin, under which conditions |
+| **Atlas** | *"Revenue fell"* | Synthesise cross-product findings (§42.3), rank contributors, prioritise, evaluate | A business's own causal model, at §23's honest tiers |
+| **Scout** | *"This is a good lead"* | Explain why it matters now, recommend the approach, name the risks, measure profitable business won | Which signals became *retained*, profitable customers |
+| **Pulse** | *"Campaign performance fell"* | Diagnose audience, message, channel, conversion or capacity, recommend, measure downstream profit | Which marketing corrections produced profit, not clicks |
+| **Forge** | *"This process is inefficient"* | Locate the bottleneck, recommend an intervention, measure cost, time and error effects | Which interventions held, and which regressed |
+| **Beacon** | *"This customer is at risk"* | Diagnose the deterioration, recommend a retention action, measure retention and customer value | Which interventions actually retained customers |
+| **Nova** | *"Tasks are being delayed"* | Identify the execution pattern, recommend an adjustment, measure improvement | Personal execution patterns — under Part III §20.8's strict privacy boundary, which is not relaxed here |
+
+The copy test decides which column is worth building. Every "eventually" cell is reproducible
+by a funded competitor in weeks — an LLM will diagnose a revenue decline plausibly today.
+**Only the last column resists copying**, and only if §43's success criterion was written in
+advance, because otherwise the accumulated record is a pile of recommendations that all
+graded themselves as having worked.
+
+---
+
+## 45. Classification
+
+### ALREADY EXISTS — no change needed
+
+| Concept the addendum named | Where |
+|---|---|
+| Provider adapters, canonical representation, no provider schema in product logic | §3.8, Part II §6, §14, §41.2 (verified) |
+| NiteOwl owns identity, graph, events, decisions, memory; provider-memory guardrail | §28 |
+| Truthful degradation; *"cannot check" is never "free"* | §1.5, §11 |
+| Governed capability chain: agent → permission → authority → adapter → event → decision | AAL §2, §3; §43.4 composes it |
+| Agents may not invent provider operations | AAL §6.1 binding rule; §41.6 states the provider corollary |
+| Causal distinctions: correlation, contributing factor, hypothesis, unknown | §23's five tiers; §23's mapping table |
+| Inference never silently becoming fact | §20.6 |
+| Cross-product exchange without schema coupling | §24 — four exchanges, five prohibitions |
+| Recommendation as a proposed decision that reserves nothing | §20.7 rule 4; AAL §18 |
+| Product expertise stays in products; Core provides contracts | §20.2, §24; §42.1 |
+| Recommendation-to-outcome as the moat, not generic advice | §17, §25, and §25's new rows |
+
+### STRENGTHEN DOCUMENTATION — done in this pass
+
+| Item | Where |
+|---|---|
+| The sovereignty principle generalised beyond memory | §41.1 |
+| Verified coupling state, provider by provider | §41.2 |
+| What survives provider loss, tested against today's providers | §41.5 |
+| Capabilities are never named after provider operations | §41.6 |
+| `caused_by` for a business condition takes a high evidential threshold, not a prohibition — with the admissible bases named | §23 |
+| A Finding records how it was actually derived, from the full provenance vocabulary | §42.2 |
+| The five causal states mapped onto the existing tiers | §23 |
+| §24's undefined "finding" pointed at its shape | §24 |
+| Diagnosis is a consumer and a contract, not a tenth layer | §42.1 |
+| Synthesis does not raise a tier | §42.3 |
+| No universal priority score; scoring version stored | §43.3 |
+| Recommending is not authorising | §43.4 |
+| Rejections are retained and are evidence | §43.4, §43.5 |
+| Solutions-not-reports, with its evidence limit | §44 |
+
+### PREPARE — define now, build nothing
+
+| # | Item | Why now |
+|---|---|---|
+| **P18** | **The Finding profile** (§42.2) — condition enumeration, time window, ranked hypotheses with tiers, contradicting evidence, assumptions | §24 already trades findings. Defining the shape before either producer or consumer exists is free; after, it is a migration across two products |
+| **P19** | **`success_criterion` + `review_at` on every recommendation** (§20.7 rule 7, M11) | The single field the learning loop rests on. Retrofitting it means the earliest recommendations — the ones with the longest measured history — are the ones that can never be graded |
+| **P20** | **Dependency-criticality bands and the CRITICAL documentation set** (§41.3) | Written when a CRITICAL dependency is next deepened. Costs nothing today, and prevents "how bad would this be?" being answered under pressure |
+| **P21** | **The commercial and policy axis on §6.1** (§41.4) | Added at the next revision of that table. A policy change gives less notice than an outage and does not end |
+
+### LATER — build when the trigger fires
+
+| # | Item | Trigger |
+|---|---|---|
+| **L24** | Findings and recommendations persisted as decision records | The first product feature that diagnoses rather than reports. For Remy that is Reception Intelligence, which is behind calendar reliability (§32) |
+| **L25** | A model/provider gateway with recorded `model_version` per stored value | L11's trigger, unchanged — plus §41.2's observation that nine hardcoded call sites make a forced migration worse than it needs to be |
+
+### MUCH LATER
+
+Unchanged: X1–X5. **Recommendation-to-outcome learning is X1**, and Part V adds a second
+precondition to it: every graded recommendation must carry a `success_criterion` written
+before its outcome (rule 7), alongside Part IV's requirement that the outcome be `observed` or
+`derived_deterministic` (rule 5). Both must be true at write time, which is why they are
+PREPARE and X1 is not.
+
+### The ratio
+
+| Band | Part V items |
+|---|---|
+| ALREADY EXISTS | 11 |
+| STRENGTHEN DOCUMENTATION | 13, all applied in this pass |
+| PREPARE | 4 |
+| LATER | 2 |
+| MUCH LATER | 0 new, 1 precondition tightened |
+| **NOW** | **0** |
+
+---
+
+## 46. Status, protection and verdict
+
+### 46.1 Phone-call work — verified, not assumed
+
+**The active Remy phone-call work remains untouched and remains the engineering priority.**
+Checked at `9bdfaf3`, on branch `fix/callback-urgency-owner-visibility`:
+
+- `git status --porcelain` reports only the documentation files in §46.2 plus
+  `supabase/.temp/cli-latest`, a Supabase CLI version cache already modified before this pass
+  began. **Nothing under `src/`, `tests/`, `supabase/migrations` or `docs/sql/` was modified
+  or opened for edit.**
+- The voice regression suite was **run**, not cited: `tests/voiceAvailability.test.mjs` and
+  `tests/voiceConversation.test.mjs` report **156 passing, 0 failing**, including
+  `tools.length === 2`, `["check_availability", "endCall"]` and *"no booking tool was
+  introduced"*. **No third tool, no mid-call booking path.**
+- `src/lib/voice/assistant.ts` rules 9 and 11 are unmodified; the PR #30 truthful closing
+  stands. `leadCapture.ts`, `bookingAvailability.ts`, `availability.ts`, `calendarSync.ts` and
+  `calendarService.ts` are unmodified.
+- No Vapi, Google Calendar, Supabase, OpenAI or Resend behaviour was changed; **no provider
+  configuration was touched**; no voice prompt was edited.
+- No schema, migration, environment variable or feature flag was touched.
+  `VOICE_CALENDAR_BOOKING_ENABLED` and `CALENDAR_EVENT_CREATION_ORG_IDS` are as they were.
+- The deferred service-matching false positive in `PROJECT_CONTEXT.md` is unchanged, and none
+  of its rejected approaches was retried.
+- No branch was created, checked out, merged or pushed, and no commit was made.
+
+The code inspected for §41.2 was **read only** — `providers/google.ts`, `lib/voice/*`, the
+OpenAI call sites — to verify claims this document makes about them.
+
+### 46.2 Documentation changes
+
+| File | Change |
+|---|---|
+| `docs/ARCHITECTURE.md` | Header records Part V. **§19** gains M10–M12. **§20.7** gains rules 7 and 8. **§23** gains the causal-evidence standard for `caused_by` and the state mapping. **§24** exchange type 3 now points at the defined Finding. **§25** gains the diagnosis and recommendation copy-test rows. **§29/§30/§31** updated. **New §40–46**. *Corrected 2026-08-31: §42.2 Finding provenance, and §23's causal standard — see §46.3* |
+| `docs/AGENT_ACCESS_LAYER.md` | Header records the pass; §6.1 gains the provider-naming corollary as a cross-reference |
+| `PROJECT_CONTEXT.md` | Canonical-set line extended to Parts I–V |
+| `CHECKLIST.md` | Architecture-map signpost extended to Part V |
+
+**Created:** none. A separate sovereignty or diagnostic document was considered and rejected
+for the reason AAL §21.3 gives and Part IV restated: fragmentation is what produced both
+defects these reviews have found.
+
+**Production code, schema, migrations, flags, environment, providers, prompts:** **none.**
+
+
+### 46.3 Two corrections applied 2026-08-31, after review
+
+Both were **over-restrictions written by Part V itself**, caught on review before anything was
+built on them. They are recorded here rather than quietly fixed, for the reason
+`docs/AGENT_ACCESS_LAYER.md` §26.3 gives: these documents assert rules a later reader will
+follow, and a corrected one that goes unmarked teaches them to trust the rest less.
+
+**Correction 1 — Finding provenance (§42.2).** The original rule read *"a finding is an
+inference, and is labelled as one — `ai_inferred` or `derived_deterministic`, never
+`observed`."* That was wrong twice. It excluded legitimate derivations a Finding can genuinely
+have — a condition the owner reported, a condition a provider reported, a condition that was
+simply observed — and, worse, it would have required a deterministic threshold evaluation to
+be filed as AI inference. **A false provenance label is precisely what §20.6 exists to
+prevent**, and the original wording mandated one. The rule now reads: *a Finding records how
+it was actually derived*, from the full nine-type vocabulary, with the weakest step in the
+derivation setting the label. No new vocabulary was added — §20.6 already carried every
+distinction needed. The two directional guards are unchanged and are now stated as a pair:
+**a deterministic Finding must never be labelled AI inference, and an AI-inferred Finding must
+never silently become observed or verified.**
+
+**Correction 2 — the causal standard (§23).** The original rule read *"a diagnosis may never
+claim `caused_by` for a business condition."* Conservative, and too absolute: it would have
+made a properly designed A/B test, a directly controlled intervention and a known
+deterministic mechanism all unrepresentable, forcing genuinely established results to be filed
+as mere attribution — which is its own form of misreporting. It is replaced by a **high
+evidential threshold**: the four defaults still hold (correlation, AI inference, temporal
+sequence and multiple correlated signals each fail to establish causation on their own), the
+default ceiling for a business condition remains `attributed_to`, and `caused_by` becomes
+reachable only on a **named admissible basis** — deterministic mechanism, controlled
+intervention, designed experiment, controlled before/after, or a domain basis defined in
+advance — carrying its evidence, provenance, confidence, intervention context, contradicting
+evidence, assumptions and time window. **The prohibition on inventing causality is not
+weakened**; it is made into a standard that evidence can actually meet, and the two guards the
+prohibition was really protecting — no automatic promotion, and display the basis alongside
+the tier — are kept explicitly.
+
+**Nothing else in Parts I–V changed.** No finding was withdrawn, no classification moved, no
+NOW item appeared, and no production code, schema, provider or configuration was touched by
+either correction.
+### 46.4 Verdict
+
+The sovereignty half returns a better answer than expected and it was verified rather than
+assumed: **Remy is not a thin layer on anyone's platform.** The reception intelligence is
+built in NiteOwl code and mapped to the provider at the last step; the calendar is fully
+isolated; the appointment, the lead and the history are NiteOwl's and survive losing either
+provider. The one real coupling is OpenAI, it was already recorded, and it is still not
+urgent. What was genuinely missing was **vocabulary, not architecture** — a way to say how
+much a dependency matters, and an axis for the way provider relationships actually end.
+
+The diagnostic half found the one real hole in the intelligence model. Between *what happened*
+and *what we decided* sits *what we think is wrong and why*, and it had no artefact — while
+§24 was already promising to trade it between products. That is the third time a dangling
+contract has been caught before both ends existed, and the third time the answer was **one
+record, another profile** rather than a new store.
+
+Three things worth taking from this pass:
+
+1. **Sovereignty was already largely won, and can be lost quietly.** The property that
+   protects it — a provider-neutral config built in our code and mapped at the boundary — is
+   invisible until someone adds a provider field to a domain type for convenience. §41.6 is
+   the rule that keeps it.
+
+2. **A recommendation that does not say in advance how it would be judged cannot be learned
+   from** (M11). It is the cheapest field in this document and the one the entire
+   recommendation-to-outcome moat rests on, and it is exactly the kind of thing dropped for
+   schedule reasons because nothing visibly breaks when it is missing.
+
+3. **Diagnosis belongs to the products; only its shape belongs to Core** (§42.1). A single
+   generic diagnosis engine would be the fastest way to turn eight differentiated specialists
+   into one chatbot with eight names.
+
+And the unchanged conclusion, for the fifth document in a row: none of this is urgent, none of
+it is built, and the next milestone is a reliable phone call.
