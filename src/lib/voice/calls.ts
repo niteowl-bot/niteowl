@@ -825,10 +825,33 @@ export async function processCallEnded(
   // a general question has no booking to report, and null omits the
   // block entirely rather than inventing a status for it.
   //
+  // ── …and only when a TIME was actually asked for ────────────────
+  //
+  // From the 2026-08-31 live burst-pipe call. The caller wanted a visit
+  // and gave no day or time at all, so nothing was ever submitted to a
+  // calendar — yet the owner was told "REQUIRES REVIEW: the requested
+  // appointment was not confirmed in the calendar", which describes a
+  // booking that was attempted and failed. Nothing was attempted.
+  //
+  // `isAppointmentRequest` only says the caller wanted a visit. It says
+  // nothing about whether they named a time, and with no time there is
+  // no booking to report — exactly as for the callback case above.
+  //
+  // Gated on the SANITISED requested timing, not the resolved instant:
+  //   - the raw phrase, so a time the caller DID give but that failed to
+  //     parse, or that the calendar refused, still reports the outcome.
+  //     Using the resolved ISO here would silently drop the block on
+  //     precisely the failures it exists to surface. FAIL-CLOSED.
+  //   - sanitised, so "as soon as possible" written into
+  //     preferred_datetime by a model ignoring its schema counts as the
+  //     urgency it is and not as a requested time (callbackTiming.ts).
+  //     The raw field alone would re-admit the confusion PR #35 removed.
+  //
   // FAILS CLOSED. A failed read leaves `status` undefined, which
   // ownerBookingStatus maps to "requires review" — never to "booked".
+  const appointmentTimeWasRequested = Boolean(callbackTiming.preferredDatetime);
   let bookingStatus: OwnerBookingStatus | null = null;
-  if (leadId && isAppointmentRequest) {
+  if (leadId && isAppointmentRequest && appointmentTimeWasRequested) {
     const { data: settledLead, error: settledError } = await admin
       .from("leads")
       .select("status")
