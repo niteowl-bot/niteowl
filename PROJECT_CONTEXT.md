@@ -10,6 +10,21 @@ This repository is the source of truth.
 
 GitHub should always reflect the latest working state.
 
+**Canonical architecture set.** Architecture lives in exactly two documents, and every
+review extends them rather than adding a third:
+
+- `docs/ARCHITECTURE.md` — **Parts I–VI.** Part I future-compatibility guardrail, Part II
+  provider independence and resilience, Part III compounding moat and outcome intelligence,
+  Part IV outcome intelligence / governed agents / resource control, Part V operational
+  sovereignty and diagnostic intelligence, Part VI the Business Problem Case. **§21 is
+  the single canonical architecture diagram.**
+- `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
+  autonomy ladder and free-product distribution architecture.
+
+All of it is **documentation only**; nothing in either document has been implemented, and
+neither asks for implementation now. The canonical `DecisionRecord` is defined once, at
+`docs/ARCHITECTURE.md` §20.7.
+
 ---
 
 # Current Status

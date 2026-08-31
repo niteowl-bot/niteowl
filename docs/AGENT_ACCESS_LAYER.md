@@ -16,6 +16,25 @@ That addendum is **§23–§30**. §1–§22 are unchanged apart from one factua
 environment variable, created no new document, and did not touch the active Remy phone-call
 work (§29.4).
 
+**Extended a third time 2026-08-31 against commit `9bdfaf3`** by the fourth competitive
+review — *outcome intelligence, governed agent architecture and resource control*. That pass
+added **no section to this document.** It found §1–§30 sufficient for every agent-access,
+capability-registry, protocol and autonomy concept the review named, and its work landed in
+`docs/ARCHITECTURE.md` **Part IV (§34–39)** together with the stitching set §29.5 had left
+pending. The four edits it made here are all consistency repairs, each marked in place: the
+§20 and §27 diagrams are superseded by the single canonical diagram at `ARCHITECTURE.md` §21;
+§24 and §29.2's "local and unpushed" residual is closed; and §29.5's pending rows are marked
+applied. The pass changed no production code, no schema, no flag and no environment variable,
+and it did not touch the active Remy phone-call work (`ARCHITECTURE.md` §32).
+
+**Extended a fourth time 2026-08-31** by the operational-sovereignty and diagnostic-intelligence
+addendum. That pass added **no section here**. It made one edit — §6.1 gains the provider-naming
+corollary below — and its substance landed in `docs/ARCHITECTURE.md` **Part V (§40–46)**:
+dependency-criticality bands, the commercial and policy risk axis, the verified provider-coupling
+state, the Finding profile and the recommendation success criterion. It changed no production
+code, no schema, no flag, no environment variable and no provider configuration, and it did not
+touch the active Remy phone-call work (`ARCHITECTURE.md` §46.1).
+
 This document designs the **Agent Access Layer (AAL)**: the governed capability layer
 through which external agents — Claude, ChatGPT, Copilot, a business's own agent, a
 customer's agent — discover and exercise NiteOwl capabilities.
@@ -316,6 +335,14 @@ implement fails at boot rather than inside a real customer's booking.
 > directly, and it contains no booking, availability, hours or capacity logic. If a
 > capability needs a rule that does not exist yet, the rule is built in the domain
 > first and exposed second.
+
+**The provider corollary.** *Added by `docs/ARCHITECTURE.md` Part V §41.6, 2026-08-31.* The
+same binding rule, pointing the other way: **a capability is named and shaped in NiteOwl's
+terms, never a provider's.** There is no `google.calendar.insert` capability and never will
+be. An agent asks NiteOwl to book; NiteOwl decides, and its adapter chooses the provider
+call. This is what keeps a published capability contract — held by third-party agents
+NiteOwl does not deploy — valid across a provider swap, and it is why a canonical event is
+named `appointment.booked` rather than after a provider verb.
 
 This is what stops the AAL becoming a second booking path — which
 `docs/ARCHITECTURE.md` §3.4 names as the one thing that would make a permission layer
@@ -879,6 +906,12 @@ is to be built.**
 
 ## 20. Updated architecture diagram
 
+> **SUPERSEDED 2026-08-31.** The single canonical architecture diagram is
+> `docs/ARCHITECTURE.md` §21, which carries the agent path, the free-product layer and Part
+> IV's erasure gate together. The diagram below is retained as the record of this pass and
+> **must not be edited** — two copies of one picture in two documents is what produced §27's
+> dropped free-product layer, and keeping one canonical copy is the repair.
+
 Part III §21 diagrams the intelligence layers. It predates this document and therefore has
 no agent path. This is the same picture with the access layer composed onto it; when Part
 III merges (§21.4) this replaces the §21 diagram rather than sitting beside it.
@@ -1189,7 +1222,9 @@ raised is genuinely open (§26), and §20's diagram silently dropped a layer (§
 > `docs/ARCHITECTURE.md` Parts I–III plus this document — is now reachable from `main` in
 > one place. The finding is kept as written because it records why the §17 contradiction
 > arose. **One residual risk remains:** at the time of writing these commits are local and
-> have not been pushed, so the set is durable in this clone only.
+> have not been pushed, so the set is durable in this clone only. **That residual is now
+> closed, verified 2026-08-31: `main` and `origin/main` are both at `f1cb427`, and all three
+> documents are pushed.**
 
 **This is the most consequential finding of this pass, and it is not an architecture
 finding. It is a durability one.**
@@ -1420,6 +1455,12 @@ was false.
 
 ## 27. Consolidated architecture diagram
 
+> **SUPERSEDED 2026-08-31.** This diagram was folded into `docs/ARCHITECTURE.md` §21, which
+> is now the single canonical architecture diagram; Part IV added the erasure gate to it. The
+> copy below is retained as the record of this pass and **must not be edited.** The analysis
+> that follows it — why §20 dropped the free-product layer, and what the gates are for —
+> stands as written.
+
 §20's diagram was written to replace Part III §21's, and in doing so **it silently dropped
 §21's free-product layer.** Neither document now holds the whole picture: §21 has the free
 products and no agent path, §20 has the agent path and no free products. This is the same
@@ -1612,7 +1653,7 @@ component, no new layer, no new table, no new category of state.
 
 | Item | Classification |
 |---|---|
-| **Commit this document and settle Part III's merge** (§24) | **DONE 2026-08-28 — decision only.** Committed as `c461214`; Part III merged as `2d89980`. Not yet pushed |
+| **Commit this document and settle Part III's merge** (§24) | **DONE 2026-08-28 — decision only.** Committed as `c461214`; Part III merged as `2d89980`. **Pushed — verified 2026-08-31, `main` = `origin/main` = `f1cb427`** |
 | Unify the decision record; agent fields as a profile (§17) | **DONE 2026-08-28 — decision only.** Applied: `docs/ARCHITECTURE.md` §20.7 is canonical, §6.2 contributes the agent profile |
 | Free-product run linkage by held token, never by inferred identity (§25.1) | **PREPARE** — a rule, documented. No free product exists |
 | Never match public-form input against `organisations` (§25.1) | **PREPARE** — a prohibition adopted before the feature that would violate it exists |
@@ -1637,7 +1678,7 @@ pass:
 
 | Risk | Change |
 |---|---|
-| **Architecture documentation lost or ignored** | **Fired once, now largely closed.** An untracked file and an unmerged branch produced the §17 contradiction. Both were resolved on 2026-08-28 (§24); the residual exposure is that the commits are local and unpushed |
+| **Architecture documentation lost or ignored** | **Fired twice, now closed.** An untracked file and an unmerged branch produced the §17 contradiction; two documents holding two copies of one diagram produced §27's dropped free-product layer. Both were resolved on 2026-08-28 (§24), the whole set was verified pushed on 2026-08-31, and `ARCHITECTURE.md` §21 is now the single canonical diagram |
 | **Cross-tenant leakage** | **Re-priced.** Part III named it as the end of the company but located it in aggregation and query discipline. §25.1 identifies a nearer route: an anonymous public form matched against real tenant records, which arrives disguised as a helpful feature |
 | **Fake benchmark confidence** | **Re-priced.** Part III gated it on tenant data. §25.2 shows the free-product path reaches the same failure over *less* trustworthy inputs, and it will be tempting sooner because free-tool volume arrives before tenant volume |
 | **Moat framing distracting from the product** | **Unchanged and still the largest practical risk.** This is the third such review. The product still has zero paying businesses, and the correct response to all three remains a reliable phone call |
@@ -1686,24 +1727,23 @@ Everything in §23–§30 sits behind Remy's phone and calendar reliability, wit
 
 **Created:** none. **Production code, schema, flags, environment, providers:** none.
 
-**§24 was settled on 2026-08-28.** The decision-record rows below are now **APPLIED**, as is
-the `CHECKLIST.md` signpost. The remaining rows are deliberately **still pending**: they add
-Addendum II material into Part III, which is expansion rather than consistency, and they wait
-on a separate decision:
+**§24 was settled on 2026-08-28, and the whole stitching set was applied on 2026-08-31** by
+the fourth review (`docs/ARCHITECTURE.md` Part IV §38). **No row remains pending.** The table
+is kept as the record of what was owed and when it was paid:
 
-| Target | Edit | Source |
-|---|---|---|
-| Part III §20.7 | ~~Agent-originated decisions add the §6.2 profile fields; adopt the argument-digest rule for the base record~~ **APPLIED 2026-08-28** | §21.6 |
-| Part III §20.7 | ~~Distinguish `authority_level` (granted standing) from adjudication outcome; require `unable_to_authorise` to be representable~~ **APPLIED 2026-08-28** | §21.6 |
-| Part III §20.7 | Note that a pending approval is `action_status: proposed` and **reserves nothing** | **§26.1, new** |
-| Part III §20.4 | Add the placement table: skills/resources/territories are Graph; uncertainty is an attribute, not a category | **§26, new** |
-| Part III §21 diagram | Replace with **§27** above — not §20, which had dropped the free-product layer | **§27, revised** |
-| Part III §25 copy-test table | Add §15's row (access layer commodity, record not) **and §28's distribution rows** | §21.6, extended |
-| Part III §26 | Add §25.1's run-linkage rule, the no-inferred-identity prohibition, and §25.2's provenance floor | **§25, new** |
-| Part III §30 PREPARE | Add the capability declaration set (§16.1), the autonomy vocabulary (§18), and the §29.2 PREPARE rows | §21.6, extended |
-| Part III §32 | Restate phone-fix protection at `5cf097e` | §21.6, revised |
-| `PROJECT_CONTEXT.md` | One line recording that the canonical architecture set is `docs/ARCHITECTURE.md` Parts I–III plus `docs/AGENT_ACCESS_LAYER.md` | §21.6 — **still pending**, deliberately: the file contains no architecture reference to contradict, so this is an addition, not a correction |
-| `CHECKLIST.md:3` | ~~The architecture-map signpost points at the 2026-08-08 document only, and should name all three~~ **APPLIED 2026-08-28** | **§24** |
+| Target | Edit | Source | Status |
+|---|---|---|---|
+| Part III §20.7 | Agent-originated decisions add the §6.2 profile fields; adopt the argument-digest rule for the base record | §21.6 | **APPLIED 2026-08-28** |
+| Part III §20.7 | Distinguish `authority_level` (granted standing) from adjudication outcome; require `unable_to_authorise` to be representable | §21.6 | **APPLIED 2026-08-28** |
+| Part III §20.7 | Note that a pending approval is `action_status: proposed` and **reserves nothing** | §26.1 | **APPLIED 2026-08-31** — §20.7 rule 4 |
+| Part III §20.4 | Add the placement table: skills/resources/territories are Graph; uncertainty is an attribute, not a category | §26 | **APPLIED 2026-08-31** — including the pending-approval and financial-constraint rules |
+| Part III §21 diagram | Replace with §27 above — not §20, which had dropped the free-product layer | §27 | **APPLIED 2026-08-31** — and §21 is now the **single canonical** diagram; §20 and §27 here are marked superseded |
+| Part III §25 copy-test table | Add §15's row (access layer commodity, record not) **and §28's distribution rows** | §21.6, extended | **APPLIED 2026-08-31** |
+| Part III §26 | Add §25.1's run-linkage rule, the no-inferred-identity prohibition, and §25.2's provenance floor | §25 | **APPLIED 2026-08-31** |
+| Part III §30 PREPARE | Add the capability declaration set (§16.1), the autonomy vocabulary (§18), and the §29.2 PREPARE rows | §21.6, extended | **APPLIED 2026-08-31** — P14, P15, P16, P17 |
+| Part III §32 | Restate phone-fix protection | §21.6 | **APPLIED 2026-08-31** — re-verified at `9bdfaf3`, tests run rather than cited |
+| `PROJECT_CONTEXT.md` | One line recording that the canonical architecture set is `docs/ARCHITECTURE.md` Parts I–IV plus `docs/AGENT_ACCESS_LAYER.md` | §21.6 | **APPLIED 2026-08-31** |
+| `CHECKLIST.md:3` | The architecture-map signpost points at the 2026-08-08 document only, and should name all three | §24 | **APPLIED 2026-08-28**, updated 2026-08-31 for Part IV |
 
 ---
 
@@ -1720,7 +1760,7 @@ Three things are worth taking from this pass:
    of the three documents sat outside `main`, and this one was in no commit at all. That
    condition had already produced one defect (§17's duplicate decision record). Both were
    made durable on 2026-08-28 (`c461214`, `2d89980`), and the duplicate decision record was
-   consolidated at the same time. The commits are local and unpushed, so one step remains.
+   consolidated at the same time. **Verified pushed 2026-08-31; the last step is done.**
 
 2. **Free products are a distribution architecture, and *repeat* is the word that carries
    the weight** (§25). Linking a visitor's runs without creating an identity has exactly one
