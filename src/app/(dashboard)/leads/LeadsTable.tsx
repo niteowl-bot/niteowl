@@ -480,14 +480,16 @@ function EditPanel({
                 {/* What the caller said when asked WHEN to ring them
                     back, in the cases where that answer was urgency and
                     not a usable day or time. Read-only and deliberately
-                    OUTSIDE the input above: it is the caller's own words,
-                    it is not a time, and it must never be saveable into
-                    preferred_datetime. Set only when no callback time was
-                    given, so it never competes with a real one. */}
+                    OUTSIDE the input above: it is not a time, and it must
+                    never be saveable into preferred_datetime. Set only
+                    when no callback time was given, so it never competes
+                    with a real one. Rendered plainly rather than as a
+                    quotation — on the obedient-model path the value is
+                    NiteOwl's own wording, not the caller's (see
+                    callbackTiming.ts URGENT_WITHOUT_TIMING). */}
                 {metadataString(lead, "callback_urgency") && (
                   <p className="mt-1.5 text-xs text-amber-400/90">
-                    Caller&rsquo;s urgency: “{metadataString(lead, "callback_urgency")}” —
-                    no specific day or time was given.
+                    Callback urgency: {metadataString(lead, "callback_urgency")}
                   </p>
                 )}
               </div>

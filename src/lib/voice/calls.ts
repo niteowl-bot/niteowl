@@ -16,7 +16,10 @@ import { isVoiceCalendarBookingEnabled } from "@/lib/integrations/flags";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
-import { sanitisePreferredDatetime } from "@/lib/voice/callbackTiming";
+import {
+  resolveCallbackUrgency,
+  sanitisePreferredDatetime,
+} from "@/lib/voice/callbackTiming";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -561,9 +564,17 @@ export async function processCallEnded(
   // Kept separately from preferred_datetime, which toExtractedLead has
   // already cleared of it: the caller told us how urgent they are, not
   // when to ring them.
-  const callbackUrgency = sanitisePreferredDatetime(
-    details?.preferred_datetime
-  ).urgency;
+  //
+  // Read from BOTH signals, because they are produced by opposite model
+  // behaviours. A model that disobeys the extraction schema puts the
+  // phrase in preferred_datetime and the sanitiser recovers it; a model
+  // that OBEYS leaves that null and sets `urgent` instead. Reading only
+  // the first is what lost the urgency on the 2026-08-31 call.
+  const callbackTiming = sanitisePreferredDatetime(details?.preferred_datetime);
+  const callbackUrgency = resolveCallbackUrgency(
+    callbackTiming,
+    details?.urgent === true
+  );
   let leadId: string | null = null;
   let serviceConfirmed = true;
 
