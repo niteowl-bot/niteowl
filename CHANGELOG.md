@@ -4,7 +4,7 @@ All notable changes to NiteOwl will be documented in this file.
 
 ## 2026-08-31 (Voice — PR #34 shipped, but urgency-only owner visibility still failed end-to-end in production; the urgency was read from the wrong field)
 
-**`fix/callback-urgency-production-regression`, branched from `main` at `7eff6ec`. NOT MERGED, NOT DEPLOYED, NOT LIVE-TESTED.** 1136 tests pass / 0 fail, 204 suites; focused `callbackTiming` 61 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+**`fix/callback-urgency-production-regression`, commit `35f6403`, MERGED as PR #35 (merge commit `62afd12`, a normal two-parent merge), DEPLOYED and **LIVE-PRODUCTION VERIFIED** on 2026-08-31.** Production deployment `dpl_BbGd7nezo2CKCG3pn8B8KZWnoZkA` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1136 tests pass / 0 fail, 204 suites; focused `callbackTiming` 61 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
 
 **No schema, migration, RLS, Vapi configuration, provider, auth, calendar, booking-logic, lead-classification or deployment-configuration change.** Six files: four production, two test files.
 
@@ -38,8 +38,16 @@ Seven end-to-end tests added to `tests/callbackTiming.test.mjs` (61 in that file
 
 **Mutation-verified:** reverting the one-expression fix fails 2 of the 7. The pre-existing tests still pass either way — which is precisely how the defect shipped.
 
-### Still open
-**Not live-tested.** Closing this needs one real urgency-only call showing the row in the owner's email. PR #34 was closed without that check, and this is what it cost.
+### Live production verification — PASS, 2026-08-31
+The post-merge urgency-only call was performed and this closes out. The caller asked for help with a **burst pipe** and said *"As soon as possible. It's urgent."*, then confirmed there was no specific day or time and they needed someone as soon as possible. Observed in production:
+
+- the owner's call-summary email visibly rendered **`Callback urgency: Urgent — no specific day or time given`** — the row that was absent on the PR #34 call
+- **Callback date: Not provided** and **Callback time: Not provided**
+- **no fabricated appointment datetime**
+- booking status remained **REQUIRES REVIEW**, and the email stated explicitly that the requested appointment was **not confirmed in the calendar**
+- Remy preserved the urgency semantically and did **not** use the previous incorrect *"any time suits"* wording
+
+Every required behaviour held on a single call: the urgency reaches the owner, no timing is invented, and nothing is falsely confirmed. **PR #34 shipped this behaviour and it did not work; PR #35 corrected it, and the correction is now proven in production** — by the live call that PR #34 was closed without.
 
 ## 2026-08-28 (Voice — the callback urgency the caller gave now reaches the owner)
 

@@ -54,9 +54,9 @@ The following features are complete and tested:
 - Owner Call-Summary Booking Status (PR #27, merged and live 2026-08-26)
 - Service-Matcher Morphology (PR #28, merged and live 2026-08-26)
 - Truthful Voice Booking Closing (PR #30, merged and live 2026-08-27; **live production smoke test PASS**)
-- Callback Urgency Owner Visibility (PR #34, merged and deployed 2026-08-31; **live regression found the same day — it did NOT work end-to-end**; fix pending on `fix/callback-urgency-production-regression`, not merged)
+- Callback Urgency Owner Visibility (PR #34, merged and deployed 2026-08-31; **live regression found the same day — it did NOT work end-to-end**. Corrected by **PR #35**, merged and deployed 2026-08-31 and **live-production verified the same day**)
 
-Verified current state through PR #34:
+Verified current state through PR #35:
 
 - **PR #27** is merged and deployed. The owner call summary now reports the **final persisted booking status**, not an interim one.
 - **PR #28** is merged and deployed, and the plumber/plumbing morphology fix was **verified successfully in production**: ordinary word forms of the same service now match.
@@ -66,8 +66,15 @@ Verified current state through PR #34:
 - **Live post-merge regression, 2026-08-31 — PR #34 did not work end-to-end.** A real production call, caller saying *"As soon as possible. It's urgent."* and then *"I don't have a specific time. Just as soon as possible, please."*, produced an owner email that correctly showed **Callback date: Not provided. Callback time: Not provided.** and **no "Callback urgency" row at all**. The whole point of PR #34 did not occur.
   - **Root cause.** Extraction returned **`urgent: true` with `preferred_datetime: null`** — which is exactly what it is instructed to do: `src/lib/voice/extraction.ts` tells the model *"URGENCY IS NOT A TIME … NEVER record one of them here; set urgent true instead. Null if no day or time was mentioned, including when urgency was all the caller gave."* But `calls.ts` derived `callbackUrgency` **only** from `preferred_datetime`, via `sanitisePreferredDatetime(...).urgency`. **PR #34 read a field that the prompt above it is designed to leave empty**, so on the obedient-model path there was nothing to read and `urgent: true` went unused. `metadata.callback_urgency` was never written either, so the leads drawer was blank for the same reason.
   - **Why the tests missed it.** The PR #34 email tests called `sendCallSummaryEmail` **directly** with a `callbackUrgency` value and checked it rendered; the sanitiser tests fed it the phrase in `preferred_datetime` — the shape a **disobedient** model produces. Nothing exercised the step that *decides* the value against the shape production actually emits. **All 54 passed while production did nothing.** The lesson is recorded because it generalises: a test that supplies the value under test cannot prove the pipeline that produces it.
-  - **The fix (NOT merged, NOT deployed).** On branch `fix/callback-urgency-production-regression`, against `7eff6ec`. `resolveCallbackUrgency()` in `callbackTiming.ts` reads **both** signals — the caller's own phrase when the model gives one, the extracted `urgent` flag when it does not — and returns nothing whenever a real timing exists. Seven end-to-end tests now drive the **real `processCallEnded`** on the live shape and are mutation-verified: reverting the fix fails two of them. 1136 tests pass / 0 fail; `tsc` clean; ESLint unchanged at 11.
-  - **Still unverified in production.** The fix has had no live call. Closing this needs one real urgency-only call showing the row — the same standard PR #34 was closed *without*, which is how the defect shipped.
+  - **The fix — PR #35, merged, deployed and LIVE-PRODUCTION VERIFIED 2026-08-31.** Branch `fix/callback-urgency-production-regression`, commit `35f6403`, merged as PR #35 (`62afd12`, a normal two-parent merge). Production deployment `dpl_BbGd7nezo2CKCG3pn8B8KZWnoZkA` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned **HTTP 200** `{"status":"ok","database":"ok"}`. `resolveCallbackUrgency()` in `callbackTiming.ts` now reads **both** signals — the caller's own phrase when the model supplies one, the extracted `urgent` flag when it does not — and returns nothing whenever a real timing exists. Seven end-to-end tests drive the **real `processCallEnded`** on the live extraction shape and are mutation-verified: reverting the fix fails two of them. 1136 tests pass / 0 fail; `tsc` clean; ESLint unchanged at 11.
+  - **Live production verification, 2026-08-31 — PASS.** A real urgency-only call closed this out. The caller asked for help with a **burst pipe** and said *"As soon as possible. It's urgent."*, then confirmed there was no specific day or time and they needed someone as soon as possible. Observed in production:
+    - the owner's call-summary email visibly rendered **`Callback urgency: Urgent — no specific day or time given`** — the row that was missing on the PR #34 call
+    - **Callback date: Not provided** and **Callback time: Not provided**, both correct
+    - **no fabricated appointment datetime** was created
+    - booking status remained **REQUIRES REVIEW**, and the email stated explicitly that the requested appointment was **not confirmed in the calendar**
+    - Remy preserved the urgency semantically and did **not** use the previous incorrect *"any time suits"* wording
+
+    Every required behaviour held together on one call: urgency reaches the owner, no timing is invented, and nothing is falsely confirmed.
 
 Deferred and non-blocking (do **not** pick these up as part of other work):
 
@@ -138,7 +145,7 @@ A live call **cannot know that a booking exists**, so the spoken closing may onl
 
 **Verified by live production smoke test 2026-08-27** (call `01a04416-941c-7991-9ea5-f0593c01f2e5`, deployment proven built from `dbf299b`): `check_availability` ran and returned AVAILABLE; Remy said *"That time is currently showing as available. After this call, I'll submit your booking request for processing so please look out for the confirmation email."*; the call ended normally; post-call settlement created the Google event; the lead settled to `booked`; exactly one `integration_links` row synced; and the customer confirmation email was received. No duplicate or contradictory state.
 
-Callback urgency rule (opened by PR #34, merge `7eff6ec`; **NOT closed by it** — see the live regression above. Corrected on `fix/callback-urgency-production-regression`, which is **not merged and not deployed**):
+Callback urgency rule (opened by PR #34, merge `7eff6ec`; **NOT closed by it** — see the live regression above. Closed by **PR #35**, merge `62afd12`, **live-production verified 2026-08-31**):
 
 Urgency is **not** a callback time, and the two must never be confused — but the owner must still see it.
 
@@ -151,7 +158,7 @@ Urgency is **not** a callback time, and the two must never be confused — but t
 - **Never fabricate the caller's words.** On the fallback path NiteOwl holds only a boolean, so the row reads `Urgent — no specific day or time given` (`URGENT_WITHOUT_TIMING`) — NiteOwl's own wording, rendered plainly and **not** as a quotation. Inventing a quote to fill the row would be the exact fabrication this rule exists to prevent
 - the distinctions are pinned by tests that drive the **real `processCallEnded`**, not the email helper in isolation — the gap that let PR #34 ship broken
 
-**Not merged, not deployed, and not live-tested.** It fires only when a caller gives urgency instead of a callback time, and both surfaces are behind auth, so closing it needs one real urgency-only call showing the row.
+**Merged, deployed and live-production verified 2026-08-31.** A real urgency-only call — a burst pipe, *"As soon as possible. It's urgent."*, then no specific day or time — produced `Callback urgency: Urgent — no specific day or time given` in the owner's email, with callback date and time both "Not provided", no fabricated appointment datetime, booking status **REQUIRES REVIEW**, the email stating the appointment was not confirmed in the calendar, and no *"any time suits"* wording.
 
 Service matching — one known false positive, DEFERRED (investigated 2026-08-26, against `f05db92`):
 
