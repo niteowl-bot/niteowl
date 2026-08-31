@@ -2,6 +2,25 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-28 (Voice — the callback urgency the caller gave now reaches the owner)
+
+**`fix/callback-urgency-owner-visibility`, implementation commit `9bdfaf3`, rebased onto `e785942` as `f9ed564`. PR NOT YET RAISED — not merged, not deployed.** 1129 tests pass / 0 fail, 203 suites; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**No schema, RLS, Vapi prompt, two-tool voice surface, booking, calendar, availability, lead-capture, provider or configuration change.** Four files: three production, one test file.
+
+### The gap
+The 2026-08-06 callback fix did half the job. Urgency-only phrases — "as soon as possible", "ASAP" — stopped becoming a callback date or time, and the caller's own words were kept on `leads.metadata.callback_urgency`. **Nothing ever read that field**: not the owner's call-summary email, not the leads dashboard. So a caller who wanted a ring back urgently arrived looking exactly like one who declined to give a time at all, and the most urgent callers were the least distinguishable. The data already existed; this exposes it.
+
+### The fix
+- **`src/lib/email.ts`** — `sendCallSummaryEmail` takes an optional `callbackUrgency` and renders one conditional **"Callback urgency"** row, HTML-escaped like every other caller-supplied value.
+- **`src/lib/voice/calls.ts`** — passes the already-computed value through. Wiring only; no change to how urgency is captured, sanitised or stored. A comment claiming the urgency "still reaches the owner" was false when written and is now true.
+- **`LeadsTable.tsx`** — a read-only note under the timing field, rendered only when the value exists and deliberately **outside** the input, so it can never be edited into `preferred_datetime`.
+
+**Urgency is surfaced as urgency, never as a date or a time.** `sanitisePreferredDatetime` returns a real timing *or* an urgency phrase and never both, so the row appears only when there is no callback time to show and can never compete with a real one. The three-way distinction — a real time shows as a time, urgency shows as urgency, neither invents anything — is preserved and pinned.
+
+### Coverage
+10 tests added to `tests/callbackTiming.test.mjs`, 54 in that file. Six drive the real send path — urgency named in the caller's own words, labelled as urgency rather than a time, escaped, and absent when a genuine callback time exists. Four are structural over `LeadsTable.tsx`, following the `calendarEventCreation.test.mjs` precedent: this repo has no React renderer, and the test file states that limitation. Mutation-verified — removing the email row breaks 2 tests, and binding urgency into the datetime input breaks 1.
+
 ## 2026-08-19 (Rescheduling — a move is checked against the real calendar, and no longer against itself)
 
 **PR #25 — `fix/reschedule-external-availability`. MERGED AND LIVE** via a normal GitHub merge commit, `4784cfc36ea18e3acadac0232e4a2c9cd33ede19`. Two Phase 1 implementation commits: the original fix `b2e80e7` and the corrective fix `ce48832`. The merge-triggered production deployment `dpl_BciwumDpGX5A6QRQzVicEL4wyPQS` (target `production`, commit `4784cfc`) reached **READY** and serves `niteowlhq.com`; the live `/api/health` returned **HTTP 200** with `{"status":"ok","database":"ok"}`. **1032 tests pass / 0 fail**, 189 suites; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
