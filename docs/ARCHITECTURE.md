@@ -26,6 +26,10 @@ new material is applied where it belongs, and Part IV records the pass.
 operational sovereignty — what happens when a provider changes the terms rather than merely
 going down — and diagnostic intelligence, the step between *what happened* and *what we
 decided*. It adds three findings, **M10–M12**, and changes nothing else.
+**Part VI** (§47–52, added 2026-08-31) adds the one capability the diagnostic architecture
+lacked: **an owner reporting a problem in their own words and asking NiteOwl to investigate
+it.** It adds two findings, **M13–M14**, one canonical event and one thin projection, and
+redefines none of the existing contracts.
 
 Governing principle for every recommendation below:
 
@@ -1560,6 +1564,82 @@ carry.
 governing rule: the point of classifying a dependency is to know what would be lost, not to
 buy a second one against a risk that has not materialised.
 
+### M13 — NiteOwl can only investigate problems it thought of itself
+
+*Added by Part VI (§47), 2026-08-31.*
+
+Every diagnostic path in Parts III–V is **system-initiated**. A product notices a condition,
+produces a Finding, proposes a recommendation. There is no way for the owner to say *"revenue
+is falling — why?"* and have that become work NiteOwl performs, records and is later judged
+on.
+
+That is a product gap, and it is the commonest way a small business actually engages: the
+owner knows something is wrong long before any threshold fires, and they do not know which of
+eight specialists to ask. But the architectural half is narrower than it looks, and it is
+worth isolating precisely, because the obvious fix is bigger than the real one.
+
+**What already works.** Since Part V's correction, §42.2 explicitly admits a Finding derived
+`business_provided` — *the owner told us*. So the owner's statement is already
+**representable**. Nothing new is needed to record what they said.
+
+**What does not work — and this is the whole finding.** A Finding is a `DecisionRecord`, and
+a `DecisionRecord` is **immutable history**. An investigation is not: it starts from a
+symptom, changes its mind as evidence arrives, may conclude something different from what was
+reported, and stays open across days and several products. Three specific consequences:
+
+- **No identity outlives a single Finding.** A revenue investigation may produce a Ledger
+  finding, a Remy finding, a Beacon finding and an Atlas synthesis. §42.3 lets the synthesis
+  cite the others as evidence, which is the right mechanism — but nothing says those four are
+  *one problem*, and nothing survives if the synthesis is later revised.
+- **There is no state.** *Investigating*, *awaiting information from the owner*,
+  *monitoring*, *resolved* are not properties of any immutable record.
+- **Nothing distinguishes "we produced a recommendation" from "the problem went away."**
+  Part V's rule 7 gives a *recommendation* a review date. It gives the **problem** nothing,
+  and those are different questions: three recommendations can be delivered against a
+  revenue decline that is still getting worse.
+
+**The minimum is smaller than a subsystem**, and §48 keeps it there. `correlation_id`
+(§20.5) already exists to bind *"the whole episode"* and is the correct mechanism; the owner's
+statement is an event; the only genuinely new thing is a thin, mutable head carrying identity
+and lifecycle, whose state is **derivable from the records it references**. No new judgement
+store, no new finding shape, no new recommendation shape.
+
+### M14 — The reported symptom will become the diagnosis unless the architecture forces them apart
+
+*Added by Part VI (§47), 2026-08-31.*
+
+This is the finding that changes the design rather than adding a field, and it is a
+**confirmation-bias** failure of exactly the kind Part V's M11 identified for grading.
+
+An owner reports *"we need more leads."* The natural implementation parses that into a
+condition, files it as the Finding, investigates around it, and recommends more marketing
+spend. Every step is defensible and the whole chain is wrong, because the evidence may show
+lead volume is stable while **booking conversion collapsed and capacity fell** — in which case
+more demand makes the real problem worse, and NiteOwl has spent the owner's money confirming
+the owner's guess.
+
+The failure is structural, not a modelling error someone will notice:
+
+- The owner's framing arrives **first**, so it becomes the working hypothesis by default and
+  everything after is evidence *for or against it* rather than an open question.
+- It arrives with the **highest apparent authority in the system** — the business owner,
+  describing their own business — which is precisely why it is tempting to file it as
+  `business_provided` fact rather than as a report.
+- **`business_provided` is a high-trust provenance** in §20.6, and rightly so for
+  configuration. It is the wrong trust level for a *causal* claim: the owner reliably knows
+  the symptom they observed and does not reliably know its cause.
+
+So the rule the architecture needs is not about storage. It is:
+
+> **A reported problem is evidence of a symptom. It is never, at intake, the diagnosis.**
+
+Which forces three things in §49: the owner's words are preserved **verbatim and separately**
+from NiteOwl's interpretation; the initial interpretation enters as a **`hypothesised`**
+candidate (§23) competing with others, never as a Finding; and the case must be able to
+**reframe** — to conclude something other than what was reported — while keeping the original
+report intact and visible. A system that cannot say *"the thing you asked about is not the
+problem"* is not a diagnostic system.
+
 ---
 
 ## 20. Recommended architecture
@@ -2128,6 +2208,12 @@ Remy:
 `customer.identified` · `enquiry.received` · `appointment.requested` ·
 `appointment.booked` · `appointment.rescheduled` · `appointment.cancelled`
 
+**A seventh was added by Part VI (§48.1), 2026-08-31:** `problem.reported` — a business owner
+formally reporting a problem for investigation. It clears the bar this section sets because it
+is owner-authored, it starts work, it is referenced for the life of the investigation, and
+under P3 it **cannot be recomputed later**: reconstructing what the owner originally said from
+a summary of what NiteOwl concluded is the M1 loss applied to the one sentence a case hangs on.
+
 Everything else Remy does — call ringing, transcript processed, knowledge published,
 capacity checked — is internal detail and does not belong on the spine (Part I §3.3 drew
 the same line).
@@ -2335,6 +2421,11 @@ no work now.**
    this clause trading an artefact no document had shaped.*
 4. **Approved operating state** — a projection, read-only, with its freshness stated.
 
+**A Business Problem Case uses these four and adds nothing.** *Part VI §50.2, 2026-08-31.* A
+specialist engaged on a case receives the minimum permissioned intelligence needed to answer
+its own question, through exactly these exchanges. **A case is not a permission:** opening one
+never widens what a product may see.
+
 ### The five prohibitions
 
 - **No product reads another product's tables.** This is Part I §3.3's rule, promoted to
@@ -2410,6 +2501,8 @@ visibly breaks when it is missing.
 | A recommendation engine, however sophisticated | Weeks | Commodity |
 | Prioritisation scoring | Weeks | Commodity |
 | **The record of which recommendations were followed, under what conditions, and whether the metric they named in advance actually moved** | **Cannot be back-filled** | **The asset** — and it exists only if §43's success criterion was written before the outcome (M11) |
+| **Owner-reported problems** — a problem-report chatbot, a generic root-cause prompt, a case UI | **Days to weeks** | Commodity. The intake is not the product |
+| **The record of real problems → evidence → diagnosis → intervention → measured outcome, including which reported symptoms turn out to mean what** | **Cannot be back-filled** | **The asset** (§51.6) |
 
 Both produce the same resource-allocation rule, and it is worth stating once for both:
 
@@ -2566,6 +2659,14 @@ implied by *"the scoring version must be stored with every result"*: the version
 per run, and **a change of scoring version breaks comparability and must be visible** rather
 than silently producing an improvement that is really a re-weighting.
 
+**The handoff into an investigation.** *Added by Part VI §51.4, 2026-08-31.* A free finding
+may offer *"investigate this further"*, which — after account, identity and **explicit
+consent**, the only promotion path — opens a Business Problem Case with
+`origin: free_product_handoff`. Two limits: running a tool still never creates a case, an
+identity or permanent Business Memory; and the free tool's finding enters the case as **one
+hypothesis among others**, never as its diagnosis. An unauthenticated form's conclusion has no
+more standing at intake than the owner's own suspicion, and rather less evidence.
+
 **No benchmarking until it is earned.** A "you rank in the bottom 30% of plumbers"
 statement made before enough legitimate data exists is a fabrication with a chart on it.
 Gate it as in §27 — and build the gate before the feature, or ship neither.
@@ -2654,6 +2755,7 @@ posture is already correct and merely needs to survive the next eight products.
 | Provider independence | **Strong** | §3.8, §14, plus §28's memory guardrail. *Part V §41.2 re-verified the coupling provider by provider: Google isolated, Vapi adapter-isolated with a provider-neutral config built in our code, OpenAI still the one real coupling at nine call sites* |
 | **Dependency criticality and provider policy risk** | **Vocabulary added (M12)** | *Part V.* §6.1 modelled outage and account loss but not terms, acceptable-use restrictions on agent-driven use, or a provider entering the market. §41.3 adds REPLACEABLE / DEGRADABLE / CRITICAL and the CRITICAL documentation set |
 | **Diagnosis and recommendation** | **Contract added (M10, M11)** | *Part V.* §24 was already trading a "finding" no document had shaped. §42 defines it as a third profile of the canonical record; §43 adds the success criterion and review date, without which a recommendation can only be graded after the fact |
+| **Owner-initiated investigation** | **Contract added (M13, M14)** | *Part VI.* Every diagnostic path was system-initiated; an owner could not report a problem and have it become recorded, routed work. §48 adds an identity, an owner-authored event and a lifecycle — and §49 keeps the reported symptom from becoming the diagnosis by default |
 | Event schema evolution | **N/A — nothing to evolve** | `schema_version` from the first event is what keeps it that way |
 | Provenance | **Weak outside the Knowledge Base — M4** | The pattern exists and is proven; it is simply not applied elsewhere. *Part IV extends the vocabulary's reach to the outcome half of a decision (M9) and to the negative attribution result (M8)* |
 | Model/version traceability | **Absent** | Model ids are hardcoded at nine call sites (L11). No stored record of which model produced which value |
@@ -2724,6 +2826,10 @@ the checklist:
 | **P19** | **`success_criterion` + `review_at` on every recommendation** (§20.7 rule 7, M11) | *Part V.* The one field the recommendation-to-outcome moat rests on. Retrofitted, the earliest recommendations — those with the longest measured history — are the ones that can never be graded |
 | **P20** | **Dependency-criticality bands and the CRITICAL documentation set** (§41.3, M12) | *Part V.* Written when a CRITICAL dependency is next deepened. Prevents "how bad would this be?" being answered under pressure |
 | **P21** | **The commercial and policy axis on the §6.1 risk matrix** (§41.4, M12) | *Part V.* An outage ends; a policy change does not, and gives less notice |
+| **P22** | **The Business Problem Case head** (§48.2, M13) — identity, `correlation_id`, origin, reported-event reference, revisable interpretation, status, desired outcome, closure reason. Thin, derivable, referencing everything | *Part VI.* Free before any case exists; afterwards a migration over the only records carrying a business's problem history |
+| **P23** | **`problem.reported` as the seventh canonical event** (§22, §48.1) | *Part VI.* Owner-authored and **not recomputable** (P3) — reconstructing what the owner said from what NiteOwl concluded is M1 applied to the sentence the case hangs on |
+| **P24** | **Report / interpretation / hypothesis kept separate at intake** (§49.1, M14) | *Part VI.* A design rule, not a field. It is what stops NiteOwl confirming the owner's guess, and it cannot be retrofitted onto cases that already did |
+| **P25** | **The case lifecycle, with no `recommended` state** (§48.4) | *Part VI.* *Advice given* must never read as progress. Free now; a corrupted learning signal later |
 
 ### LATER — build when the trigger fires
 
@@ -2739,6 +2845,8 @@ the checklist:
 | **L23** | **Entity redaction — the mechanism behind P11** | The first erasure request, or the first real customer history. The rule (P11) must precede the corpus; the mechanism need not |
 | **L24** | **Findings and recommendations persisted as decision records** | The first product feature that diagnoses rather than reports. For Remy that is Reception Intelligence, which sits behind calendar reliability (§32) |
 | **L25** | **A model/provider gateway recording `model_version` per stored value** | L11's trigger, unchanged — sharpened by §41.2's finding that nine hardcoded call sites make a forced migration worse than it needs to be |
+| **L26** | **Business Problem Cases implemented** — intake, head, lifecycle, routing | The first product feature that investigates rather than reports. Behind L24, which is behind Remy's calendar reliability |
+| **L27** | **Cross-domain synthesis via Atlas** | Two products live for one tenant — X2's precondition, unchanged |
 
 ### MUCH LATER — requires legitimate accumulated outcome data
 
@@ -2789,6 +2897,14 @@ re-priced, and each corresponds to a finding rather than to a speculation:
 | **A recommendation grading itself** | **New — M11.** With no success criterion written in advance, the metric and the window are chosen once the result is known, and the Learning Layer concludes that most recommendations work. Mitigated by §20.7 rule 7. Distinct from Part IV's M9, which stops a *predicted* outcome being read as a *measured* one; this stops a *measured* outcome being read against an *invented* target |
 | **Diagnosis presented as cause** | **New — M10.** A diagnostic surface is where §23's tiers are most tempting to drop, because *"missed calls caused the revenue drop"* reads better than the truthful attribution. Mitigated by §23's causal-evidence standard — `caused_by` for a business condition requires a named admissible basis with its full evidence set, promotion is never automatic, and every surface displaying a causal claim must display the basis as well as the tier |
 | **Provider policy or commercial change** | **New — M12.** §6.1 modelled outages, which end and are answered by truthful degradation. A terms or acceptable-use change does not end, gives little notice, and is answered only by a migration designed beforehand. Mitigated by §41.3's bands and §41.4's axis — **not** by buying a redundant provider |
+
+**Part VI delta, 2026-08-31.** Three further entries:
+
+| Risk | Change |
+|---|---|
+| **Confirming the owner's guess** | **New — M14.** The reported symptom arrives first and with the highest apparent authority in the system, so the natural implementation investigates *around* it and recommends a remedy for a problem the business may not have. Mitigated by §49.1's separation of report, interpretation and hypothesis, and by §49.3 making reframing a first-class outcome |
+| **"Advice given" counted as progress** | **New — M13.** A case whose recommendation shipped can look resolved while the condition worsens, and every learning signal downstream inherits the error. Mitigated by §48.4 having no `recommended` state and §51.1 requiring an observed outcome against a predeclared criterion |
+| **The case as a second system of record** | **New — M13.** A Business Problem Case is the most natural place in the architecture to start copying evidence into, and the copy would be a rival history over the same events. Mitigated by §48.3 — the head is a derivable projection, references only, no case-level judgement schema |
 
 ---
 
@@ -3760,3 +3876,534 @@ Three things worth taking from this pass:
 
 And the unchanged conclusion, for the fifth document in a row: none of this is urgent, none of
 it is built, and the next milestone is a reliable phone call.
+
+---
+---
+
+# Part VI — The Business Problem Case
+
+**Added 2026-08-31 against commit `51b0130`.** Same rules as Parts I–V: **documentation
+only.** No schema, no migration, no route, no flag, no environment variable, no provider
+configuration, no working code. Nothing below was implemented and nothing below asks for
+implementation now. Files modified are listed in §52.2.
+
+A **tightly scoped addendum**, adding one capability the architecture did not have: a business
+owner reporting a problem in their own words and asking NiteOwl to investigate it. It reuses
+the Finding contract (§42), the Recommendation contract (§43), provenance (§20.6), the causal
+standard (§23), Decision & Outcome Memory (§20.7), the Outcome Spine (§20.5), the Business
+Graph (§20.2), Business Operating State (§20.4), the Agent Access Layer, the Capability
+Registry and the Cross-Product Learning Contract (§24) — **and redefines none of them.**
+
+---
+
+## 47. Is a Business Problem Case actually needed?
+
+The brief asks this as a question rather than assuming it, which is the right way round, so it
+is answered before anything is designed.
+
+**Three cheaper answers were tested first, and two of them nearly work.**
+
+| Candidate | Verdict |
+|---|---|
+| *The owner's report is just a Finding with `provenance: business_provided`* | **Half right, and already supported.** §42.2 explicitly admits it. But a Finding **asserts a condition**; an owner's report also **requests work**, and a `DecisionRecord` is immutable history — it cannot hold a state that changes as evidence arrives |
+| *`correlation_id` already binds an episode* | **Right mechanism, insufficient alone.** §20.5 defines `correlation_id` as *"the whole episode"*, which is exactly the binding needed. It carries no owner-authored statement and no lifecycle |
+| *A synthesis Finding is the container* | **No.** §42.3 lets a synthesis cite other findings as evidence — the correct mechanism for evidence — but a revised synthesis is a *new record*, and nothing then says the two are the same problem |
+
+So a Case **is** needed, and its necessary responsibility is exactly the residue those three
+leave behind: **an identity that outlives any single record, the owner's own words, and a
+lifecycle.** Everything else the brief lists — symptoms, evidence, hypotheses, confidence,
+contradictory evidence, diagnosis, recommendation, authority, actions, success criteria,
+measured outcome — **already has a canonical home**, and the Case references it rather than
+holding it.
+
+> **A Business Problem Case is a correlation with a head and a state. It is not a container,
+> and it must never become a place where evidence is copied.**
+
+---
+
+## 48. The minimal contract
+
+### 48.1 Three parts, two of which already exist
+
+```
+1. problem.reported          an EVENT on the Outcome Spine (§20.5) — immutable,
+                             the owner's own words, provenance business_provided
+                                        │
+2. correlation_id            EXISTING mechanism (§20.5) — binds every finding,
+                             decision, recommendation, action and outcome that
+                             follows, across every product involved
+                                        │
+3. the Case head             the only new thing: identity + lifecycle + the
+                             current interpretation. Thin, mutable, and
+                             DERIVABLE from what it references
+```
+
+**`problem.reported` is a seventh canonical event, and it earns the seat.** §22 keeps the
+vocabulary deliberately at six, and the bar it sets is *business-meaningful transitions only*.
+An owner formally reporting a problem is one: it is owner-authored, it starts work, it is
+referenced for the life of the investigation, and — decisively under P3 — **it cannot be
+recomputed later.** Reconstructing what the owner originally said from a summary of what
+NiteOwl concluded is exactly the M1 loss, applied to the sentence the whole case hangs on.
+
+### 48.2 The Case head
+
+| Field | Note |
+|---|---|
+| `case_id`, `org_id` | Tenant-scoped like everything else |
+| `correlation_id` | The binding. Every downstream record carries it — **this is how the Case has contents without holding any** |
+| `origin` | `owner_reported` / `system_detected` / `free_product_handoff` (§51.4). System-initiated diagnosis may open a Case too, and should when it spans products |
+| `reported_event_id` | Points at the `problem.reported` event. **The owner's original wording lives there, not here** |
+| `interpretation` | NiteOwl's current structured reading — **revisable, versioned, and never overwriting the report** (§49) |
+| `status` | The lifecycle in §48.4 |
+| `desired_outcome` | What the owner said good would look like, in their terms. Distinct from a `success_criterion`, which is per-recommendation and measurable (§43.2) |
+| `closure_reason` | Why it ended, including the honest endings (§50.4) |
+
+Everything else is reached by reference: **Findings** are `diagnosis.*` records sharing the
+`correlation_id` (§42.2); **hypotheses, confidence, contradicting evidence, assumptions and
+time windows** live on those Findings; **recommendations** are `recommendation.*` records with
+`addresses_finding_id` (§43.1); **authority, approval, actions and outcomes** are base
+`DecisionRecord` fields (§20.7); **events** are the spine.
+
+### 48.3 The rule that keeps the head thin
+
+Borrowed unchanged from §20.4, because the Case is the same kind of object as Operating State
+and carries the same hazard:
+
+> **The Case head is a projection. Its status and its interpretation must be derivable from
+> the records it references; the stored row exists for query convenience, not as a source of
+> truth.**
+>
+> **The one exception is the owner's original statement, and that is exactly why it is an
+> immutable event rather than a field here.**
+
+Two prohibitions follow, and they are the difference between a Case and a ticketing system:
+
+- **No evidence is copied into a Case.** Not a metric, not a transcript, not a customer
+  record. References only — Part IV's M7 rule, which is also what keeps erasure workable.
+- **No Case-level finding, recommendation, decision or outcome schema exists.** A fifth
+  judgement shape would fragment the exact history §25 says is the only thing that cannot be
+  copied — the argument that produced one `DecisionRecord` in the first place.
+
+### 48.4 Lifecycle — nine states, and one that is deliberately not there
+
+| Status | Meaning |
+|---|---|
+| `reported` | Received, not yet scoped |
+| `investigating` | One or more specialists are working (§50) |
+| `awaiting_information` | Blocked on the owner, or on data NiteOwl cannot reach |
+| `diagnosis_ready` | A Finding exists and is explainable |
+| `awaiting_approval` | A recommendation needs authority it does not have (§43.4) |
+| `acting` | An approved action is underway |
+| `monitoring` | Acted; waiting for `review_at` (§20.7 rule 7) |
+| `resolved` | Verified against predeclared criteria (§51.1) |
+| `closed` | Ended without verified resolution — `closure_reason` says which honest ending (§50.4) |
+
+**The state that does not exist is "recommended", and its absence is the point.**
+
+> **Producing a recommendation does not advance a Case towards resolution.** A recommendation
+> is a *proposal*, and Part IV's rule 4 already says a proposal **reserves nothing**. A Case
+> whose recommendation has shipped is `awaiting_approval`, `acting` or `monitoring` — never
+> `resolved`.
+
+Three recommendations can be delivered against a revenue decline that is still getting worse.
+A lifecycle that let "advice given" count as progress would measure NiteOwl's output instead
+of the business's condition, and every learning signal downstream would inherit that.
+
+---
+
+## 49. Intake — preserving the report, and refusing to confirm it
+
+Closing M14. This section is the one that changes behaviour rather than adding structure.
+
+### 49.1 Three separate things, never collapsed
+
+| | What it is | Mutability | Provenance |
+|---|---|---|---|
+| **The report** | The owner's words, verbatim, in the `problem.reported` event | **Immutable** | `business_provided` — an accurate record of *what they said* |
+| **The interpretation** | NiteOwl's structured reading: suspected area, entities, time window, desired outcome | **Revisable, versioned** | `ai_inferred` when a model produced it (§42.2's weakest-step rule) |
+| **The working hypothesis** | The owner's suspected cause, entered as one candidate among others | Competes, ranks, may lose | **`hypothesised`** (§23) — never a Finding at intake |
+
+> **The owner's words are never rewritten, summarised over, or replaced by the
+> interpretation.** Every later explanation quotes the report as given (§51.3).
+
+The trap this avoids is precise. *"We need more leads"* interpreted into
+`condition: insufficient_demand` and filed as a Finding makes demand the thing under
+investigation, and every subsequent step gathers evidence for or against **the owner's guess**
+rather than answering their actual question, which was *"why is revenue falling?"*.
+
+### 49.2 The owner is authoritative about the symptom, not about its cause
+
+`business_provided` is a high-trust provenance in §20.6, and correctly so — for
+configuration, for hours, for what services the business offers. It is the **wrong trust
+level for a causal claim**, and the distinction is worth stating because the owner is
+genuinely the most authoritative human in the system:
+
+> **An owner reliably knows the symptom they observed. They do not reliably know its cause,
+> and neither does NiteOwl at intake.** The observation may be recorded `business_provided`.
+> The suspected cause enters as `hypothesised`, and earns a tier only on evidence (§23).
+
+### 49.3 Reframing is a first-class outcome
+
+A Case must be able to conclude something other than what was reported. When evidence moves
+the working hypothesis away from the owner's framing:
+
+- a **new Finding** is written; the earlier one is **not** edited or deleted — it is immutable
+  history and it is also *evidence about the investigation itself*
+- the Case's `interpretation` is **revised, with the prior version retained** and the
+  reframing recorded as a decision with its reason codes
+- the `problem.reported` event is untouched, permanently
+- the reframing is stated plainly to the owner (§51.3), never silently substituted
+
+> **A system that cannot tell the owner "the thing you asked about is not the problem" is not
+> a diagnostic system.** Being able to say so, with evidence, is most of the value.
+
+### 49.4 Asking for clarification
+
+NiteOwl may request focused clarification, and `awaiting_information` exists for it. Two
+constraints keep it from becoming an interrogation, and both come from rules that already
+exist:
+
+- **Ask only what changes the investigation.** A question whose answers do not alter which
+  specialists are engaged or which hypotheses survive is not worth an owner's attention. Same
+  discipline as §3.6's *collect nothing without a current use*.
+- **The absence of an answer is a stated limitation, not a blocker.** A Case may proceed with
+  the evidence it has and record what it could not establish — §50.4. Refusing to conclude
+  anything until the owner answers is the *"we could not check" is never "it is free"* rule
+  inverted into unhelpfulness.
+
+---
+
+## 50. Investigation — routing, Atlas, and the honest endings
+
+### 50.1 Routing is a decision, and it is recorded as one
+
+**No Case is broadcast to all eight products.** Scoping selects the minimum set of domains
+whose evidence could plausibly bear on the interpretation, and — because it determines what
+gets looked at and therefore what can be found — **the routing choice is itself a
+`DecisionRecord`**, with its reason codes and the domains it excluded.
+
+That matters for a reason that is not bureaucratic: *"we never looked at margin"* and *"we
+looked at margin and found nothing"* are different facts about an investigation, and Part IV's
+M8 already established that conflating them teaches a learner the wrong lesson. The routing
+record is what makes the first one recoverable.
+
+Illustrative only, and **not** a routing table to implement:
+
+| Reported concern | Plausible domains |
+|---|---|
+| Revenue or profitability | Ledger, Pulse, Scout, Remy, Forge, Beacon — Atlas only if genuinely cross-domain |
+| Customer retention | Beacon, Remy; Ledger where value or margin per customer is implicated |
+| Jobs running late | Forge, Remy; Ledger if cost overruns are implicated |
+| Leads not converting | Remy, Pulse, Scout |
+
+### 50.2 Least privilege applies to evidence requests
+
+A specialist engaged on a Case receives the **minimum permissioned intelligence** needed to
+answer its own question, through §24's four exchange types — never a general read of the
+Case, and never another product's tables. The existing prohibitions carry over unchanged, and
+one is worth restating because a Case makes it tempting: **a Case is not a permission.**
+Opening one does not widen what any product may see, and a specialist that could not read a
+class of data yesterday cannot read it because an investigation is open.
+
+### 50.3 Atlas synthesises; it does not own investigations
+
+Atlas's role is already defined (§25: *institutional business intelligence, a business's
+causal model*), and §42.3 already defines synthesis. Part VI adds only the boundary:
+
+> **Atlas is engaged when a Case genuinely spans domains that cannot be reconciled within
+> one specialist. It is not the default owner of every Case, and it is never a hop that
+> domain-specific work is routed through.**
+
+A conversion problem is Remy's. A margin problem is Ledger's. Routing either through Atlas
+adds a layer, loses domain nuance, and recreates the generic-diagnosis-engine mistake §42.1
+refused. When Atlas *is* engaged it consumes canonical Findings, evidence references,
+Operating State, canonical events and permissioned derived claims — **never another product's
+private schema** (§24, unchanged) — and its output is a Finding like any other, subject to
+§23. The rule from §42.3 applies with particular force here: **synthesis does not raise a
+tier.** Five `correlated_with` inputs from five products do not compose into an
+`attributed_to` conclusion, and the appearance of corroboration across domains is exactly
+where that error will feel most justified.
+
+### 50.4 NiteOwl is allowed not to know
+
+A Case may close without a diagnosis, and doing so honestly is a feature. Valid
+`closure_reason` values include: **insufficient evidence**; **several plausible explanations,
+none separable**; **conflicting evidence**; **required data unavailable**; **no material
+problem found**; **resolved by the business independently**; **withdrawn by the owner**.
+
+> **An owner asking for a diagnosis does not create the evidence for one.** Manufacturing a
+> confident answer because one was requested is the same failure as a fabricated benchmark
+> (§26) or a guessed outcome (§20.7 rule 3), arriving through the most sympathetic door
+> available.
+
+*No material problem found* deserves its own mention: it is a **useful, recordable result**,
+not a failed investigation, and a Case that reaches it should say so plainly rather than
+offering a recommendation to justify the effort.
+
+---
+
+## 51. Resolution, learning and the surfaces around it
+
+### 51.1 Verified resolution — and the Resolution Plan question
+
+**No Resolution Plan artefact is needed.** §43 already carries evidence, confidence,
+priority, expected effect, effort, risks, trade-offs, dependencies, reversibility, authority,
+`success_criterion` and `review_at`. The only thing missing at case level is linkage, and
+`correlation_id` supplies it. A Case's plan is *the set of `recommendation.*` records sharing
+its correlation* — ordered by each product's own prioritisation (§43.3), because there is
+still no universal score.
+
+Resolution is verified, never assumed:
+
+```
+recommendation (success_criterion + review_at, both predeclared — §20.7 rule 7)
+  → authority check / approval where required (§43.4)
+  → action through the domain choke point, which re-runs its own rules
+  → canonical event
+  → at review_at: measured outcome, with outcome_provenance (Part IV rule 5)
+  → compared against the criterion written BEFORE the outcome was known
+  → resolved / not resolved / uncertain
+```
+
+Two rules govern the comparison, both inherited:
+
+- **Only `observed` or `derived_deterministic` outcomes may close a Case as `resolved`.** A
+  predicted improvement is not an improvement (Part IV rule 5).
+- **A `review_at` that passes with no outcome is itself a result** — the review did not
+  happen — and must not read as "no change yet" (Part V rule 7).
+
+And one that is specific to cases: **the criterion belongs to the recommendation, not to the
+Case.** A Case may be closed `resolved` only when the recommendations that were acted on met
+the criteria *they* declared. Inventing a case-level criterion after the fact would reopen
+exactly the M11 hole at one level up.
+
+### 51.2 Failed interventions are kept, and are the more valuable half
+
+> **A failed intervention is never erased, retracted or quietly superseded.** It stays in
+> Decision & Outcome Memory with its evidence, its confidence, its predeclared criterion and
+> its measured miss.
+
+Reopening a Case adds; it does not rewrite. A new Finding, a revised interpretation with the
+prior version retained, the failed recommendation still referenced by the same
+`correlation_id`. §43.4 already requires refusals and rejections to be retained for
+selection-bias reasons; a *failed* intervention is the same argument with more force, because
+it is the only evidence that a plausible, well-evidenced recommendation did not work under
+these conditions — which is the single most informative record the learning layer will ever
+hold, and the one most likely to be tidied away.
+
+### 51.3 Owner-facing explanation — a structural requirement, not a UI
+
+**Architecture only; no UI is designed here.** The requirement is that a Case can always be
+rendered as this, from records alone, with no field invented at presentation time:
+
+| Section | Sourced from |
+|---|---|
+| What you reported | The `problem.reported` event — **quoted, not paraphrased** (§49.1) |
+| What we found | The Case's current Findings |
+| Most likely contributors | Ranked hypotheses **with their §23 tiers**, and their evidence |
+| What we could not establish | `unattributed` links (M8), `contradicting_evidence`, `assumptions` |
+| What we recommend | `recommendation.*` records, with priority and any approval required |
+| How confident we are | `confidence` and provenance, in the owner's terms |
+| How we will know whether it worked | The predeclared `success_criterion` and `review_at` |
+
+The last two rows are the test of the whole design. If either cannot be filled from stored
+records, the case has produced advice rather than a diagnosis — and the "what we could not
+establish" row is the one that will be dropped first, which is why it is listed as required
+rather than optional.
+
+### 51.4 Free-product handoff
+
+The existing staged model (§26) already supports the path and needs no amendment:
+
+```
+free diagnostic → finding + immediate standalone value (no account)
+  → "investigate this further" → account, business identity, EXPLICIT CONSENT
+  → Business Problem Case, origin: free_product_handoff
+```
+
+Three rules carry over unchanged, and one is added:
+
+- Running a free tool **never** creates a Case, an identity, or permanent Business Memory.
+  Consent is the only promotion path, and it is scoped, recorded and revocable.
+- Self-reported inputs enter as `business_provided`, **never** `verified` — so a Case seeded
+  from a free tool starts from the **lowest-trust evidence in the architecture**, and its
+  early confidence must reflect that.
+- Runs are linked by a bearer token the visitor holds; identity is **never** inferred, and a
+  business name typed into a public form is **never** matched against `organisations`.
+- *Added here:* the free tool's finding enters the Case as **one hypothesis among others**,
+  under §49.1 — not as its diagnosis. An unauthenticated form's conclusion has no more
+  standing at intake than the owner's own suspicion, and rather less evidence.
+
+### 51.5 Privacy and authority
+
+A Case is, by construction, **the highest-concentration business-sensitive object in the
+architecture**: it can pull finance, customers, operations, marketing and staff evidence into
+one correlation. No new mechanism is proposed — the existing ones are sufficient and are named
+here so they are applied deliberately rather than discovered later:
+
+- **Tenant isolation** — `org_id` on the Case, on every record it references, and on every
+  evidence request. No cross-tenant Case exists, ever.
+- **Least privilege** — §50.2. A Case is not a permission.
+- **Classification at write time** — §20.8, on every assertion the Case accumulates.
+- **Auditability** — the routing decision, every evidence request, every approval and every
+  reframing is a `DecisionRecord`. *Who asked to see what, and why*, is answerable.
+- **Nova's boundary is absolute.** Personal execution signals do not enter a business Case
+  because an investigation is open. §20.8's rule is unchanged: personal → business-wide
+  requires explicit, recorded, revocable consent, and is never a side effect.
+
+### 51.6 Problem-to-outcome intelligence — where this joins the moat
+
+The chain the Case makes recordable end to end:
+
+```
+reported problem → interpretation → evidence → diagnosis → recommendation
+  → approval → action → measured outcome → verified or not
+```
+
+Over years, and only with real cases, that corpus can answer questions nothing else can:
+**which reported symptoms actually correspond to which underlying conditions** — *"owners who
+say 'we need more leads' turn out to have a conversion problem more often than a demand
+one"*; which investigations were informative and which wasted effort; which recommendations
+worked, under which operating conditions; and which failed.
+
+Applying the copy test honestly, as §25 requires:
+
+| Component | Time for a funded competitor | Verdict |
+|---|---|---|
+| A problem-report chatbot | **Days** | Commodity |
+| A generic root-cause prompt over business data | Days | Commodity |
+| AI-generated remediation advice | Days | Commodity |
+| An anomaly alert, a dashboard, a case UI | Weeks | Commodity |
+| **The accumulated record of real problems → evidence → diagnosis → intervention → measured outcome, per business and across the cohort** | **Cannot be back-filled** | **The asset** |
+
+The intake is the commodity; the corpus is the moat — the same split §15 found for the access
+layer and §28 for distribution. And the same caveat applies for the sixth document running:
+**this accumulates only at the speed of real businesses with real problems**, of which there
+are currently none.
+
+---
+
+## 52. Classification, status and verdict
+
+### 52.1 Classification
+
+**ALREADY EXISTS — reused unchanged, nothing added**
+
+| Concept | Where |
+|---|---|
+| Finding shape, hypotheses, contradicting evidence, assumptions, time window | §42.2 |
+| Recommendation shape, priority, effort, risks, success criterion, review date | §43, §20.7 rule 7 |
+| Evidence references, confidence, nine-type provenance | §20.6, §42.2 |
+| Causal tiers and the evidential standard for `caused_by` | §23 |
+| Decision & Outcome Memory; refusals and rejections retained | §20.7, §43.4 |
+| `correlation_id` as the binding across an episode | §20.5 |
+| Cross-product exchange without schema coupling | §24 |
+| Atlas as synthesiser; synthesis does not raise a tier | §25, §42.3 |
+| Authority, approval, governed action, domain choke points | §43.4, AAL §3, §18 |
+| Tenant isolation, least privilege, classification, Nova's boundary | §1.4, §20.8, §24 |
+| Free-product staged consent and run linkage | §26 |
+| Erasure by reference, not by copy | Part IV M7 |
+
+**DOCUMENTATION STRENGTHENING — applied in this pass**
+
+Routing is a recorded decision, with what it excluded (§50.1) · a Case is not a permission
+(§50.2) · Atlas's engagement boundary (§50.3) · the honest closure reasons, including *no
+material problem found* (§50.4) · the owner is authoritative about the symptom, not its cause
+(§49.2) · reframing is a first-class outcome (§49.3) · clarification asks only what changes
+the investigation (§49.4) · only observed or deterministic outcomes may close a Case
+`resolved` (§51.1) · failed interventions are kept and are the more valuable half (§51.2) ·
+the free-tool finding enters as a hypothesis, not a diagnosis (§51.4) · a Case is the
+highest-concentration sensitive object and the existing controls apply deliberately (§51.5).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P22** | **The Case head** (§48.2) — identity, `correlation_id`, origin, reported-event reference, revisable interpretation, status, desired outcome, closure reason. Thin, derivable, referencing everything | The shape is free before any case exists. Afterwards it is a migration over the only records that carry a business's problem history |
+| **P23** | **`problem.reported` as the seventh canonical event** (§48.1) | Owner-authored and **not recomputable** (P3). Reconstructing what the owner said from what NiteOwl concluded is M1 applied to the sentence the case hangs on |
+| **P24** | **Report / interpretation / hypothesis kept separate at intake** (§49.1, M14) | The design rule, not a field. It is what stops NiteOwl confirming the owner's guess, and it cannot be retrofitted onto a corpus of cases that already did |
+| **P25** | **The lifecycle, with no "recommended" state** (§48.4) | *Advice given* must never read as progress. Free now; a corrupted learning signal later |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L26** | Business Problem Cases implemented — intake, head, lifecycle, routing | The first product feature that investigates rather than reports. Behind L24 (findings persisted), which is behind Remy's calendar reliability |
+| **L27** | Cross-domain synthesis via Atlas | Two products live for one tenant — X2's precondition, unchanged |
+
+**MUCH LATER**
+
+X1–X5 unchanged. Part VI adds one corpus to X1: **symptom → underlying condition**
+correspondence across many real cases (§51.6). It requires years of verified case outcomes and
+inherits every existing precondition — predeclared criteria, observed outcomes, and §27's five
+gates before any cohort statistic.
+
+**NOW: none.** No code, no schema, no migration, no flag, no provider change.
+
+| Band | Part VI items |
+|---|---|
+| ALREADY EXISTS | 12 |
+| DOCUMENTATION STRENGTHENING | 11, all applied |
+| PREPARE | 4 |
+| LATER | 2 |
+| MUCH LATER | 0 new, 1 corpus added to X1 |
+| **NOW** | **0** |
+
+### 52.2 Documentation changes
+
+| File | Change |
+|---|---|
+| `docs/ARCHITECTURE.md` | Header records Part VI. **§19** gains M13–M14. **§22** gains `problem.reported` as the seventh event. **§24** notes a Case routes through the existing exchange types. **§25** gains the problem-to-outcome copy-test rows. **§26** notes the handoff. **§29/§30/§31** updated. **New §47–52** |
+| `PROJECT_CONTEXT.md` | Canonical-set line extended to Parts I–VI |
+| `CHECKLIST.md` | Architecture-map signpost extended to Part VI |
+
+**`docs/AGENT_ACCESS_LAYER.md` is unchanged by this pass** — Part VI introduces no new agent
+capability, no new principal kind and no new governance rule. **Created: none.**
+
+### 52.3 Phone-call work — verified, not assumed
+
+Checked at `51b0130` on branch `docs/niteowl-moat-diagnostic-architecture`:
+
+- `git status --porcelain` reports only the documentation files above plus
+  `supabase/.temp/cli-latest`, the pre-existing Supabase CLI version cache, untouched by this
+  pass. **Nothing under `src/`, `tests/`, `supabase/migrations` or `docs/sql/` was modified or
+  opened for edit** — the working tree is identical to `main` for all code.
+- The phone-fix branch `fix/callback-urgency-owner-visibility` is untouched at `9bdfaf3`.
+- No Vapi, Google Calendar, Supabase, OpenAI or Resend behaviour changed; no provider
+  configuration, no voice prompt, no feature flag, no environment variable.
+- The live assistant tool surface is unchanged — Part V §46.1's verification stands, and this
+  pass touched no file that could affect it.
+- The deferred service-matching false positive in `PROJECT_CONTEXT.md` is unchanged, and none
+  of its rejected approaches was retried.
+- No commit, branch, push or merge was made by this pass.
+
+### 52.4 Verdict
+
+A Business Problem Case is genuinely needed, and it is **much smaller than it first appears**.
+Three cheaper answers were tested; two nearly worked, and what they left behind is the whole
+requirement: **an identity that outlives any single immutable record, the owner's own words,
+and a lifecycle.** Everything else already had a home, and the Case references it. One new
+event type, one thin projection, four prepared rules, and no fifth judgement schema.
+
+Three things are worth taking from this pass:
+
+1. **The Case is a correlation with a head and a state, not a container.** The moment
+   evidence is copied into it rather than referenced, it becomes a second system of record
+   over the same history — the mistake this architecture has now refused four times, in four
+   different disguises.
+
+2. **The reported symptom is not the diagnosis** (M14). This is the finding that changes the
+   design. The owner's framing arrives first, with the highest apparent authority in the
+   system, and the natural implementation confirms it — spending the owner's money proving
+   their own guess. Separating report from interpretation from hypothesis is what makes it
+   possible to say *"the thing you asked about is not the problem"*, which is most of the
+   value on offer.
+
+3. **"We produced a recommendation" is not "the problem is solved."** The lifecycle has no
+   `recommended` state on purpose. A Case that measured NiteOwl's output instead of the
+   business's condition would corrupt every learning signal downstream, and would do it while
+   looking productive.
+
+And unchanged for the sixth document running: none of this is urgent, none of it is built, the
+corpus accumulates only at the speed of real businesses with real problems, and the next
+milestone is still a reliable phone call.

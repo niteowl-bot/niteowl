@@ -13,11 +13,11 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–V.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–VI.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
-  sovereignty and diagnostic intelligence. **§21 is the single canonical architecture
-  diagram.**
+  sovereignty and diagnostic intelligence, Part VI the Business Problem Case. **§21 is
+  the single canonical architecture diagram.**
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
