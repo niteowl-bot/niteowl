@@ -2,6 +2,42 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-08-31 (Voice — the owner is told about a booking only when one was asked for)
+
+**`fix/owner-booking-status-no-time-requested`, commit `3de1210`, MERGED as PR #37 (merge commit `13883e1`, a normal two-parent merge), DEPLOYED and LIVE-PRODUCTION VERIFIED on 2026-08-31.** Production deployment `dpl_9daL9V8cAb7376hVBDyThY9NdHm9` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1143 tests pass / 0 fail, 205 suites; focused `ownerCallSummaryStatus` 19 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**No schema, migration, RLS, OAuth, Vapi configuration, provider, calendar-creation, booking-confirmation, deployment-configuration or dashboard change.** Two files: one production, one test file. `src/lib/email.ts` untouched.
+
+### The defect
+Found by the same live call that verified PR #35, and deliberately fixed separately. The caller wanted a visit and gave no day or time, so nothing was ever submitted to a calendar — and the owner's email still carried **"REQUIRES REVIEW — The requested appointment was not confirmed in the calendar."** That sentence describes a booking that was attempted and failed. None was attempted.
+
+The block was gated on `isAppointmentRequest`, which only means *"the caller wanted a visit"* and says nothing about whether they named a time. A callback already got no block for exactly this reason; a service request with no time equally has no booking to report. It conflated **"we tried and could not"** with **"there was nothing to try"** — the conflation refused everywhere else here: `lookup_failed` is not `capacity_full`, `unable_to_authorise` is not `deny`, and *"we could not check"* is never *"it is free"*.
+
+### The fix
+One condition in `src/lib/voice/calls.ts`: the block renders only when `callbackTiming.preferredDatetime` is set. Gated on the **sanitised** requested phrase, and on neither alternative:
+
+- **not the resolved instant** — a time the caller *did* give but that failed to parse, or that the calendar refused, must still report its outcome. Gating on the resolved value would drop the block on precisely the failures it exists to surface. **Fail-closed preserved.**
+- **not the raw `details.preferred_datetime`** — a model ignoring its extraction schema and writing *"as soon as possible"* into that field would make the raw check true, rendering a booking block for a call where no time was ever given, re-admitting the urgency-as-time confusion PR #35 removed.
+
+Both rejected alternatives are pinned by tests.
+
+### Coverage
+Seven tests driving the **real `processCallEnded`**: urgent with no time produces no block and no calendar-failure language while the urgency row survives; an urgency phrase written in as a time is not a requested time; a time given but unparseable still reports; a time plus a calendar failure still reports REQUIRES REVIEW; an ordinary callback is unchanged. **Mutation-verified** — reverting the gate fails 3, using the raw field fails 1.
+
+The eight pre-existing tests in that file hand `sendCallSummaryEmail` a `bookingStatus` and assert it renders. That isolated-renderer shape is what let PR #34 ship a feature that did nothing, which is why these drive the decision instead.
+
+### Live production verification — PASS, 2026-08-31
+An urgent burst-pipe call: the caller had a burst pipe, needed someone as soon as possible, had **no particular day or time**, and asked for the team to contact them as soon as possible. Observed in the owner's email:
+
+- **`Callback urgency: Urgent — no specific day or time given`** — present, so PR #35's behaviour survived this change
+- **Callback date: Not provided** and **Callback time: Not provided**
+- the false **"REQUIRES REVIEW — The requested appointment was not confirmed in the calendar"** block **did not appear**
+- **no false booking attempt and no failed-calendar claim** of any kind
+- the urgent request still reached the owner correctly
+
+### One separate finding from the same call — NOT part of this entry
+The caller gave the name **"Ernesto"**. The generated summary carried `Name: Ernesto` correctly, but the structured **Caller** field in the owner email displayed **"Ernie Sephora"**. The mismatch was observed on the same call during which the caller's name and email address were captured and confirmed. **The cause and field-precedence path have not yet been investigated or established.** **Recorded only — not investigated, no cause established, no code changed, and not part of PR #37**, whose own verification passed independently on the same call. A separate read-only investigation follows.
+
 ## 2026-08-31 (Voice — PR #34 shipped, but urgency-only owner visibility still failed end-to-end in production; the urgency was read from the wrong field)
 
 **`fix/callback-urgency-production-regression`, commit `35f6403`, MERGED as PR #35 (merge commit `62afd12`, a normal two-parent merge), DEPLOYED and **LIVE-PRODUCTION VERIFIED** on 2026-08-31.** Production deployment `dpl_BbGd7nezo2CKCG3pn8B8KZWnoZkA` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1136 tests pass / 0 fail, 204 suites; focused `callbackTiming` 61 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.

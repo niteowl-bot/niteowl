@@ -54,9 +54,10 @@ The following features are complete and tested:
 - Owner Call-Summary Booking Status (PR #27, merged and live 2026-08-26)
 - Service-Matcher Morphology (PR #28, merged and live 2026-08-26)
 - Truthful Voice Booking Closing (PR #30, merged and live 2026-08-27; **live production smoke test PASS**)
-- Callback Urgency Owner Visibility (PR #34, merged and deployed 2026-08-31; **live regression found the same day — it did NOT work end-to-end**. Corrected by **PR #35**, merged and deployed 2026-08-31 and **live-production verified the same day**)
+- Callback Urgency Owner Visibility (PR #34, merged and deployed 2026-08-31; **live regression found the same day — it did NOT work end-to-end**. Corrected by **PR #35**, merged, deployed and **live-production verified** 2026-08-31)
+- Owner Booking-Status Accuracy (PR #37, merged, deployed and **live-production verified** 2026-08-31 — a booking outcome is reported only when a time was actually requested)
 
-Verified current state through PR #35:
+Verified current state through PR #37:
 
 - **PR #27** is merged and deployed. The owner call summary now reports the **final persisted booking status**, not an interim one.
 - **PR #28** is merged and deployed, and the plumber/plumbing morphology fix was **verified successfully in production**: ordinary word forms of the same service now match.
@@ -75,8 +76,23 @@ Verified current state through PR #35:
     - Remy preserved the urgency semantically and did **not** use the previous incorrect *"any time suits"* wording
 
     Every required behaviour held together on one call: urgency reaches the owner, no timing is invented, and nothing is falsely confirmed.
+- **PR #37 — the false calendar-failure block, merged, deployed and LIVE-PRODUCTION VERIFIED 2026-08-31.** A **separate** defect found by the same live call that verified PR #35, and fixed separately. The owner's email showed **"REQUIRES REVIEW — The requested appointment was not confirmed in the calendar"** on a call where **no time was ever requested**, so nothing had been submitted to a calendar and nothing had failed. The block was gated on `isAppointmentRequest` alone — *"the caller wanted a visit"* — which says nothing about whether they named a time. It conflated **"we tried and could not"** with **"there was nothing to try"**, the conflation this codebase refuses everywhere else.
+  - **The fix.** Branch `fix/owner-booking-status-no-time-requested`, commit `3de1210`, merged as PR #37 (`13883e1`, a normal two-parent merge). One condition in `src/lib/voice/calls.ts`: the block renders only when `callbackTiming.preferredDatetime` is set. Gated on the **sanitised** requested phrase deliberately — not the resolved instant, so a time that was given but failed to parse or that the calendar refused still reports its outcome (**fail-closed preserved**); and not the raw `details.preferred_datetime`, because a model writing *"as soon as possible"* into that field would re-admit the urgency-as-time confusion PR #35 removed. Both rejected alternatives are pinned by tests. `src/lib/email.ts` untouched — the block is omitted, not relabelled. 7 tests drive the **real `processCallEnded`**; mutation-verified (reverting the gate fails 3, using the raw field fails 1). 1143 tests pass / 0 fail; `tsc` clean; ESLint unchanged at 11.
+  - **Production deployment.** `dpl_9daL9V8cAb7376hVBDyThY9NdHm9` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned **HTTP 200** `{"status":"ok","database":"ok"}`.
+  - **Live production verification, 2026-08-31 — PASS.** An urgent burst-pipe call: the caller had a burst pipe, needed someone as soon as possible, had **no particular day or time**, and wanted the team to contact them as soon as possible. Observed in the owner's email:
+    - **`Callback urgency: Urgent — no specific day or time given`** — present, so PR #35's behaviour survived the change
+    - **Callback date: Not provided** and **Callback time: Not provided**
+    - the false **"REQUIRES REVIEW — The requested appointment was not confirmed in the calendar"** block **did not appear**
+    - **no false booking attempt and no failed-calendar claim** of any kind
+    - the urgent request still reached the owner correctly
+
+    **PR #37 is verified.** The owner is now told about a booking outcome only when a booking was actually asked for.
 
 Deferred and non-blocking (do **not** pick these up as part of other work):
+
+- **NEW, OPEN — the owner email showed the wrong caller name (observed 2026-08-31, not investigated).** On the PR #37 verification call the caller gave the name **"Ernesto"**. The generated summary carried **`Name: Ernesto`** correctly, but the structured **Caller** field in the owner email displayed **"Ernie Sephora"** — a different name. The mismatch was observed on the same call during which the caller's name and email address were captured and confirmed. **The cause and field-precedence path have not yet been investigated or established.**
+
+  **Recorded only. Not part of PR #37, and PR #37 passed its own live verification independently of it** — the urgency row, the absent booking-status block and the "Not provided" date and time were all correct on the same call. **No cause has been established and no code has been looked at**; the next step is a separate read-only investigation, after this closeout.
 
 - The remaining `requiredMatches` false positive is **explicitly deferred** pending a safer service-identity architecture. It is **not** to be closed with a matcher tweak — see the service-matching section below for the approaches already investigated and rejected.
 - The `requested_service` architectural seam remains **deferred and not approved** (same section).
