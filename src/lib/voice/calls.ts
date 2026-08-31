@@ -16,6 +16,7 @@ import { isVoiceCalendarBookingEnabled } from "@/lib/integrations/flags";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
+import { resolveCallerName } from "@/lib/voice/nameIntegrity";
 import {
   resolveCallbackUrgency,
   sanitisePreferredDatetime,
@@ -239,7 +240,14 @@ const VALID_INTENTS: LeadIntent[] = [
  */
 function toExtractedLead(
   details: VoiceExtractedDetails | null,
-  callerPhone: string | null
+  callerPhone: string | null,
+  /**
+   * The call transcript, read ONLY as evidence of whether the caller
+   * actually spoke their name (nameIntegrity.ts). Nothing else is taken
+   * from it here, and it is optional so every existing caller behaves
+   * exactly as before.
+   */
+  transcript: string | null = null
 ): ExtractedLead | null {
   if (!details) return null;
 
@@ -247,13 +255,24 @@ function toExtractedLead(
     ? (details.intent as LeadIntent)
     : "unknown";
 
+  // Normalised first: the name guard below compares against the address
+  // that will actually be stored, not the spoken wording.
+  const email = normaliseSpokenEmail(details.email);
+
   return {
     intent,
-    name: details.name,
+    // An email must never manufacture a caller name. Extraction can
+    // fabricate a plausible person from an email's local part when no
+    // name was clearly given — the 2026-08-31 "Ernie Sephora" call. A
+    // name the caller actually spoke outranks the model's candidate;
+    // absent any spoken support, a candidate that looks built from the
+    // address is dropped so the owner sees the caller's phone number
+    // rather than someone who does not exist. See nameIntegrity.ts.
+    name: resolveCallerName(details.name, email, transcript),
     // Spoken aloud, so the same treatment the phone field gets: convert
     // "michael ryan at hotmail dot com", and store nothing at all rather
     // than a spoken form that would bounce a confirmation email.
-    email: normaliseSpokenEmail(details.email),
+    email,
     // Caller ID first, exactly as before. The spoken number only ever
     // reaches this field when caller ID is withheld — and then only if
     // it survives normalisation, because an unusable number here would
@@ -559,7 +578,7 @@ export async function processCallEnded(
     }
   }
 
-  const extracted = toExtractedLead(details, event.callerPhone);
+  const extracted = toExtractedLead(details, event.callerPhone, event.transcript);
   const alternatePhone = resolveAlternatePhone(details, event.callerPhone);
   // Kept separately from preferred_datetime, which toExtractedLead has
   // already cleared of it: the caller told us how urgent they are, not
@@ -877,7 +896,12 @@ export async function processCallEnded(
     // Passed through so the owner actually sees the urgency the caller
     // gave; it is null whenever a real callback time was given.
     callbackUrgency,
-    callerName: details?.name ?? null,
+    // The GUARDED name, not the raw extraction. toExtractedLead is where
+    // an email is stopped from manufacturing a caller (nameIntegrity.ts).
+    // Reading details.name here would route the owner email around that
+    // guard — and the owner email is the surface the 2026-08-31 defect
+    // was actually seen on, so the two must not be able to disagree.
+    callerName: extracted?.name ?? null,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,
     summary: event.summary,
