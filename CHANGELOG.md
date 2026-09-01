@@ -2,6 +2,55 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-09-01 (Voice — closing dialogue is forbidden until the required fields are complete)
+
+**`fix/voice-required-fields-before-closing`, commit `c3d39d8`, MERGED as PR #40 (merge commit `91d2bc3`, a normal two-parent merge), DEPLOYED and LIVE-PRODUCTION VERIFIED on 2026-09-01.** Production deployment `dpl_8xEYiKCKpQ6cntxRyPGVjX1nhavm` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. Its `githubCommitSha` reads `91d2bc37a594d7aa647f1e5f8c75d73d0e7d6f24` — the merge commit itself, read from Vercel's own metadata rather than inferred from deployment timing. 1197 tests pass / 0 fail, 212 suites; new `voiceClosingGate` 26 / 0; `voiceConversation` 111 / 0; PR #35 `callbackTiming` 61 / 0; PR #37 `ownerCallSummaryStatus` 19 / 0; PR #39 `voiceNameIntegrity` 28 / 0; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**Prompt-only. No schema, migration, RLS, OAuth, Vapi configuration, provider, calendar, booking, cancellation, rescheduling, deployment-configuration or dashboard change.** Two files: `src/lib/voice/assistant.ts` (+5 −5) and a new test file.
+
+### The defect (Finding A)
+On the PR #39 verification call the caller wanted an **urgent service visit** and could not give a day or a time. Remy collected name, address and callback number, then went straight to *"Is there anything else I can help you with today?"* with the **email never asked for**, **no recap** and **no confirmation** — and asked *"anything else?"* a second time.
+
+This was never "Remy forgot the email". Rule 5's COMPLETION GATE already blocked *"anything else?"*, the recap **and** the goodbye while a required field was open, and email was already named in it. The gate was **bypassed**.
+
+### Root cause
+The moment the caller declined a time, Remy spoke **rule 11's urgent CLOSING line mid-call** — *"I'll note this as urgent and pass your request to the team straight away"* — and repeated it verbatim at the number step. **Having spoken a closing, it behaved as though the call was closing.**
+
+The prompt permitted this. The closing lines were defined *only* as closings, but nothing forbade speaking one earlier, and three rules invite callback-shaped wording the moment a caller is urgent: rule 11 buckets *"CALLBACK (rule 13), or a call that is urgent or needs a human"* together, rule 12 assures an urgent caller of a callback, and rule 6 prescribes its own different handoff wording when urgency is all that was given. Rule 13's *"NEVER end the timing question early"* is **satisfied** here, because the caller had declined a time — which that rule expressly allows.
+
+**The defect is a TRANSITION, not a phrase**, so the fix targets the transition. Remy may still say the sentence the moment it is true.
+
+### The fix
+Five prompt changes:
+
+- rule 5's gate gains **URGENCY NEVER OPENS THE GATE** (an urgent service visit is a service request, keeps this list, and rule 13's shorter one does not apply; declining a time settles the time and nothing else; email named as the step this loses) and **TELLING THE CALLER THE TEAM WILL BE IN TOUCH IS NOT A CLOSING** (allowed when true, but must be followed by the next unfinished item)
+- rule 11 defers explicitly to the gate and names its four lines as CLOSING LINES, forbidden while a required field is open; having said one earlier never counts as having closed
+- rules 6 and 12 mark their urgency acknowledgements as not closings; rule 13 separates its mid-call handoff phrase from rule 11's closing
+
+Refusal still releases the gate and *"Ask at most twice"* is unchanged, so **no caller is pressed for a time they have declined**. No state machine, no new tool, no config key — a test pins that the config's key set has not grown.
+
+### Coverage
+26 new tests. Half pin the invariant's wording, because the prompt IS the mechanism. The rest **parse the required-field list back out of the prompt** and replay the real 2026-09-01 call against it, asserting that at the moment Remy said *"anything else?"* exactly `["email"]` was open and all four closing moves were forbidden — the collision the existing string-presence tests missed. Dropping `email` from the gate breaks that replay.
+
+**Mutation-verified**, five reversions, source restored and re-verified green after each: removing both new gate paragraphs fails 7; removing rule 11's closing-lines gate fails 2; reverting rule 6's clause fails 1; dropping `email` from the gate's list fails 5; reverting rule 11's deference to the gate fails 1.
+
+### Live production verification — PASS, 2026-09-01
+A live urgent / no-specific-time call confirmed what the tests could not:
+
+- Remy **requested the caller's email before closing**
+- Remy **did not skip a remaining required field merely because the request was urgent**
+- the **recap ran before the closing / goodbye sequence**
+
+**FINDING A IS CLOSED.** This is a model-behaviour prompt correction: the suite can prove the instruction is present, coherent and mutation-sensitive, never that the model obeys it. Only this call could close it — the same reasoning that made PR #34's all-green suite worthless in production.
+
+### Finding B remains OPEN
+The house-number transcription and address-confirmation weakness from the same original call is **untouched**. Rule 5 step 7 is **byte-identical** to what it was before this branch, verified block-by-block at merge time. PR #40 restored the recap, which gives the caller a second chance to notice a wrong address — **a mitigation, not a fix**: Remy will still accept an impossible house number such as `A c 1 Oakland Drive` in the first place.
+
+**Still not verified:** whether `leads.metadata.service_address` agrees with the summary's `Address:` line. They are independent paths that are never compared, and only the summary was ever observed. That check has **not** been performed and must not be claimed.
+
+### Historical record — a cosmetic PR-number discrepancy, deliberately not corrected
+Merge commit `3457927` (the PR #39 documentation closeout) says *"Merge pull request #40 from niteowl-bot/docs/pr39-live-verification-closeout"*. **No PR #40 existed for that branch** — it was merged locally with a hand-written message and the number was guessed; GitHub later issued **#40 to this Finding A fix**. `main` history is **deliberately not rewritten**: the discrepancy is cosmetic and the commit is already on `origin/main`. The lesson: `git merge --no-ff -m "Merge pull request #N …"` does not create PR #N — take the number from `gh`, or open the PR first.
+
 ## 2026-09-01 (Voice — an email address can no longer manufacture a caller name)
 
 **`fix/voice-caller-name-integrity`, commit `fa9e0d2`, MERGED as PR #39 (merge commit `569cb8c`, a normal two-parent merge), DEPLOYED and LIVE-PRODUCTION VERIFIED on 2026-09-01.** Production deployment `dpl_5jeEKH4NVzsyyAMMEU2GvFUE9Lc5` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1171 tests pass / 0 fail, 209 suites; focused caller-name integrity 28 pass / 0 fail; PR #35 `callbackTiming` 61 / 0; PR #37 `ownerCallSummaryStatus` 19 / 0; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
