@@ -17,6 +17,7 @@ import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
 import { resolveCallerName } from "@/lib/voice/nameIntegrity";
+import { resolveServiceAddress } from "@/lib/voice/addressIntegrity";
 import {
   resolveCallbackUrgency,
   sanitisePreferredDatetime,
@@ -242,10 +243,10 @@ function toExtractedLead(
   details: VoiceExtractedDetails | null,
   callerPhone: string | null,
   /**
-   * The call transcript, read ONLY as evidence of whether the caller
-   * actually spoke their name (nameIntegrity.ts). Nothing else is taken
-   * from it here, and it is optional so every existing caller behaves
-   * exactly as before.
+   * The call transcript, read ONLY as evidence of what the caller
+   * actually said — their name (nameIntegrity.ts) and their address
+   * (addressIntegrity.ts). Nothing else is taken from it here, and it
+   * is optional so every existing caller behaves exactly as before.
    */
   transcript: string | null = null
 ): ExtractedLead | null {
@@ -288,6 +289,13 @@ function toExtractedLead(
     // never in a field that means WHEN.
     preferred_datetime: sanitisePreferredDatetime(details.preferred_datetime)
       .preferredDatetime,
+    // Speech-to-text mangles a house number into letter noise — the
+    // 2026-09-01 "A c 1 Oakland Drive" call. Resolved HERE, at the one
+    // convergence point, so the calendar event and the lead's stored
+    // copy read the same decision instead of the raw model value twice.
+    // Constrain-only: it may refuse a value or prefer the caller's own
+    // later wording, never rewrite one. See addressIntegrity.ts.
+    service_address: resolveServiceAddress(details.service_address, transcript),
     confidence: ACTIONABLE_INTENTS.includes(intent) ? 0.75 : 0.4,
   };
 }
@@ -734,7 +742,12 @@ export async function processCallEnded(
         // built inside. Passing it here changes no write and adds no
         // query; without it a phone booking reaches the engineer's diary
         // with no address on it.
-        details?.service_address ?? null
+        //
+        // The RESOLVED address, not the raw extraction: this and the
+        // lead's copy below are the two consumers that used to read
+        // details.service_address independently, and an engineer's diary
+        // must never carry an address the lead does not have.
+        extracted?.service_address ?? null
       );
       leadId = captureResult.leadId;
 
@@ -763,7 +776,9 @@ export async function processCallEnded(
           leadId,
           event.callerPhone,
           alternatePhone,
-          details?.service_address ?? null,
+          // The RESOLVED address — the same value the calendar event
+          // above was given (addressIntegrity.ts).
+          extracted?.service_address ?? null,
           callbackUrgency,
           isAppointmentRequest
         );
@@ -902,6 +917,11 @@ export async function processCallEnded(
     // guard — and the owner email is the surface the 2026-08-31 defect
     // was actually seen on, so the two must not be able to disagree.
     callerName: extracted?.name ?? null,
+    // The RESOLVED address, the same value the lead and the calendar
+    // event carry. The summary paragraph keeps its own independently
+    // generated "Address:" line; this row is the definitive one
+    // (addressIntegrity.ts).
+    serviceAddress: extracted?.service_address ?? null,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,
     summary: event.summary,
