@@ -617,6 +617,19 @@ interface CallSummaryParams {
    */
   callbackUrgency?: string | null;
   callerName: string | null;
+  /**
+   * Where the work happens, as RESOLVED by the voice engine
+   * (voice/addressIntegrity.ts) and stored on the lead — not the
+   * summary model's independent reading of the same call.
+   *
+   * The generated summary paragraph still carries its own "Address:"
+   * line; this structured row is the definitive one, and the two are
+   * now fed from different places on purpose: if they ever disagree,
+   * the owner can see it rather than being shown only the model's
+   * version. Optional and omitted when absent, so callers that pass
+   * nothing render exactly as before.
+   */
+  serviceAddress?: string | null;
   startedAt: string | null; // ISO string
   durationSeconds: number | null;
   summary: string | null;
@@ -669,6 +682,7 @@ export async function sendCallSummaryEmail(
     leadCreated,
     callbackUrgency,
     bookingStatus,
+    serviceAddress,
     timezone,
   } = params;
 
@@ -692,6 +706,11 @@ export async function sendCallSummaryEmail(
   // raw.
   const safeCallbackUrgency = callbackUrgency?.trim()
     ? escapeHtml(callbackUrgency.trim())
+    : null;
+  // The resolved, stored address. Escaped like every other
+  // caller-supplied value: detailsBlock interpolates raw.
+  const safeServiceAddress = serviceAddress?.trim()
+    ? escapeHtml(serviceAddress.trim())
     : null;
   const formattedTime = startedAt
     ? formatAppointmentDate(startedAt, timezone)
@@ -736,6 +755,10 @@ export async function sendCallSummaryEmail(
           safeCallbackUrgency
             ? ["Callback urgency", safeCallbackUrgency]
             : null,
+          // The address actually recorded against the lead, so the
+          // owner reads the value the engineer will be sent to rather
+          // than the summary model's separate reading of the call.
+          safeServiceAddress ? ["Service address", safeServiceAddress] : null,
           formattedTime ? ["Time", formattedTime] : null,
           formattedDuration ? ["Duration", formattedDuration] : null,
           statusCopy ? ["Booking status", statusCopy.label] : null,

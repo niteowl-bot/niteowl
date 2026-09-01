@@ -41,6 +41,20 @@ export interface ExtractedLead {
   phone: string | null;
   service: string | null;
   preferred_datetime: string | null;
+  /**
+   * Where the work happens, once it has passed the same guarded
+   * convergence point every other caller-supplied field goes through.
+   *
+   * Optional, so the chat and widget extractors are untouched and every
+   * existing caller behaves exactly as before. Voice sets it via
+   * resolveServiceAddress (voice/addressIntegrity.ts) so that the
+   * calendar event and the lead's stored copy cannot disagree — before
+   * this they read the raw model value independently, twice.
+   *
+   * Never written to a lead column by this module: it reaches the
+   * database only through the voice engine's metadata write.
+   */
+  service_address?: string | null;
   confidence: number;
 }
 
@@ -51,6 +65,7 @@ export const EMPTY_LEAD: ExtractedLead = {
   phone: null,
   service: null,
   preferred_datetime: null,
+  service_address: null,
   confidence: 0,
 };
 
