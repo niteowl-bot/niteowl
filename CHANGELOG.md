@@ -9,22 +9,43 @@ All notable changes to NiteOwl will be documented in this file.
 **No schema, migration, RLS, OAuth, Vapi configuration, provider, calendar, booking, cancellation, rescheduling, deployment-configuration or dashboard change.** Three files: one new production helper, a two-line wiring change, one test file.
 
 ### Live production verification — PASS, 2026-09-01
-A real call closed this out. The caller explicitly gave the name **"Ernesto"**. Observed in the owner's email:
+A real leaking-radiator call (17:39, duration 1m 40s, caller ID `+353871465274`) closed this out. The caller explicitly gave the name **"Ernesto"** (*"User: Ernesto. Ernesto."*). Observed in the owner's email, and confirmed against the call transcript:
 
-- the structured **Caller** field displayed **"Ernesto"**
+- the structured **Caller** field displayed **`Ernesto`**, and the subject read *"…a call from Ernesto"*
 - it did **not** display the previous fabricated email-derived name
-- the generated summary also identified the caller as **Ernesto** — the two surfaces agreed
+- the generated summary also identified the caller as **Ernesto** (*"Ernesto called to request an urgent appointment… Name: Ernesto."*) — **the two surfaces agreed**, which is the exact disagreement PR #39 exists to prevent
 - **`Callback urgency: Urgent — no specific day or time given`** was still present (PR #35 intact)
-- **no false booking outcome** appeared (PR #37 intact)
+- **no Booking status row appeared at all**, and the summary carried `Appointment date: Not provided. Appointment time: Not provided.` (PR #37 intact — no false booking outcome)
+- **no email was collected on this call** (`Email: Not provided`), so the guard held on the path where it matters most: with no email to borrow from, the name still came through as the caller's own
 
 Recorded honestly: `vercel inspect` carries no git metadata, so the deployment's commit SHA was **not** read back directly. The identification rests on the deployment being created at 23:06:53, three seconds after the `569cb8c` merge commit at 23:06:50, plus the `git-main` alias — not on a SHA comparison.
 
 ### Two SEPARATE findings from the same call — OPEN, not part of PR #39
-Deliberately **not** bundled into the fix. PR #39 passed its own verification independently of both. Read-only investigation only; **no code changed**.
+Deliberately **not** bundled into the fix. PR #39 passed its own verification independently of both. **Root cause is now PROVEN for both, from the call transcript. No source change has been made, and none should be until the corrections below are approved.**
 
-**Finding A — email collection was skipped.** Remy collected name, address and callback number but never asked for an email; the owner email correctly showed `Email: Not provided`. The rendering is right, the collection is what did not happen. Source analysis: there is **no state machine** — the whole sequence is prompt text, and the live tool surface is exactly `endCall` and `check_availability`, neither of which collects or sequences anything. The prompt carries **two different required-field lists**: rule 5's COMPLETION GATE (which requires email) for *"an appointment or service request"*, and rule 13's shorter CALLBACK list, which says *"An email and a service address are not required for a callback"*. Rules 11, 12 and 6 all push an **urgent, timeless service request** toward the callback track, and nothing says which list then governs. **Which path the model actually took is unproven** — the production transcript read was blocked by the permission classifier.
+**Finding A — the rule 11 closing sequence was skipped, and email collection with it.** Remy collected name, address and callback number but never asked for an email; the owner email correctly showed `Email: Not provided`. The rendering is right, the collection is what did not happen.
 
-**Finding B — address recognition and confirmation.** `81 Oakland Drive` was transcribed as `K e 1 Auckland Drive` and `A c 1 Oakland Drive` before the caller corrected it; the final summary carried the correct value. Both bad forms mangle the **house number**, not the street name — a transcriber artefact. **This repository configures no transcriber**: the assistant config emits no transcriber, model, keyword or spelling-boost setting anywhere in `src/`. Correction handling, extraction and the summary all behaved correctly. The gap is that rule 5 step 7 only queries an uncertain **street name** while rule 7's digit read-back covers only the **callback number**, so a garbled house number falls between them. **Not verified:** whether `leads.metadata.service_address` agrees with the summary's `Address:` line — they are independent paths that are never compared, and the check needs the blocked production read.
+The transcript shows this is bigger than a missing field: **the entire rule 11 closing never ran** — no recap, no confirmation. Remy went from the callback number straight to *"Is there anything else I can help you with today?"*, precisely what rule 5's COMPLETION GATE forbids while a required field is open, then asked *"anything else?"* a **second time** against rule 11's *"ONCE per call"*.
+
+The trigger is visible. The caller opened with a **service visit** (*"I have a leaking radiator. And I need someone as soon as possible."*) — and the summary model agreed, labelling the fields "Appointment date"/"Appointment time", so rule 5's gate applied and **email was required**. Rule 6 handled the timing correctly. Then, the moment the caller declined a time, Remy spoke **rule 11's urgent CLOSING line mid-call**: *"I'll note this as urgent and pass your request to the team straight away."* It repeated it verbatim at the number step. **Having spoken a closing, it behaved as though the call was closing** — and skipped step 6.
+
+Why the prompt permits it: the urgent closing is defined **only as a closing**, but nothing forbids speaking it earlier, and rule 11 (which buckets *"CALLBACK … or a call that is urgent"* together), rule 12 and rule 6 all invite callback-shaped wording the moment a caller is urgent. Rule 13's *"NEVER end the timing question early"* is **satisfied here** — the caller had declined a time, which that rule allows. The two required-field lists then diverge: rule 5's gate requires email, rule 13 says *"An email and a service address are not required for a callback."*
+
+**This is a prompt-behaviour defect, not control flow, not extraction, not code.** There is no state machine — the sequence is prompt text, and the live tool surface is exactly `endCall` and `check_availability`, neither of which collects a field nor sequences a call. Nothing downstream failed: no code requires an email, and `sendCallSummaryEmail` has no structured Email field at all.
+
+**Coverage gap:** the tests pin both lists and pin that the gate blocks the recap and the goodbye, but nothing tests their **collision** — an urgent service request with no timing. And every prompt test is an `assert.match` against the prompt **string**; none drives a conversation, so no test could catch a model that reads the right text and does something else. The PR #34 gap in a new place.
+
+**Smallest safe correction (NOT implemented):** prompt-only — the rule 11 closing lines may only be spoken **after** the COMPLETION GATE is satisfied and the recap confirmed; urgency mid-call takes rule 6's acknowledgement wording, never rule 11's closing; and an urgent service visit is still a service request, keeping rule 5's list.
+
+**Finding B — a mangled HOUSE NUMBER was accepted without question.** The caller intended `81 Oakland Drive`. The transcript shows `K e 1 Auckland Drive`, then on correction `A c 1. Oakland Drive` — the caller said the number twice and **the digits were mangled both times**, while the street name resolved correctly on the second attempt. The failure is confined to the **house number**, which makes it a transcriber artefact; **this repository configures no transcriber at all** (no transcriber, model, keyword or spelling-boost setting anywhere in `src/`).
+
+Remy's read-backs were **correct** — it queried the address and read the whole corrected value back, per rule 5 step 7 and rule 10 — and still insufficient, because **it accepted `A c 1` as a house number**. Step 7 tells Remy to query an uncertain **street name**; rule 7's digit read-back covers only the **callback number**. Nothing says a house number is digits, so an impossible address passed unchallenged.
+
+It was caught **by the caller, not by Remy** — at *"anything else?"*: *"Yes. My address is 81 Oakland Drive."* **The rule 11 recap is the designed safety net for exactly this, and Finding A is why it never ran.** The two findings converge there. Correction handling, extraction and the summary then all behaved correctly: the owner email carried `Address: 81 Oakland Drive`.
+
+**Not verified:** whether `leads.metadata.service_address` agrees with the summary's `Address:` line. They are **independent paths that are never compared** — the lead's copy comes from `details.service_address` via `recordLeadCallDetails`, while the owner's `Address:` line lives in the generated summary paragraph (`sendCallSummaryEmail` has no structured Address field). Only the summary was observed; reading the production `leads` row was blocked by the permission classifier.
+
+**Smallest safe correction (NOT implemented):** prompt-only — a house number is digits, so query that part alone when what was heard is not, the same shape as the existing street-name check. **No speculative address parser, no Vapi/provider configuration change.** Fixing Finding A restores the recap, which is the more valuable half.
 
 
 ## 2026-08-31 (Voice — the owner is told about a booking only when one was asked for)
