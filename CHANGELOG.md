@@ -2,6 +2,31 @@
 
 All notable changes to NiteOwl will be documented in this file.
 
+## 2026-09-01 (Voice — an email address can no longer manufacture a caller name)
+
+**`fix/voice-caller-name-integrity`, commit `fa9e0d2`, MERGED as PR #39 (merge commit `569cb8c`, a normal two-parent merge), DEPLOYED and LIVE-PRODUCTION VERIFIED on 2026-09-01.** Production deployment `dpl_5jeEKH4NVzsyyAMMEU2GvFUE9Lc5` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1171 tests pass / 0 fail, 209 suites; focused caller-name integrity 28 pass / 0 fail; PR #35 `callbackTiming` 61 / 0; PR #37 `ownerCallSummaryStatus` 19 / 0; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
+
+**No schema, migration, RLS, OAuth, Vapi configuration, provider, calendar, booking, cancellation, rescheduling, deployment-configuration or dashboard change.** Three files: one new production helper, a two-line wiring change, one test file.
+
+### Live production verification — PASS, 2026-09-01
+A real call closed this out. The caller explicitly gave the name **"Ernesto"**. Observed in the owner's email:
+
+- the structured **Caller** field displayed **"Ernesto"**
+- it did **not** display the previous fabricated email-derived name
+- the generated summary also identified the caller as **Ernesto** — the two surfaces agreed
+- **`Callback urgency: Urgent — no specific day or time given`** was still present (PR #35 intact)
+- **no false booking outcome** appeared (PR #37 intact)
+
+Recorded honestly: `vercel inspect` carries no git metadata, so the deployment's commit SHA was **not** read back directly. The identification rests on the deployment being created at 23:06:53, three seconds after the `569cb8c` merge commit at 23:06:50, plus the `git-main` alias — not on a SHA comparison.
+
+### Two SEPARATE findings from the same call — OPEN, not part of PR #39
+Deliberately **not** bundled into the fix. PR #39 passed its own verification independently of both. Read-only investigation only; **no code changed**.
+
+**Finding A — email collection was skipped.** Remy collected name, address and callback number but never asked for an email; the owner email correctly showed `Email: Not provided`. The rendering is right, the collection is what did not happen. Source analysis: there is **no state machine** — the whole sequence is prompt text, and the live tool surface is exactly `endCall` and `check_availability`, neither of which collects or sequences anything. The prompt carries **two different required-field lists**: rule 5's COMPLETION GATE (which requires email) for *"an appointment or service request"*, and rule 13's shorter CALLBACK list, which says *"An email and a service address are not required for a callback"*. Rules 11, 12 and 6 all push an **urgent, timeless service request** toward the callback track, and nothing says which list then governs. **Which path the model actually took is unproven** — the production transcript read was blocked by the permission classifier.
+
+**Finding B — address recognition and confirmation.** `81 Oakland Drive` was transcribed as `K e 1 Auckland Drive` and `A c 1 Oakland Drive` before the caller corrected it; the final summary carried the correct value. Both bad forms mangle the **house number**, not the street name — a transcriber artefact. **This repository configures no transcriber**: the assistant config emits no transcriber, model, keyword or spelling-boost setting anywhere in `src/`. Correction handling, extraction and the summary all behaved correctly. The gap is that rule 5 step 7 only queries an uncertain **street name** while rule 7's digit read-back covers only the **callback number**, so a garbled house number falls between them. **Not verified:** whether `leads.metadata.service_address` agrees with the summary's `Address:` line — they are independent paths that are never compared, and the check needs the blocked production read.
+
+
 ## 2026-08-31 (Voice — the owner is told about a booking only when one was asked for)
 
 **`fix/owner-booking-status-no-time-requested`, commit `3de1210`, MERGED as PR #37 (merge commit `13883e1`, a normal two-parent merge), DEPLOYED and LIVE-PRODUCTION VERIFIED on 2026-08-31.** Production deployment `dpl_9daL9V8cAb7376hVBDyThY9NdHm9` reached READY, carries the `git-main` alias and serves `niteowlhq.com`; `/api/health` returned HTTP 200 `{"status":"ok","database":"ok"}`. 1143 tests pass / 0 fail, 205 suites; focused `ownerCallSummaryStatus` 19 pass / 0 fail; `tsc --noEmit` clean; ESLint unchanged at 11 pre-existing problems, none in a changed file.
