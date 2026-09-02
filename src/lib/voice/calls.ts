@@ -949,10 +949,23 @@ export async function processCallEnded(
   // ownerBookingStatus maps to "requires review" — never to "booked".
   const appointmentTimeWasRequested = Boolean(callbackTiming.preferredDatetime);
   let bookingStatus: OwnerBookingStatus | null = null;
+  /**
+   * The instant to show the owner as a CONFIRMED appointment — set only
+   * when the lead settled to "booked", i.e. when the calendar actually
+   * accepted the event.
+   *
+   * Read from the same row, in the same query, for the same reason the
+   * status is: the row is the only thing that knows the final answer. A
+   * refused or conflicting booking leaves an appointment_datetime
+   * behind, so presenting that as "Appointment" would contradict the
+   * status block sitting directly beneath it. The requested phrase is
+   * shown instead in that case.
+   */
+  let confirmedAppointmentIso: string | null = null;
   if (leadId && isAppointmentRequest && appointmentTimeWasRequested) {
     const { data: settledLead, error: settledError } = await admin
       .from("leads")
-      .select("status")
+      .select("status, appointment_datetime")
       .eq("id", leadId)
       .maybeSingle();
 
@@ -964,6 +977,13 @@ export async function processCallEnded(
     }
 
     bookingStatus = ownerBookingStatus(settledLead?.status);
+    // ownerBookingStatus is the single place "booked" is decided, and it
+    // fails closed. Reusing it here means the Appointment row and the
+    // Booking status row cannot disagree about whether a booking exists.
+    confirmedAppointmentIso =
+      bookingStatus === "booked"
+        ? (settledLead?.appointment_datetime as string | null) ?? null
+        : null;
   }
 
   const sent = await sendCallSummaryEmail({
@@ -994,6 +1014,25 @@ export async function processCallEnded(
     // generated "Address:" line; this row is the definitive one
     // (addressIntegrity.ts).
     serviceAddress: extracted?.service_address ?? null,
+    // The canonical service — the same value persisted to
+    // leads.service_needed and used to title the calendar event. PR #48
+    // removed its fallbacks to the message and the provider summary, so
+    // this is now either what the caller asked for or nothing at all.
+    serviceNeeded: extracted?.service ?? null,
+    // Set only when the calendar actually accepted the booking (see the
+    // read above), so the row can never imply a confirmation the status
+    // block denies.
+    appointmentIso: confirmedAppointmentIso,
+    // The caller's OWN words for when they want it, already sanitised
+    // so urgency can never arrive here as a time (callbackTiming.ts).
+    // Rendered verbatim: a vague answer stays vague rather than being
+    // parsed into a precision the caller never gave.
+    requestedTiming: callbackTiming.preferredDatetime,
+    // Chooses the label between an appointment and a callback. Taken
+    // from the intent BEFORE the voice engine's downgrade, so a genuine
+    // appointment request recorded as a question is still labelled as
+    // the appointment it was.
+    requestedTimingIsAppointment: isAppointmentRequest,
     startedAt: event.startedAt,
     durationSeconds: event.durationSeconds,
     summary: event.summary,

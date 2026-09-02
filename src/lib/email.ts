@@ -651,6 +651,47 @@ interface CallSummaryParams {
    * nothing render exactly as before.
    */
   serviceAddress?: string | null;
+  /**
+   * What the caller wants doing, as resolved by the voice engine and
+   * persisted to leads.service_needed — the canonical service, never
+   * the message or the provider summary it might once have fallen back
+   * to (PR #48 removed those fallbacks).
+   *
+   * Until this row existed the owner could only learn the service from
+   * the generated paragraph's "Issue:" line, which is the summary
+   * model's own reading of the call and answers to no guard.
+   */
+  serviceNeeded?: string | null;
+  /**
+   * The instant an appointment was actually BOOKED for, and only then.
+   *
+   * Callers must pass this solely when the lead settled to "booked" —
+   * i.e. when the calendar accepted the event. An appointment_datetime
+   * can exist on a row the calendar refused, and rendering that as
+   * "Appointment" would tell the owner a booking exists when the status
+   * block directly below says it does not. Booking truth outranks
+   * completeness here, so a time that was requested but not confirmed
+   * is reported through `requestedTiming` instead.
+   */
+  appointmentIso?: string | null;
+  /**
+   * The day/time the caller ASKED for, in their own words, already
+   * sanitised by sanitisePreferredDatetime (voice/callbackTiming.ts).
+   *
+   * Never re-parsed and never converted to a clock time: a vague
+   * "tomorrow afternoon" is shown exactly as vague. The sanitiser also
+   * guarantees urgency can never arrive here — "as soon as possible"
+   * comes through as `callbackUrgency` instead — so this row can never
+   * turn urgency into a time, which is the PR #35 rule.
+   */
+  requestedTiming?: string | null;
+  /**
+   * Whether the caller wanted a VISIT (true) or a call back (false).
+   * Chooses the label only; it never invents a timing. Derived from the
+   * extracted intent before any downgrade, so it survives the voice
+   * engine recording an appointment request as a question.
+   */
+  requestedTimingIsAppointment?: boolean;
   startedAt: string | null; // ISO string
   durationSeconds: number | null;
   summary: string | null;
@@ -705,6 +746,10 @@ export async function sendCallSummaryEmail(
     callbackUrgency,
     bookingStatus,
     serviceAddress,
+    serviceNeeded,
+    appointmentIso,
+    requestedTiming,
+    requestedTimingIsAppointment,
     timezone,
   } = params;
 
@@ -740,6 +785,45 @@ export async function sendCallSummaryEmail(
   const safeServiceAddress = serviceAddress?.trim()
     ? escapeHtml(serviceAddress.trim())
     : null;
+  // The canonical service. Escaped like every other caller-supplied
+  // value: detailsBlock interpolates raw.
+  const safeServiceNeeded = serviceNeeded?.trim()
+    ? escapeHtml(serviceNeeded.trim())
+    : null;
+  // ── The one scheduling row, and which of the four states it shows ──
+  //
+  // These states are deliberately kept apart rather than collapsed into
+  // one "date/time", because the difference between them is the whole
+  // of booking truth:
+  //
+  //   1. BOOKED           — the calendar accepted it. Only then is the
+  //                         resolved instant shown, formatted in the
+  //                         organisation's zone.
+  //   2. TIME REQUESTED   — the caller named a day or time but nothing
+  //                         is confirmed. Their own words, verbatim.
+  //   3. CALLBACK TIMING  — same, for a caller who wanted a call back
+  //                         rather than a visit. Only the label differs.
+  //   4. URGENT, NO TIME  — no row at all here; the existing "Callback
+  //                         urgency" row above is the whole truth, and
+  //                         sanitisePreferredDatetime has already made
+  //                         sure urgency cannot reach `requestedTiming`.
+  //
+  // A confirmed instant is rendered through formatAppointmentDate, so
+  // it lands in the ORGANISATION's timezone (DST-aware) exactly like
+  // every other appointment time in this file — never the server's zone
+  // and never a hardcoded one. A requested value is never formatted at
+  // all: it is a phrase, not an instant, and parsing it here would
+  // invent precision the caller never gave.
+  const safeAppointment = appointmentIso
+    ? escapeHtml(formatAppointmentDate(appointmentIso, timezone))
+    : null;
+  const safeRequestedTiming =
+    !safeAppointment && requestedTiming?.trim()
+      ? escapeHtml(requestedTiming.trim())
+      : null;
+  const requestedTimingLabel = requestedTimingIsAppointment
+    ? "Requested appointment"
+    : "Requested callback";
   const formattedTime = startedAt
     ? formatAppointmentDate(startedAt, timezone)
     : null;
@@ -793,6 +877,15 @@ export async function sendCallSummaryEmail(
           // owner reads the value the engineer will be sent to rather
           // than the summary model's separate reading of the call.
           safeServiceAddress ? ["Service address", safeServiceAddress] : null,
+          // What the caller wants doing, from the canonical field the
+          // dashboard shows and the calendar titles the event with —
+          // not the summary paragraph's separate "Issue:" reading.
+          safeServiceNeeded ? ["Service needed", safeServiceNeeded] : null,
+          // Exactly one of these, or neither. See the four states above.
+          safeAppointment ? ["Appointment", safeAppointment] : null,
+          safeRequestedTiming
+            ? [requestedTimingLabel, safeRequestedTiming]
+            : null,
           formattedTime ? ["Time", formattedTime] : null,
           formattedDuration ? ["Duration", formattedDuration] : null,
           statusCopy ? ["Booking status", statusCopy.label] : null,
