@@ -256,28 +256,54 @@ function buildStructuredDataSchema(): Record<string, unknown> {
  * email renders it inside a <p>, where newlines collapse — this keeps
  * the existing email template untouched.
  */
+// ── The summary is CONTEXT, not a second set of facts ─────────────
+// This used to require seven labelled facts — Name, Email, Callback
+// number, the date, the time, Address, Issue — each written as
+// "Label: value", with "Not provided" where a value was missing.
+//
+// That made the summarising model a SECOND, unguarded source for every
+// fact the deterministic pipeline had already resolved. It reads only
+// the transcript, answers to none of the guards, and was reproduced
+// contradicting canonical values on the caller's name, their email,
+// their address and their callback timing. Most of the rules that used
+// to live here were scar tissue from exactly those contradictions:
+// each labelled fact needed its own paragraph of defence, and the model
+// still had to be trusted to obey it.
+//
+// The labels existed because the owner had nowhere else to read those
+// facts. That is no longer true. Every one of them is now a canonical
+// structured row in the owner's email, resolved once and rendered from
+// the same value the lead, the calendar and the dashboard carry:
+// Caller, Caller ID, Alternate number, Email, Service address, Service
+// needed, Appointment / Requested appointment / Requested callback,
+// Callback urgency and Booking status.
+//
+// So the labels are removed rather than defended. The paragraph keeps
+// the one job the rows cannot do — telling the owner, in a sentence or
+// two, what the call was actually about — and the grounding rules that
+// keep even that prose honest are kept, because narrative can still
+// invent, still repeat a value the caller corrected, and still claim a
+// booking that does not exist.
+//
+// ONE CANONICAL FACT -> MANY RENDERINGS. This is the last surface that
+// was still producing a second reading of the same call.
 function buildSummaryInstructions(): string {
   return [
     "You are a precise note-taker for a business phone answering system. You will be given the transcript of a phone call between an AI receptionist and a caller. Write a short summary for the business owner.",
     "",
     "Ground every word in the transcript:",
     "- Use ONLY what was actually said on the call. Never infer, assume, or fill in a detail that is not in the transcript.",
-    "- Never invent or adjust a callback date, callback time, phone number, address, name, or any other detail. If the caller gave only a vague time such as \"tomorrow\" or \"the afternoon\", write that vague phrase exactly as they said it — never turn it into a specific date or clock time.",
+    "- Never invent or adjust a date, a time, a phone number, an address, a name, or any other detail. If the caller gave only a vague time such as \"tomorrow\" or \"the afternoon\", write that vague phrase exactly as they said it — never turn it into a specific date or clock time.",
     "- A detail counts as collected ONLY if the caller gave it or confirmed it. Anything the receptionist suggested, offered, or asked for that the caller never answered is NOT collected.",
     "- Where the caller corrected a detail (e.g. \"boiler service, not buzzer\"), report ONLY their corrected version. Never report the mis-heard value, and never report both.",
-    "- Callback number: the caller's own number is captured automatically from Caller ID and is shown elsewhere in this email, so it is NEVER missing merely because no digits appear in the transcript — the receptionist is forbidden from reading it aloud. If the caller agreed to be reached on the number they are calling from, write exactly \"Number calling from\". If they gave a DIFFERENT number aloud, write that number as they gave it. Write \"Not provided\" ONLY if the caller explicitly refused to give a number AND declined the one they were calling from.",
-    "- Callback date: if the transcript settled on a calendar date — the receptionist said \"Thursday, 6 August\" and the caller agreed — write that full date, not the bare weekday. If a bare weekday or a vague phrase was all that was ever said, write exactly that and never work out a date yourself.",
-    "- Callback time: a time window the caller gave (\"the afternoon\", \"between 2 and 5\") IS a time — write it as they said it.",
-    "- The two rules above, and the urgency rule below, apply exactly the same way when the labels are \"Appointment date\" and \"Appointment time\".",
-    "- URGENCY IS NOT A DATE AND NOT A TIME. \"As soon as possible\", \"ASAP\", \"whenever you can\", \"the earliest you can\", \"soon\" and \"any time\" say how urgent the caller is, not when they are free. NEVER write one of them as the Callback date or the Callback time: if that is all the caller gave, both are \"Not provided\", and you say in the sentences above that they asked to be called back as soon as possible.",
+    "- URGENCY IS NOT A DATE AND NOT A TIME. \"As soon as possible\", \"ASAP\", \"whenever you can\", \"the earliest you can\", \"soon\" and \"any time\" say how urgent the caller is, not when they are free. Never turn one of them into a day or a clock time. If urgency is all the caller gave, say plainly that they asked to be seen or called back as soon as possible.",
     "- Say what the caller actually asked for. If they asked for someone to call them back, report it as a callback request — never as a booked or requested appointment. If they asked to book an appointment, report the appointment they asked for and never call it confirmed.",
     "",
-    "Write two or three short sentences saying who called and what they wanted. Then, in the same paragraph, give these seven details in this order, each written as \"Label: value\" and separated by full stops: Name, Email, Callback number, the date, the time, Address, Issue.",
-    "- Email: write the address in normal written form (michaelryan@hotmail.com), NEVER the spoken wording (\"michael ryan at hotmail dot com\"). If the caller changed it during the call, give ONLY the final version they confirmed — never an earlier one, and never both.",
-    "LABEL THE DATE AND TIME FOR WHAT THEY ACTUALLY ARE. If the caller was arranging an APPOINTMENT or a service visit — someone coming out to do the work — the labels are \"Appointment date\" and \"Appointment time\". If they were asking to be RUNG BACK, the labels are \"Callback date\" and \"Callback time\". Decide from what the caller asked for, never from which words the receptionist happened to use, and never label an appointment as a callback. \"Callback number\" keeps its name either way — it is the number to reach them on, whichever they wanted.",
-    "Include all seven labels every time. Where the caller did not give a value, write exactly \"Not provided\" — never leave a label blank, never omit it, and never guess a value to fill it.",
+    "Write two or three short sentences saying who called and what they wanted, and anything about the request the business would want to know that a form field could not carry — the problem in their own words, the constraint they mentioned, the reason it is urgent.",
     "",
-    "Return only the summary. No preamble, no headings, no markdown, no bullet characters.",
+    "DO NOT list the caller's details. Their name, email address, phone number, service address, the service they want, the day or time they asked for, their urgency and the booking outcome are ALL recorded separately and shown to the owner as their own fields in this same email. Do not restate them as a list, do not write them as \"Label: value\", and do not write \"Not provided\" for anything. Naming a detail in a natural sentence is fine where it is genuinely part of the story; enumerating the details is not, and a detail you cannot support from the transcript must simply go unmentioned.",
+    "",
+    "Return only the summary. No preamble, no headings, no markdown, no bullet characters, no labelled fields.",
   ].join("\n");
 }
 

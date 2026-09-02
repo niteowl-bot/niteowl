@@ -540,23 +540,32 @@ describe("the real call: 'Thursday at 2 PM' must not pass unconfirmed", () => {
     assert.match(prompt, /Just to confirm, you mean Thursday, 6 August at 2pm\?/);
   });
 
-  test("the owner's summary reports the settled calendar date", () => {
-    // The email said "Callback date: Thursday". The summary is generated
-    // from the transcript, so it can only be as good as what Remy said —
-    // but where a date WAS settled, it must not be reduced to a weekday.
+  test("the settled date is a canonical row, not a summary label", () => {
+    // Was: the email said "Callback date: Thursday" where a full date had
+    // been settled, so the summary was told how to render that label.
+    //
+    // F4 Step 3 removed the label. The owner reads the date from the
+    // canonical scheduling row instead (PR #49), which renders the
+    // resolved instant in the organisation's timezone when the calendar
+    // confirmed it, and the caller's own requested phrase when it did
+    // not. Neither can be reduced to a bare weekday by a model, because
+    // neither passes through one.
     const { summaryInstructions } = configFor();
-    assert.match(summaryInstructions, /Callback date: if the transcript settled on a calendar date/);
-    assert.match(summaryInstructions, /write that full date, not the bare weekday/);
-    assert.match(summaryInstructions, /never work out a date yourself/);
+    assert.doesNotMatch(summaryInstructions, /Callback date:/);
+    assert.doesNotMatch(summaryInstructions, /Callback time:/);
+    assert.doesNotMatch(summaryInstructions, /Appointment date/);
+    assert.doesNotMatch(summaryInstructions, /Appointment time/);
   });
 
   test("the summary still refuses to invent a date that was never said", () => {
+    // This rule survives Step 3 and must: prose can still invent.
     const { summaryInstructions } = configFor();
     assert.match(
       summaryInstructions,
-      /If a bare weekday or a vague phrase was all that was ever said, write exactly that/
+      /never turn it into a specific date or clock time/
     );
     assert.match(summaryInstructions, /Use ONLY what was actually said/i);
+    assert.match(summaryInstructions, /Never invent or adjust a date, a time/);
   });
 });
 
@@ -804,25 +813,30 @@ describe("corrections win", () => {
   // appointment_request: true) — only the summary was wrong, because
   // the six labels were hardcoded to callback wording regardless of
   // what the caller actually asked for.
-  test("an appointment is labelled an appointment, not a callback", () => {
+  test("appointment vs callback is now decided in code, not by a label", () => {
+    // The 2026-08-08 defect above was that the summary's six labels were
+    // hardcoded to callback wording whatever the caller asked for. The
+    // fix at the time taught the model to choose the label.
+    //
+    // F4 Step 3 takes the choice away from the model entirely. The
+    // distinction now lives in the canonical scheduling row, which picks
+    // "Appointment", "Requested appointment" or "Requested callback"
+    // from `requestedTimingIsAppointment` — the extracted intent, read
+    // before the voice engine's downgrade — and from whether the
+    // calendar actually confirmed it. A model cannot mislabel a row it
+    // does not write.
     const { summaryInstructions } = configFor();
-    assert.match(summaryInstructions, /LABEL THE DATE AND TIME FOR WHAT THEY ACTUALLY ARE/);
+    assert.doesNotMatch(summaryInstructions, /LABEL THE DATE AND TIME/);
+    assert.doesNotMatch(summaryInstructions, /the labels are/);
+    assert.doesNotMatch(summaryInstructions, /Callback number/);
+    // What survives is the semantic rule, which still governs prose: a
+    // callback must not be described as an appointment, and nothing may
+    // be called confirmed.
     assert.match(
       summaryInstructions,
-      /the labels are "Appointment date" and "Appointment time"/
+      /report it as a callback request — never as a booked or requested appointment/
     );
-    assert.match(
-      summaryInstructions,
-      /If they were asking to be RUNG BACK, the labels are "Callback date" and "Callback time"/
-    );
-    assert.match(summaryInstructions, /never label an appointment as a callback/);
-    // Decided from the caller's request, not from Remy's phrasing.
-    assert.match(
-      summaryInstructions,
-      /never from which words the receptionist happened to use/
-    );
-    // The contact-number label is intentionally unchanged.
-    assert.match(summaryInstructions, /"Callback number" keeps its name either way/);
+    assert.match(summaryInstructions, /never call it confirmed/);
   });
 
   // 2026-08-08 third live call: the owner summary read "Callback number:
@@ -832,32 +846,30 @@ describe("corrections win", () => {
   // the digits aloud — so no number appears there and "Not provided" was
   // the honest-looking wrong answer. An earlier call rendered the same
   // situation as "Number calling from", which is the convention.
-  test("a known caller ID is never summarised as 'Not provided'", () => {
+  test("the caller's number is never summarised at all now", () => {
+    // The 2026-08-08 defect: the summary read "Callback number: Not
+    // provided" while the email's own Caller ID row directly above it
+    // showed the real number. The summarising model only ever sees the
+    // transcript, and rule 7 forbids Remy from reading the digits aloud,
+    // so the label could not be answered honestly from what it could
+    // see — three paragraphs of instruction were written to work around
+    // that, and the model still had to obey them.
+    //
+    // F4 Step 3 deletes the question. The number was always in the
+    // Caller ID row; the alternate number has had its own row since
+    // PR #34. The paragraph is now told not to list details at all.
     const { summaryInstructions } = configFor();
+    assert.doesNotMatch(summaryInstructions, /Callback number/);
+    assert.doesNotMatch(summaryInstructions, /Number calling from/);
+    assert.doesNotMatch(summaryInstructions, /Write "Not provided" ONLY if/);
+    assert.doesNotMatch(summaryInstructions, /Include all seven labels/);
+    // The old convention is not merely absent — it is forbidden, so the
+    // model cannot reproduce it out of habit.
+    assert.match(summaryInstructions, /do not write "Not provided" for anything/);
+    assert.match(summaryInstructions, /DO NOT list the caller's details/);
     assert.match(
       summaryInstructions,
-      /NEVER missing merely because no digits appear in the transcript/
-    );
-    assert.match(
-      summaryInstructions,
-      /If the caller agreed to be reached on the number they are calling from, write exactly "Number calling from"/
-    );
-    // A genuinely different spoken number still wins.
-    assert.match(
-      summaryInstructions,
-      /If they gave a DIFFERENT number aloud, write that number as they gave it/
-    );
-    // "Not provided" survives for the one case that earns it.
-    assert.match(
-      summaryInstructions,
-      /Write "Not provided" ONLY if the caller explicitly refused to give a number AND declined the one they were calling from/
-    );
-    // The general "Not provided" rule for the other labels stands.
-    // Seven since Email joined the list (2026-08-08) — see below.
-    assert.match(summaryInstructions, /Include all seven labels every time/);
-    assert.match(
-      summaryInstructions,
-      /apply exactly the same way when the labels are "Appointment date" and "Appointment time"/
+      /recorded separately and shown to the owner as their own fields in this same email/
     );
   });
 
@@ -868,22 +880,28 @@ describe("corrections win", () => {
   // the code or its history treats that omission as deliberate: the
   // structured schema extracts email, the lead stores it, and the summary
   // simply never had a label for it.
-  test("the owner summary carries the caller's final email", () => {
+  test("the caller's email is a canonical row, not a summary label", () => {
+    // The 2026-08-08 defect: the summary listed six labels and no email
+    // at all, on a call where the caller had given one and corrected it
+    // twice. Email was added as a seventh label, with its own rules for
+    // written-vs-spoken form and for preferring the final correction.
+    //
+    // F4 Step 3 removes all seven. The owner reads the email from the
+    // canonical Email row added by PR #45, which renders
+    // normaliseSpokenEmail's output — the address a confirmation is
+    // actually sent to — and omits itself entirely when the normaliser
+    // refused the value. Written form and "the final correction wins"
+    // are now properties of that resolver, not instructions a model has
+    // to follow.
     const { summaryInstructions } = configFor();
-    assert.match(
-      summaryInstructions,
-      /give these seven details in this order, each written as "Label: value" and separated by full stops: Name, Email, Callback number, the date, the time, Address, Issue/
-    );
-    // Written form, not the spoken wording the transcript contains.
-    assert.match(
-      summaryInstructions,
-      /write the address in normal written form \(michaelryan@hotmail\.com\), NEVER the spoken wording/
-    );
-    // Only the final confirmed version — this call had three.
-    assert.match(
-      summaryInstructions,
-      /If the caller changed it during the call, give ONLY the final version they confirmed — never an earlier one, and never both/
-    );
+    assert.doesNotMatch(summaryInstructions, /each written as "Label: value"/);
+    assert.match(summaryInstructions, /do not write them as "Label: value"/);
+    assert.doesNotMatch(summaryInstructions, /Name, Email, Callback number/);
+    assert.doesNotMatch(summaryInstructions, /michaelryan@hotmail\.com/);
+    assert.doesNotMatch(summaryInstructions, /seven details/);
+    // Corrections still win in prose — that rule is about narrative
+    // honesty, not about a labelled field, so it stays.
+    assert.match(summaryInstructions, /report ONLY their corrected version/i);
   });
 });
 
@@ -1218,24 +1236,38 @@ describe("the real call: 'as soon as possible' became the callback date AND time
     assert.match(intent, /only if the caller actually asked to arrange the appointment on this call/);
   });
 
-  test("the owner's summary writes 'Not provided', never the urgency phrase", () => {
+  test("the summary never turns urgency into a day or a clock time", () => {
+    // PR #35's rule, and the one part of the old timing block that had
+    // to survive Step 3: prose can still say "they want 3pm" when the
+    // caller only said "as soon as possible". What is gone is the
+    // labelled-field half — there is no Callback date to write "Not
+    // provided" into, because urgency has had its own canonical row
+    // since PR #34/#35 and the scheduling row stays empty without a
+    // real timing.
     const summary = configFor().summaryInstructions;
     assert.match(summary, /URGENCY IS NOT A DATE AND NOT A TIME/);
+    assert.match(summary, /Never turn one of them into a day or a clock time/);
+    // The urgency itself is still reported — as plain narrative.
     assert.match(
       summary,
-      /NEVER write one of them as the Callback date or the Callback time/
+      /say plainly that they asked to be seen or called back as soon as possible/
     );
-    assert.match(summary, /both are "Not provided"/);
-    // The urgency itself is still reported — in the sentences, not the fields.
-    assert.match(summary, /you say in the sentences above that they asked to be called back as soon as possible/);
+    assert.doesNotMatch(summary, /both are "Not provided"/);
   });
 
-  test("the owner's summary keeps a real time window, and names the request", () => {
+  test("the summary names the request without claiming a booking", () => {
     const summary = configFor().summaryInstructions;
-    assert.match(summary, /a time window the caller gave \("the afternoon", "between 2 and 5"\) IS a time/);
     assert.match(
       summary,
       /report it as a callback request — never as a booked or requested appointment/
+    );
+    assert.match(summary, /never call it confirmed/);
+    // A real time window is still written as the caller said it — now
+    // through the general no-inventing rule rather than a "Callback
+    // time" label of its own.
+    assert.match(
+      summary,
+      /write that vague phrase exactly as they said it/
     );
   });
 });

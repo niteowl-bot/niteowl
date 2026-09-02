@@ -255,7 +255,7 @@ describe("assistant prompt — when Remy asks for a number", () => {
     assert.match(prompt, /never state a time they did not say/i);
   });
 
-  test("the summary is grounded in the transcript and marks gaps", () => {
+  test("the summary is grounded in the transcript and states no gaps", () => {
     const { summaryInstructions } = buildVoiceAssistantConfig(
       ORG,
       [],
@@ -264,8 +264,15 @@ describe("assistant prompt — when Remy asks for a number", () => {
       "+353861234567"
     );
     assert.match(summaryInstructions, /Use ONLY what was actually said/i);
-    assert.match(summaryInstructions, /write exactly "Not provided"/i);
     assert.match(summaryInstructions, /never turn it into a specific date or clock time/i);
+    // The "Not provided" convention is GONE with the labelled fields it
+    // belonged to (F4 Step 3). A gap is now simply not mentioned: the
+    // owner learns what is missing from the canonical rows, which omit
+    // themselves when there is no value, rather than from prose
+    // asserting an absence it only inferred from the transcript.
+    assert.doesNotMatch(summaryInstructions, /write exactly "Not provided"/i);
+    // …and the model is explicitly told not to carry the habit over.
+    assert.match(summaryInstructions, /do not write "Not provided" for anything/i);
     // Provider template syntax belongs to the adapter, not here.
     assert.doesNotMatch(summaryInstructions, /\{\{/);
   });
