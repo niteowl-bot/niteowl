@@ -60,9 +60,31 @@ const ANSWER_PREFIX =
 const NOT_A_NAME =
   /^(?:yes|no|yeah|yep|nope|ok|okay|sure|thanks|thank you|correct|that(?:'|’)?s right|speaking|hello|hi|hey)$/i;
 
-/** Letters only, lowercased — the comparison form for every check. */
+/** Letters only, lowercased — the comparison form for a NAME. */
 function normalise(value: string): string {
   return value.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+/**
+ * The comparison form for an email's LOCAL PART. Separators go — one
+ * name is written "john.smith", "john_smith" or "john-smith" — but
+ * DIGITS STAY.
+ *
+ * They stay because of the 2026-09-02 production call. The caller was
+ * "Jason Test", their local part was "jasontest141", and the shared
+ * normalise() above deleted the digits, collapsing the local part to
+ * exactly "jasontest" — the caller's own name. looksDerivedFromEmail
+ * then reported an EXACT match and declared a real person's real name
+ * manufactured from their own address. Building an email out of your
+ * name plus a few digits is what ordinary people do, so that false
+ * positive was aimed squarely at the normal case.
+ *
+ * Keeping the digits leaves the two strings the different lengths they
+ * honestly are, and costs nothing elsewhere: a local part with no
+ * digits normalises exactly as it did before.
+ */
+function normaliseLocalPart(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /** Restricted Levenshtein; bails out as soon as it exceeds `max`. */
@@ -99,15 +121,43 @@ function editDistance(a: string, b: string, max: number): number {
  * collide, and it is only ever consulted as a NEGATIVE guard when no
  * caller-spoken support exists (see resolveCallerName). Similarity is
  * never on its own treated as proof that a name is invalid.
+ *
+ * **Digits in the local part are significant** — see
+ * normaliseLocalPart. "Jason Test" against "jasontest141" is NOT a
+ * match, because the digits make it a longer string that the name does
+ * not account for.
+ *
+ * The deliberate trade that follows, recorded rather than glossed
+ * over: a name a model genuinely DID manufacture from a local part
+ * containing digits no longer trips this guard either. The evidence
+ * for the two cases is identical — "Jason Test" from "jasontest141"
+ * looks the same whether a person or a model wrote it — and nothing
+ * available here separates them.
+ *
+ * The costs are not symmetric, and that is what settles it. A false
+ * positive DESTROYS a correct name the extractor got right, which is
+ * what happened in production on 2026-09-02. A false negative only
+ * leaves the candidate standing, exactly as it stood before this guard
+ * existed. So this fails toward keeping the caller's own data, and the
+ * all-letter local part that PR #39 was actually built on — including
+ * the observed "erniesophura" — is untouched.
  */
 export function looksDerivedFromEmail(
   name: string | null | undefined,
   email: string | null | undefined
 ): boolean {
   const n = normalise(name ?? "");
-  const local = normalise((email ?? "").split("@")[0] ?? "");
+  const local = normaliseLocalPart((email ?? "").split("@")[0] ?? "");
   if (!n || !local || n.length < 3) return false;
   if (n === local) return true;
+  // A local part carrying DIGITS is settled by the exact test alone.
+  // The edit-distance rule below measures one thing — the vowel drift
+  // between two spellings of the same word — and an appended digit run
+  // is not that. Left in, it silently re-admits the whole defect for
+  // shorter suffixes: "johnsmith" against "johnsmith82" is two edits,
+  // so a real John Smith would be destroyed exactly as Jason Test was.
+  // The three digits in the observed call were incidental.
+  if (/\d/.test(local)) return false;
   if (n.length < 6 || local.length < 6) return false;
   return editDistance(n, local, 2) <= 2;
 }
