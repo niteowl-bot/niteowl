@@ -634,10 +634,14 @@ export async function processCallEnded(
   // provider-side analysis failure never costs the lead.
   let details = event.extracted;
   if (!details) {
-    details = await extractVoiceLeadFromTranscript(
-      event.transcript,
-      event.summary
-    );
+    // The transcript only. The provider's summary is NOT a second
+    // source: it is that provider's own model retelling the call, it
+    // passes no guard, and extracting from it manufactured canonical
+    // facts out of prose. A call with no transcript now leaves those
+    // facts unknown rather than inventing them — the call itself is
+    // still stored, and the owner is still emailed with the summary as
+    // review context.
+    details = await extractVoiceLeadFromTranscript(event.transcript);
     if (details) {
       console.log(
         "[voice] provider returned no structured data — used fallback transcript extraction:",

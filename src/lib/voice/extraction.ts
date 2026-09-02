@@ -107,15 +107,28 @@ ${transcript}
  * extraction is impossible or fails — callers treat null exactly like
  * a call the provider returned no structured data for, so a failure
  * here can never make things worse than before the fallback existed.
+ *
+ * ── The transcript is the ONLY admissible source ──────────────────
+ * This used to accept the provider's summary as a second argument and
+ * fall back to it when the transcript was missing. That made
+ * provider-generated PROSE a source of canonical business data: the
+ * summary is written by the provider's own model from the transcript,
+ * it is not compared against any guard, and it can state a name an
+ * email manufactured, an address addressIntegrity refused, or a clock
+ * time the caller never gave. Extracting from it turned those into the
+ * lead's name, email, address and requested time.
+ *
+ * The parameter is REMOVED rather than merely unused at the call site,
+ * so no future caller can reintroduce the path by passing one.
+ *
+ * A transcript is the caller's own words. A summary is a retelling of
+ * them. Only the first is evidence.
  */
 export async function extractVoiceLeadFromTranscript(
-  transcript: string | null,
-  summary: string | null
+  transcript: string | null
 ): Promise<VoiceExtractedDetails | null> {
   const openaiKey = process.env.OPENAI_API_KEY;
-  // The summary alone is a weak extraction source but far better than
-  // dropping the call when the provider omitted the transcript too.
-  const text = transcript?.trim() || summary?.trim() || "";
+  const text = transcript?.trim() || "";
   if (!openaiKey || !text) return null;
 
   try {
