@@ -968,9 +968,16 @@ export async function capturePartialLead(
    * address the caller gave, because the lead's own copy is written
    * afterwards and would arrive too late for the event.
    *
-   * The UPDATE path does not use this — it already reads the address
-   * back from the lead's metadata, which is what makes a webhook replay
-   * consistent with the first pass.
+   * BOTH paths use it. The UPDATE path used to read the address back
+   * from the lead's metadata instead, on the reasoning that doing so
+   * kept a webhook replay consistent with the first pass. That never
+   * worked: LEAD_SELECT_COLUMNS does not select `metadata`, so the
+   * expression was always undefined and the location always null.
+   *
+   * It is not restored, because it would now be wrong rather than
+   * merely dead. A re-processed call that resolves no address must send
+   * none — never the address an earlier pass happened to find. The
+   * current call is the only source, on both paths.
    */
   serviceLocation: string | null = null
 ): Promise<{ outsideBusinessHours: boolean; suggestedAlternativeIso: string | null; unavailableReason: UnavailableReason; leadId: string | null; needsReviewContactCaptured?: boolean; /** The appointment instant actually stored, so a reply can state it rather than guess. */ appointmentIso: string | null; /** Whether the lead genuinely ended up confirmed. */ booked: boolean; /** The customer named a date we will not guess at — the reply must ASK. Never set by an availability, calendar or lookup outcome; only by the datetime parser. */ needsClarification: boolean; /** The date we understood, when only the time is missing. Null when the date itself is what needs clarifying. */ clarificationDate: string | null }> {
@@ -1372,12 +1379,26 @@ export async function capturePartialLead(
             service: updatePayload.service_needed,
             name: updatePayload.name,
             email: mergedEmail,
-            location:
-              typeof (existing as { metadata?: Record<string, unknown> }).metadata
-                ?.service_address === "string"
-                ? ((existing as { metadata?: Record<string, unknown> }).metadata!
-                    .service_address as string)
-                : null,
+            // The SAME canonical current-call address the INSERT path
+            // uses, and for the same reason: one resolved value feeds
+            // the calendar event, the lead's metadata, the owner email
+            // and the dashboard, so no two of them can disagree.
+            //
+            // This used to read `existing.metadata.service_address`.
+            // That expression could never return an address:
+            // LEAD_SELECT_COLUMNS does not select `metadata`, and all
+            // three layers of resolveExistingLead select exactly those
+            // columns — so `existing.metadata` was always undefined,
+            // the typeof test always false, and the location always
+            // null. A valid current address was dropped on this path
+            // even when the call had one.
+            //
+            // Reading a stored address here would ALSO be wrong now,
+            // not merely dead: a re-processed call that resolves no
+            // address must send none, never the earlier one. Absence
+            // stays absence — the rule PR #46 established for the
+            // persisted copy, applied to the event.
+            location: serviceLocation,
           }
         );
         confirmedBooking = settled.status === "booked";
