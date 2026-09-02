@@ -618,6 +618,27 @@ interface CallSummaryParams {
   callbackUrgency?: string | null;
   callerName: string | null;
   /**
+   * The caller's email address as RESOLVED by the voice engine
+   * (normaliseSpokenEmail, applied in voice/calls.ts toExtractedLead)
+   * and stored on the lead — the same value a booking confirmation is
+   * actually sent to.
+   *
+   * Exactly the reason callerName reads the guarded name rather than
+   * details.name: until this row existed, the ONLY email address the
+   * owner could see was the one the summary model wrote into its own
+   * paragraph, from the transcript, with no sight of the normaliser's
+   * output. So the address the owner read and the address the system
+   * used could disagree, and a candidate the normaliser REJECTED as
+   * unusable — meaning no confirmation email was ever sent — still
+   * appeared in the paragraph as though it had been accepted.
+   *
+   * Omitted when there is no canonical address, which is the whole
+   * point: a rejected or absent email must render no row at all rather
+   * than fall back to the model's reading of it. Optional, so callers
+   * that pass nothing render exactly as before.
+   */
+  callerEmail?: string | null;
+  /**
    * Where the work happens, as RESOLVED by the voice engine
    * (voice/addressIntegrity.ts) and stored on the lead — not the
    * summary model's independent reading of the same call.
@@ -675,6 +696,7 @@ export async function sendCallSummaryEmail(
     callerPhone,
     alternatePhone,
     callerName,
+    callerEmail,
     startedAt,
     durationSeconds,
     summary,
@@ -706,6 +728,12 @@ export async function sendCallSummaryEmail(
   // raw.
   const safeCallbackUrgency = callbackUrgency?.trim()
     ? escapeHtml(callbackUrgency.trim())
+    : null;
+  // The resolved, stored email address — never the summary model's
+  // reading of it. Escaped like every other caller-supplied value:
+  // detailsBlock interpolates raw.
+  const safeCallerEmail = callerEmail?.trim()
+    ? escapeHtml(callerEmail.trim())
     : null;
   // The resolved, stored address. Escaped like every other
   // caller-supplied value: detailsBlock interpolates raw.
@@ -749,6 +777,12 @@ export async function sendCallSummaryEmail(
           // both are present.
           safePhone ? ["Caller ID", safePhone] : ["Caller ID", "Withheld"],
           safeAlternatePhone ? ["Alternate number", safeAlternatePhone] : null,
+          // The address a confirmation would actually be sent to, so
+          // the owner reads the value the system accepted rather than
+          // the summary paragraph's separate reading of the call. No
+          // row at all when there is none: an address the normaliser
+          // refused is not shown as though it had been kept.
+          safeCallerEmail ? ["Email", safeCallerEmail] : null,
           // Only present when the caller gave urgency INSTEAD of a
           // callback time. Labelled as urgency, never as a time, so it
           // cannot be read as a slot anyone can be rung at.

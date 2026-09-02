@@ -917,6 +917,14 @@ export async function processCallEnded(
     // guard — and the owner email is the surface the 2026-08-31 defect
     // was actually seen on, so the two must not be able to disagree.
     callerName: extracted?.name ?? null,
+    // The RESOLVED email — the address capturePartialLead persisted and
+    // that a booking confirmation is actually sent to (normaliseSpokenEmail,
+    // applied in toExtractedLead). Reading details.email here would route
+    // the owner email around that normaliser exactly as reading
+    // details.name would route it around the name guard. Null when the
+    // spoken address could not be made usable, and then no row is
+    // rendered: the owner is not shown an address nothing was sent to.
+    callerEmail: extracted?.email ?? null,
     // The RESOLVED address, the same value the lead and the calendar
     // event carry. The summary paragraph keeps its own independently
     // generated "Address:" line; this row is the definitive one
