@@ -541,3 +541,158 @@ describe("the real path — an email cannot manufacture a caller", () => {
     );
   });
 });
+
+// ── The 2026-09-02 digit-suffix regression ─────────────────────────
+// A SECOND way the caller name was lost, and the opposite failure to
+// the Ernesto one above: there the model INVENTED a name and the guard
+// had to reject it; here the model got the name RIGHT and the guard
+// destroyed it.
+//
+// The live call (Vapi 01a06124-b3e9-744c-9a32-b6a9ea8f4ddc, 2026-09-02):
+// the caller was "Jason Test" on jasontest141@gmail.com. Deepgram
+// rendered the isolated name turn as "JSON test" — it transcribed the
+// same speaker's "jason" correctly seconds later inside the spoken
+// email, so this is the formatting layer picking the technical token,
+// not an acoustic failure. Vapi's structuredData was CORRECT
+// ("Jason Test"). The lead still persisted "JSON test", because:
+//
+//   normalise("jasontest141") stripped the digits -> "jasontest"
+//   normalise("Jason Test")                       -> "jasontest"
+//   => looksDerivedFromEmail reported an EXACT match
+//   => namesAgree("Jason Test","JSON test") was false, the transcript
+//      having mangled the only evidence that would have vindicated it
+//   => rule 2 fired and took the mangled transcript value.
+//
+// These use the REAL production values throughout.
+
+const JASON_TRANSCRIPT = T(
+  "AI: Dot, thanks for calling night owl test. This is Remy, your AI receptionist. How can I help you today?",
+  "User: Hi. I have a leaking radiator, and I need someone as soon as possible.",
+  "AI: Of course, I'll mark that as urgent. Is there a particular day or time window that would suit you?",
+  "User: It's urgent, but I don't have a particular day or time. So as soon as possible is fine.",
+  "AI: No problem. I'll note that and ask the team to ring you as early as they can. May I have your name, please?",
+  "User: JSON test.",
+  "AI: Thanks, Jason. May I have your email address, please?",
+  "User: Yeah. It's jason test 1 4 1 at g mail dot com.",
+  "AI: I've got that as JSON test 1 4 1, at g mail dot com. Is that right?",
+  "User: Yeah.",
+  "AI: What's the address where the work is needed?",
+  "User: 81 Oakland Drive.",
+  "AI: Thank you. I can use the number you're calling from. Is that the best number to reach you on?",
+  "User: Yeah."
+);
+
+describe("looksDerivedFromEmail — a digit suffix is not the same string", () => {
+  test("THE OBSERVED SHAPE — a real name plus digits is NOT derived", () => {
+    assert.equal(
+      looksDerivedFromEmail("Jason Test", "jasontest141@gmail.com"),
+      false
+    );
+  });
+
+  test("ordinary name-plus-digits addresses are all safe", () => {
+    assert.equal(looksDerivedFromEmail("John Smith", "johnsmith82@gmail.com"), false);
+    assert.equal(looksDerivedFromEmail("Mary O'Brien", "maryobrien1990@gmail.com"), false);
+    assert.equal(looksDerivedFromEmail("Ernesto", "ernesto123@gmail.com"), false);
+  });
+
+  test("separators are still not significant — only digits are", () => {
+    // A local part written with a separator is ONE name, and must stay
+    // caught: this is the PR #39 shape with a dot in it.
+    assert.equal(looksDerivedFromEmail("James Hartley", "james.hartley@gmail.com"), true);
+    assert.equal(looksDerivedFromEmail("James Hartley", "james_hartley@gmail.com"), true);
+    assert.equal(looksDerivedFromEmail("James Hartley", "james-hartley@gmail.com"), true);
+  });
+
+  test("PR #39's own cases are untouched by the digit rule", () => {
+    // No digits anywhere in these local parts, so they normalise
+    // exactly as they did before and must behave exactly as before.
+    assert.equal(looksDerivedFromEmail("James Hartley", "jameshartley@gmail.com"), true);
+    assert.equal(looksDerivedFromEmail("Ernie Sephora", "erniesophura@gmail.com"), true);
+    assert.equal(looksDerivedFromEmail("Ernesto", "erniesophura@gmail.com"), false);
+  });
+
+  test("distinct names still never collapse into one another", () => {
+    // The digit change must not have widened identity matching.
+    assert.equal(looksDerivedFromEmail("Jason Test", "brianmurphy141@gmail.com"), false);
+    assert.equal(looksDerivedFromEmail("John Smith", "johnsmyth141@gmail.com"), false);
+    assert.equal(looksDerivedFromEmail("Dave", "dan1@gmail.com"), false);
+  });
+});
+
+describe("resolveCallerName — the correct name survives a digit-suffixed email", () => {
+  test("THE OBSERVED CALL — the model's correct name is kept", () => {
+    assert.equal(
+      resolveCallerName("Jason Test", "jasontest141@gmail.com", JASON_TRANSCRIPT),
+      "Jason Test"
+    );
+  });
+
+  test("a caller CORRECTING their name still wins, digits or not", () => {
+    // Precedence unchanged: the candidate stands on a plain
+    // disagreement, so a later correction is never overridden here.
+    assert.equal(
+      resolveCallerName(
+        "Brian",
+        "brian141@gmail.com",
+        T("AI: Can I take your name?", "User: Bryan. B R Y A N.")
+      ),
+      "Brian"
+    );
+  });
+
+  test("a manufactured name with NO digits is still rejected", () => {
+    // PR #39 rule 4, unchanged: no spoken support and the candidate
+    // looks built from the address.
+    assert.equal(
+      resolveCallerName("James Hartley", "jameshartley@gmail.com", null),
+      null
+    );
+  });
+});
+
+describe("the real path — a correct name survives to the lead and the owner", () => {
+  let stubs;
+  beforeEach(() => {
+    stubs = installStubs();
+  });
+  afterEach(() => stubs.restore());
+
+  test("THE OBSERVED CALL — the lead and the owner email both say Jason Test", async () => {
+    await processCallEnded(
+      await admin(),
+      ORG_ID,
+      nameCall(
+        "cccccccc-3333-4333-8333-cccccccccccc",
+        JASON_TRANSCRIPT,
+        {
+          // The real structuredData Vapi returned for this call.
+          intent: "new_booking",
+          name: "Jason Test",
+          email: "jasontest141@gmail.com",
+          service: "leaking radiator",
+          service_address: "81 Oakland Drive",
+          preferred_datetime: null,
+          urgent: true,
+        }
+      )
+    );
+
+    assert.equal(stubs.inserts[0].name, "Jason Test", "the persisted lead name");
+    assert.equal(
+      stubs.inserts[0].email,
+      "jasontest141@gmail.com",
+      "the email is untouched by the name guard"
+    );
+    const html = stubs.summaryHtml();
+    assert.equal(
+      detailsRow(html, "Caller"),
+      "Jason Test",
+      "the owner-email Caller field"
+    );
+    assert.ok(
+      !/JSON test/.test(detailsRow(html, "Caller") ?? ""),
+      "the mangled transcript rendering must never become the Caller"
+    );
+  });
+});
