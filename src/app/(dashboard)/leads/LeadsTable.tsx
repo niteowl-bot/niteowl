@@ -141,7 +141,10 @@ function SummaryPreview({ text }: { text: string | null | undefined }) {
 
 // ── EditPanel (slide-out) ────────────────────────────────────────
 
-function EditPanel({
+// Exported for tests only: the drawer is reachable in the app solely by
+// clicking a row, so a rendering test cannot get to it otherwise. The
+// component itself, and how LeadsTable uses it, are unchanged.
+export function EditPanel({
   lead,
   timezone,
   onClose,
@@ -384,6 +387,23 @@ function EditPanel({
                 <span className="text-slate-400">Email</span>
                 <span className="text-slate-200 break-all">{valueOrDash(lead.email)}</span>
               </div>
+              {/* Where the work happens, for an on-site trade. The
+                  RESOLVED value stored by the voice engine — the same
+                  one the owner's call-summary email and the calendar
+                  event carry (voice/addressIntegrity.ts). Read-only and
+                  metadata-driven, exactly like the alternate number
+                  above: this surface displays the canonical address, it
+                  never recomputes or repairs one. Absent when address
+                  integrity refused the value, and then nothing is shown
+                  rather than an older or raw reading of it. */}
+              {metadataString(lead, "service_address") && (
+                <div className="flex justify-between gap-4">
+                  <span className="shrink-0 text-slate-400">Service address</span>
+                  <span className="text-right text-slate-200">
+                    {metadataString(lead, "service_address")}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-slate-400">Source</span>
                 <span className="capitalize text-slate-200">{valueOrDash(lead.source)}</span>
