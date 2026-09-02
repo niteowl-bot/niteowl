@@ -1511,7 +1511,22 @@ export async function capturePartialLead(
       name: extracted.name,
       email: extracted.email,
       phone: extracted.phone,
-      service_needed: extracted.service ?? userMessage,
+      // The extracted service, or nothing. NOT the message it was
+      // extracted from.
+      //
+      // `userMessage` is the customer's typed message on chat, and on
+      // voice it is the PROVIDER'S SUMMARY — model-written prose. Using
+      // either as the service put a whole message into a canonical
+      // field that means "what this customer wants", and on voice it
+      // let provider prose become the service that reaches the calendar
+      // event's title, both directly below and through the UPDATE
+      // path's shouldUpdateService.
+      //
+      // Null is the honest value for "no service was established", and
+      // the surfaces already expect it: the dashboard renders
+      // `service_needed || message`, so the owner still reads the
+      // enquiry text where there is no service to show.
+      service_needed: extracted.service,
       preferred_datetime: extracted.preferred_datetime,
       appointment_datetime: resolvedIso,
       message: userMessage,
@@ -1536,7 +1551,13 @@ export async function capturePartialLead(
         inserted.id,
         resolvedIso,
         {
-          service: extracted.service ?? userMessage,
+          // Same rule as service_needed above: the calendar event's
+          // title takes the extracted service or nothing. summarise()
+          // in calendarSync.ts already has the neutral fallback —
+          // "Appointment" — so an event with no established service is
+          // titled plainly instead of carrying a paragraph of provider
+          // prose into the engineer's diary.
+          service: extracted.service,
           name: extracted.name,
           email: extracted.email,
           // Null for chat and the widget, exactly as before. A phone
@@ -1562,7 +1583,13 @@ export async function capturePartialLead(
           businessOwnerEmail: ownerInfo?.email ?? null,
           appointmentDatetime: resolvedIso ?? "",
           bookingReference: (inserted?.id ?? "").slice(0, 8).toUpperCase(),
-          serviceNeeded: extracted.service ?? userMessage,
+          // The third instance of the same fallback, and the only one
+          // the CUSTOMER reads. On voice this could put the provider's
+          // summary paragraph into the confirmation email as the
+          // service the customer had booked. sendBookingConfirmationEmails
+          // omits the row entirely when this is null, so absence is
+          // already rendered correctly.
+          serviceNeeded: extracted.service,
           manageToken,
           timezone: ownerInfo?.timezone ?? null,
         }).catch((err) =>
