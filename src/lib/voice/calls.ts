@@ -344,6 +344,33 @@ function resolveAlternatePhone(
  * flag uses) — read-merged so it can never clobber a flag another
  * writer set. Voice-only and non-fatal: a failure here must not fail
  * the call's processing.
+ *
+ * ── Per-call keys are AUTHORITATIVE, not additive ─────────────────
+ * The four keys in the `perCall` map below describe THIS call. Each used
+ * to be written only when its new value was truthy, which meant this
+ * function could say "this call found an address" but never "this call
+ * found none" — so a second write to the same row left the earlier
+ * value standing as though it belonged to the later call.
+ *
+ * That is reachable, though not by the route it first appears. A voice
+ * lead is never merged across calls: leadCapture's resolveExistingLead
+ * returns null outright for source "voice", so two calls from the same
+ * handset get two separate leads and cannot contaminate each other.
+ * The row is reused when the SAME call is processed twice — a replay.
+ * processCallEnded throws if the owner's summary email fails,
+ * deliberately, to leave the event replayable; that throw happens AFTER
+ * this function has already written. The replay re-runs the identical
+ * code path, and where the provider returned no structured data the
+ * extraction comes from the transcript fallback — a fresh model call,
+ * which can legitimately resolve less than the first attempt did.
+ *
+ * Each per-call key is therefore set from this call's resolved value,
+ * or REMOVED when this call resolved none. A missing current fact must
+ * never resurrect an earlier one. Keys this function does not own —
+ * the needs-review notification flags above all — are untouched, which
+ * is why the read-merge stays.
+ *
+ * appointment_request is deliberately NOT included; see its comment.
  */
 async function recordLeadCallDetails(
   admin: AdminClient,
@@ -362,15 +389,12 @@ async function recordLeadCallDetails(
    */
   isAppointmentRequest = false
 ): Promise<void> {
-  if (
-    !callerPhone &&
-    !alternatePhone &&
-    !serviceAddress &&
-    !callbackUrgency &&
-    !isAppointmentRequest
-  ) {
-    return;
-  }
+  // No early return on "this call resolved nothing". That shortcut was
+  // correct only while writes were additive: a call that resolves no
+  // address is exactly the call that has to CLEAR a stale one, and
+  // returning here would skip that. Whether anything actually needs
+  // writing is decided below, after reading the row, so a call with
+  // nothing to say still issues no UPDATE.
 
   try {
     const { data } = await admin
@@ -384,14 +408,50 @@ async function recordLeadCallDetails(
     const holdsAppointment =
       isAppointmentRequest && Boolean(data?.appointment_datetime);
 
-    const metadata = {
-      ...((data?.metadata as Record<string, unknown>) ?? {}),
-      ...(callerPhone ? { caller_id: callerPhone } : {}),
-      ...(alternatePhone ? { alternate_phone: alternatePhone } : {}),
-      ...(serviceAddress ? { service_address: serviceAddress } : {}),
-      ...(callbackUrgency ? { callback_urgency: callbackUrgency } : {}),
-      ...(holdsAppointment ? { appointment_request: true } : {}),
+    const existing = (data?.metadata as Record<string, unknown>) ?? {};
+    // Read-merged, so every key this function does not own survives —
+    // the needs-review notification flags in particular.
+    const metadata: Record<string, unknown> = { ...existing };
+
+    // This call's own facts. Set when resolved, removed when not.
+    const perCall: Record<string, string | null> = {
+      caller_id: callerPhone,
+      alternate_phone: alternatePhone,
+      service_address: serviceAddress,
+      callback_urgency: callbackUrgency,
     };
+
+    let changed = false;
+    for (const [key, value] of Object.entries(perCall)) {
+      if (value) {
+        if (existing[key] !== value) changed = true;
+        metadata[key] = value;
+      } else if (key in existing) {
+        // The clear. This is the whole fix: absence is recorded as
+        // absence rather than left to read as the previous value.
+        delete metadata[key];
+        changed = true;
+      }
+    }
+
+    // NOT cleared when false, deliberately, and this is the one place
+    // the rule above does not apply. appointment_request is a CAPACITY
+    // marker, not a reported fact: it tells the availability count that
+    // this row occupies a slot. The costs are asymmetric — leaving it
+    // set on a row that no longer holds an appointment slightly
+    // over-counts capacity, while wrongly clearing it frees a slot the
+    // lead really does hold and invites a double booking. Clearing it
+    // would also change booking behaviour, which this fix does not
+    // touch. It stays additive until capacity is looked at on its own.
+    if (holdsAppointment && existing.appointment_request !== true) {
+      metadata.appointment_request = true;
+      changed = true;
+    }
+
+    // Nothing to say and nothing stale to remove — the case the old
+    // early return covered, now decided from the row rather than
+    // guessed from the arguments.
+    if (!changed) return;
 
     const { error } = await admin
       .from("leads")
