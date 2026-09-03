@@ -110,12 +110,42 @@ function extractCallContext(message: UnknownRecord): {
  * the provider (ultimately from an LLM listening to an untrusted
  * caller), so every field is type-checked — mirrors how the widget
  * route validates extractLeadData output before trusting it.
+ *
+ * ── An EMPTY envelope is not an answer ────────────────────────────
+ *
+ * This used to return a fully-formed all-null object for ANY non-array
+ * object, `{}` included. That made "the provider sent an object"
+ * indistinguishable from "the provider told us something", and
+ * `calls.ts` selects the transcript fallback on `if (!details)` — so a
+ * syntactically valid but semantically empty payload SUPPRESSED the
+ * fallback. The caller's email, service, requested time and urgency
+ * were then recorded as absent on a call whose transcript held all
+ * four, and `extracted.service` being null also closed the booking
+ * gate. `name` and `service_address` survived only because their own
+ * guards read the transcript as evidence in their own right.
+ *
+ * `{}` is not an exotic shape either: the schema we send declares no
+ * `required` fields and types every field as a plain string, so a
+ * model with nothing to report must OMIT each one — `{}` is that
+ * schema's own correct way to say "nothing".
+ *
+ * So emptiness is decided HERE, where the payload is interpreted and
+ * next to the `asString` normalisation it completes, rather than at
+ * each consumer. Returning null means exactly what it has always
+ * meant to every caller — the provider supplied no structured data —
+ * and the existing `if (!details)` needs no change.
+ *
+ * This decides only WHETHER the fallback producer runs. It does not
+ * merge the two producers: a PARTIALLY populated object is still
+ * substantive, still authoritative, and still skips the fallback
+ * entirely. Field-by-field completion is a separate architectural
+ * question and is deliberately not answered here.
  */
 function parseStructuredDetails(value: unknown): VoiceExtractedDetails | null {
   const data = asRecord(value);
   if (!data) return null;
 
-  return {
+  const details: VoiceExtractedDetails = {
     intent: asString(data.intent),
     name: asString(data.name),
     email: asString(data.email),
@@ -125,6 +155,25 @@ function parseStructuredDetails(value: unknown): VoiceExtractedDetails | null {
     service_address: asString(data.service_address),
     urgent: data.urgent === true,
   };
+
+  // Every supported field, not just the ones that happen to be strings
+  // today: a field added above and forgotten here would silently stop
+  // counting as substance.
+  const hasSubstance =
+    details.intent !== null ||
+    details.name !== null ||
+    details.email !== null ||
+    details.phone !== null ||
+    details.service !== null ||
+    details.preferred_datetime !== null ||
+    details.service_address !== null ||
+    // URGENCY IS INFORMATION. `urgent: true` on its own is a real fact
+    // the caller supplied and must never collapse to "empty" — losing
+    // it is the PR #35 failure again. `false` cannot count, because
+    // after normalisation it is indistinguishable from absent.
+    details.urgent;
+
+  return hasSubstance ? details : null;
 }
 
 /**
