@@ -364,7 +364,7 @@ describe("the owner reads every fact from a canonical row", () => {
       admin(),
       ORG_ID,
       call("dddddddd-4444-4444-8444-dddddddddddd", {
-        transcript: T("AI: When?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When?", "User: Thursday 20 August at 3 PM."),
       })
     );
 
@@ -386,7 +386,7 @@ describe("the owner reads every fact from a canonical row", () => {
       admin(),
       ORG_ID,
       call("eeeeeeee-5555-4555-8555-eeeeeeeeeeee", {
-        transcript: T("AI: When?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When?", "User: Thursday 20 August at 3 PM."),
       })
     );
 
@@ -404,7 +404,7 @@ describe("the owner reads every fact from a canonical row", () => {
       admin(),
       ORG_ID,
       call("ffffffff-6666-4666-8666-ffffffffffff", {
-        transcript: T("AI: When?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When?", "User: Thursday 20 August at 3 PM."),
       })
     );
     assert.equal(row(stubs.html(), "Appointment"), "Thursday, 20 August 2026 at 15:00");
@@ -525,6 +525,8 @@ describe("the owner reads every fact from a canonical row", () => {
       ORG_ID,
       call("66666666-cccc-4ccc-8ccc-666666666666", {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: Can I take your name?",
           "User: Ernesto.",
           "AI: And your email?",
@@ -575,7 +577,7 @@ describe("the owner reads every fact from a canonical row", () => {
       admin(),
       ORG_ID,
       call("88888888-eeee-4eee-8eee-888888888888", {
-        transcript: T("AI: Address?", "User: 81 Oakland Drive.", "AI: When?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: Address?", "User: 81 Oakland Drive.", "AI: When?", "User: Thursday 20 August at 3 PM."),
         extracted: { service_address: "81 Oakland Drive" },
       })
     );
