@@ -4,7 +4,7 @@ All notable changes to NiteOwl will be documented in this file.
 
 ## 2026-09-03 (Architecture Part VII — the intelligence layer says more than it can currently do)
 
-**Documentation only.** No code, schema, migration, RLS, flag, prompt, provider or environment change. Two files: `docs/ARCHITECTURE.md` (new §53–§61, plus M15–M19 in §19 and updates to §28, §29, §30, §31 and the header) and `PROJECT_CONTEXT.md` (canonical-set line extended to Parts I–VII). No new document was created — a seventh review producing a seventh document is the failure mode §31 already fired twice on. **NOW: none.**
+**Documentation only.** No code, schema, migration, RLS, flag, prompt, provider or environment change. Four files: `docs/ARCHITECTURE.md` (new §53–§61, plus M15–M19 in §19 and updates to §28, §29, §30, §31 and the header), `PROJECT_CONTEXT.md` (canonical-set line extended to Parts I–VII), `CHANGELOG.md` (this entry) and `CHECKLIST.md` (architecture-map signpost extended to Part VII). No new document was created — a seventh review producing a seventh document is the failure mode §31 already fired twice on. **NOW: none.**
 
 The seventh review asked for cross-product measured outcome learning and proprietary decision intelligence above Business Memory and orchestration. **Sixteen of its twenty-four sections were already answered** by Parts I–VI, several more completely than they were asked — five causal tiers rather than four, `unattributed` where the brief had no equivalent, an outcome-provenance rule it did not think to require. Three needed placing rather than building: the contribution map for the eight products, the outcome-chain model, and where differential privacy and federated learning sit behind §27's existing gates.
 
