@@ -67,8 +67,10 @@ phone — ONLY an additional number the caller spoke aloud to be reached on
   (e.g. "call me back on the office line instead"), digits as spoken. The
   number they are calling from is already known and recorded separately —
   never guess or reconstruct it. Null if they stated no number.
-service — short summary of what the caller wants, e.g. "Boiler repair",
-  "Product demo". Only when intent is new_booking; otherwise null.
+service — what the caller asked for, EXACTLY in their own words — never
+  expand, rename, relabel, or infer a more specific service than they
+  actually said, whether or not it sounds like a service the business
+  offers. Only when intent is new_booking; otherwise null.
 preferred_datetime — the caller's requested day and time EXACTLY as they
   said it (e.g. "tomorrow at 2pm", "the twelfth of July at 10 AM",
   "Thursday between 2 and 5"). Do NOT convert to a calendar date. If the
