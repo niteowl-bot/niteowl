@@ -723,7 +723,7 @@ describe("the provider summary is narrative, never a fact source", () => {
       admin(),
       ORG_ID,
       call("55555555-bbbb-4bbb-8bbb-555555555555", {
-        transcript: T("AI: Address?", "User: 81 Oakland Drive.", "AI: When?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: Address?", "User: 81 Oakland Drive.", "AI: When?", "User: Thursday 20 August at 3 PM."),
         summary: CONTRADICTING_SUMMARY,
         extracted: {
           intent: "new_booking",

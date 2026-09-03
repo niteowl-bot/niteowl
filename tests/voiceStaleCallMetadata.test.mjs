@@ -678,8 +678,13 @@ describe("a per-call fact never outlives its call", () => {
         extracted: { name: null },
       })
     );
-    // caller_id is the one fact such a call still carries.
-    assert.deepEqual(Object.keys(stubs.meta()), ["caller_id"]);
-    assert.equal(stubs.metadataPatches().length, 1);
+    // F5: the fixture's `burst pipe` is not in this caller's transcript,
+    // so resolveRequestedService refuses it. With no name, no timing and
+    // no urgency either, the call establishes nothing substantive — and
+    // no lead is the correct outcome, not a lead carrying a service the
+    // caller never asked for. The assertion this test exists for is
+    // unchanged and now holds a fortiori: no metadata write occurs.
+    assert.equal(stubs.all().length, 0, "nothing substantive was established, so no lead");
+    assert.equal(stubs.metadataPatches().length, 0);
   });
 });

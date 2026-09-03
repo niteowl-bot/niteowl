@@ -18,6 +18,7 @@ import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
 import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
 import { resolveCallerName } from "@/lib/voice/nameIntegrity";
 import { resolveServiceAddress } from "@/lib/voice/addressIntegrity";
+import { resolveRequestedService } from "@/lib/voice/serviceIntegrity";
 import {
   resolveCallbackUrgency,
   sanitisePreferredDatetime,
@@ -279,7 +280,16 @@ function toExtractedLead(
     // it survives normalisation, because an unusable number here would
     // become the lead's primary phone and its merge key.
     phone: callerPhone ?? normaliseSpokenNumber(details.phone),
-    service: details.service,
+    // A model asked for a label returns one, and nothing checked that
+    // the label came from the caller. "radiator repair" on a call where
+    // the caller only said the radiator was leaking would have reached
+    // the lead, the owner's email, the Knowledge Base gate, the diary
+    // entry's title and the CUSTOMER's confirmation. Resolved HERE, at
+    // the one convergence point both extraction paths pass through, so
+    // every consumer reads the same decision. Constrain-only: it keeps
+    // the candidate, reduces it to the caller's own words, or refuses
+    // it — it never invents one. See serviceIntegrity.ts.
+    service: resolveRequestedService(details.service, transcript),
     // "As soon as possible" is urgency, not a time (see callbackTiming.ts).
     // It must never become the lead's preferred_datetime: it is not a
     // slot anyone can be booked into and it is not a time anyone can be

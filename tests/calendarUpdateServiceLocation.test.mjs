@@ -311,6 +311,8 @@ async function reprocess({ firstAddress = OLD_ADDRESS, second }) {
       ORG_ID,
       call(CALL_ID, {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address where the work is needed?",
           `User: ${firstAddress}.`,
           "AI: When suits?",
@@ -352,6 +354,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const r = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: 81 Oakland Drive.",
           "AI: When suits?",
@@ -373,6 +377,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const r = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: 12 Meadow Court, Galway.",
           "AI: When suits?",
@@ -402,6 +408,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const r = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: A c 1 Oakland Drive.",
           "AI: When suits?",
@@ -425,7 +433,7 @@ describe("the calendar event takes the canonical current-call address", () => {
   test("C. no address on this call sends no location", async () => {
     const r = await reprocess({
       second: {
-        transcript: T("AI: When suits?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When suits?", "User: Thursday 20 August at 3 PM."),
         extracted: { service_address: null },
       },
     });
@@ -456,6 +464,8 @@ describe("the calendar event takes the canonical current-call address", () => {
       const r = await reprocess({
         second: {
           transcript: T(
+            "AI: How can I help?",
+            "User: I need a boiler service.",
             "AI: What's the address?",
             `User: ${address}.`,
             "AI: When suits?",
@@ -478,6 +488,8 @@ describe("the calendar event takes the canonical current-call address", () => {
         ORG_ID,
         call("bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb", {
           transcript: T(
+            "AI: How can I help?",
+            "User: I need a boiler service.",
             "AI: What's the address?",
             "User: 81 Oakland Drive.",
             "AI: When suits?",
@@ -537,6 +549,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const withAddress = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: 81 Oakland Drive.",
           "AI: When suits?",
@@ -547,7 +561,7 @@ describe("the calendar event takes the canonical current-call address", () => {
     });
     const without = await reprocess({
       second: {
-        transcript: T("AI: When suits?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When suits?", "User: Thursday 20 August at 3 PM."),
         extracted: { service_address: null },
       },
     });
@@ -568,6 +582,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const withAddress = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: 81 Oakland Drive.",
           "AI: When suits?",
@@ -578,7 +594,7 @@ describe("the calendar event takes the canonical current-call address", () => {
     });
     const without = await reprocess({
       second: {
-        transcript: T("AI: When suits?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When suits?", "User: Thursday 20 August at 3 PM."),
         extracted: { service_address: null },
       },
     });
@@ -596,6 +612,8 @@ describe("the calendar event takes the canonical current-call address", () => {
     const withAddress = await reprocess({
       second: {
         transcript: T(
+          "AI: How can I help?",
+          "User: I need a boiler service.",
           "AI: What's the address?",
           "User: 81 Oakland Drive.",
           "AI: When suits?",
@@ -606,7 +624,7 @@ describe("the calendar event takes the canonical current-call address", () => {
     });
     const without = await reprocess({
       second: {
-        transcript: T("AI: When suits?", "User: Thursday 20 August at 3 PM."),
+        transcript: T("AI: How can I help?", "User: I need a boiler service.", "AI: When suits?", "User: Thursday 20 August at 3 PM."),
         extracted: { service_address: null },
       },
     });
