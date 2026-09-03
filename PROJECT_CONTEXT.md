@@ -13,17 +13,26 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–VI.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–VII.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
-  sovereignty and diagnostic intelligence, Part VI the Business Problem Case. **§21 is
-  the single canonical architecture diagram.**
+  sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
+  cross-product outcome learning and decision intelligence. **§21 is the single canonical
+  architecture diagram**, and Part VII does not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
 All of it is **documentation only**; nothing in either document has been implemented, and
 neither asks for implementation now. The canonical `DecisionRecord` is defined once, at
 `docs/ARCHITECTURE.md` §20.7.
+
+Part VII (added 2026-09-03) found sixteen of its twenty-four requirements already answered and
+added five findings, **M15–M19** — as-of evidence references so a decision can be re-judged on
+what was known at the time; an evaluation denominator that keeps rejected and unmeasured
+recommendations in the count; `action_status: withheld` so a comparison group can ever exist;
+`evidence_scope` so a claim says whose experience supports it; and rebuild-without deletion so
+the erasure promise over derived artefacts is keepable. All seven of its items are **PREPARE**
+(P26–P32). **NOW: none** — no code, schema, flag, prompt or provider change.
 
 ---
 

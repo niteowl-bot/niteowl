@@ -31,6 +31,15 @@ lacked: **an owner reporting a problem in their own words and asking NiteOwl to 
 it.** It adds two findings, **M13–M14**, one canonical event and one thin projection, and
 redefines none of the existing contracts.
 
+**Part VII** (§53–§61, added 2026-09-03) is the seventh review — *cross-product outcome
+learning and proprietary decision intelligence*. Sixteen of its twenty-four requirements were
+already answered by Parts I–VI, three needed placing rather than building, and five were real:
+**M15–M19**. Each is a gap between something this document already *says* and something it can
+actually *do* — reconstructing what was known at decision time, measuring recommendation
+quality in aggregate, recording the decision *not* to act, saying whose experience supports a
+claim, and keeping §27's promise about derived artefacts. It creates no layer, no document and
+no service, and does not redraw §21.
+
 Governing principle for every recommendation below:
 
 > **MINIMUM CHANGE NOW, MAXIMUM COMPATIBILITY LATER.**
@@ -1642,6 +1651,78 @@ problem"* is not a diagnostic system.
 
 ---
 
+### M15 — Nothing preserves what was knowable at decision time
+
+*Added by Part VII (§54), 2026-09-03. **Stated in full at §54**, which is not repeated here.*
+
+§20.7 says a decision record captures *"what was known at the time"*. Nothing makes that true.
+`evidence_refs` are references (P11) and resolve to an entity's **current** value; `leads` is
+destructively overwritten (M1); Business Operating State is recomputed per query and never
+stored (§20.4). Both of those designs are correct and neither should be reversed — the
+consequence is that *"given only what NiteOwl knew at 10:00, was this reasonable?"* is
+unanswerable, and every retrospective judgement silently reads information that did not exist
+when the decision was made. A learner trained that way relies on information it will not have
+next time: offline evaluation looks excellent, the live system underperforms it, and there is
+no defect anywhere to find. Corrected by an `observed_at` on every evidence reference, by
+stating that §20.7's input whitelist is a **temporal** control as well as a privacy one, and by
+the evaluation boundary in §54.2.
+
+### M16 — A recommendation can be graded; recommendation quality cannot be measured
+
+*Added by Part VII (§55), 2026-09-03. **Stated in full at §55**.*
+
+M11 grades one recommendation against a criterion written in advance. Nothing says how the
+corpus is read in aggregate, and the naive aggregate — successes over *recommendations that
+produced an outcome* — is biased upward by construction: the rejected, the expired unreviewed,
+the failed-to-execute and the `unattributed` all drop out of the denominator, and those four
+populations hold nearly all of the bad news. The reported success rate then rises as
+reliability falls. Corrected by the denominator rule (§55.1) and by naming the metric set
+before any data exists (§55.2), for the same reason M11 exists: a metric chosen after the
+results are visible is chosen to flatter them.
+
+### M17 — Nothing records a decision not to act, so the comparison group can never exist
+
+*Added by Part VII (§56), 2026-09-03. **Stated in full at §56**.*
+
+Decisions are written at choke points, and a choke point runs when something is being done. So
+the corpus contains only cases where NiteOwl **acted**: the false-negative rate is
+uncomputable, threshold behaviour is invisible, and §23's *designed experiment* — an admissible
+basis for a causal claim — cannot be constructed, because a holdout requires knowing which
+eligible cases were deliberately not acted on, and that is precisely what was never written
+down. Corrected by enumerating `action_status` and adding **`withheld`**, bounded to candidates
+a named rule or model actually evaluated, with two guards: `withheld` is never scored as a
+failure, and it is distinct from both `rejected` and `unable_to_authorise`.
+
+### M18 — Provenance says how a claim was established, never whose experience supports it
+
+*Added by Part VII (§57), 2026-09-03. **Stated in full at §57**.*
+
+A pattern learned from this business's own two hundred outcomes and one learned from a cohort of
+forty other businesses can both be `derived_deterministic` with identical confidence, and are
+not the same claim. The difference decides whether a recommendation is the moat or a plausible
+generic average, and whether §27's consent regime applies at all. Corrected by an
+**`evidence_scope`** axis (`tenant` / `cohort` / `platform` / `external`) orthogonal to
+provenance, with two rules — narrowest sufficient scope wins, and scope never widens silently —
+onto which the review's six learning levels map with no further vocabulary. Not deferrable with
+the cohort work: the moment the first cohort statistic exists, every earlier claim lacks the
+field that says it was not one.
+
+### M19 — Derived intelligence has no rights model, and §27 already promises one
+
+*Added by Part VII (§58), 2026-09-03. **Stated in full at §58**.*
+
+The architecture is thorough about the corpus — erasure by reference (M7/P11), redaction (L23),
+export including history (L22) — and silent about **derived artefacts**: models, calibrations,
+scoring policies, indexes, embeddings. §27's gate 4 already promises that opt-out removes
+contribution *"including from anything already derived"*, and a model fitted over many tenants
+cannot be un-fitted for one, so that gate is currently a promise nothing can keep. Corrected by
+requiring every artefact to be **rebuildable from the corpus by a recorded recipe**, honouring
+deletion by **rebuild-without rather than unlearning**, and forbidding any artefact whose inputs
+cannot be enumerated. §58.2 states the rights split and the anti-lock-in commitment that follows
+from it.
+
+---
+
 ## 20. Recommended architecture
 
 Nine layers. Each is a **conceptual boundary**, not a table, a service or a package. The
@@ -2712,6 +2793,7 @@ intelligence layers specifically:
 | Permissions and consent records | **NiteOwl** | |
 | Business Memory, institutional knowledge | **NiteOwl** | |
 | Learning logic and models trained on outcomes | **NiteOwl** | Weights may be computed anywhere; the *data and the models* are NiteOwl's |
+| **Evaluation datasets, metric definitions and calibration history** | **NiteOwl** | *Added by Part VII, §57.4.* The artefact a replacement model is **measured against** — which is what makes the model replaceable at all |
 | Calendar, telephony, email, payments, language, observability | **Providers** | Capabilities, replaceable, already contracted (§3.8, §14) |
 
 Future gateway boundaries — AI Model, Voice/Telephony, Calendar, CRM,
@@ -2756,6 +2838,11 @@ posture is already correct and merely needs to survive the next eight products.
 | **Dependency criticality and provider policy risk** | **Vocabulary added (M12)** | *Part V.* §6.1 modelled outage and account loss but not terms, acceptable-use restrictions on agent-driven use, or a provider entering the market. §41.3 adds REPLACEABLE / DEGRADABLE / CRITICAL and the CRITICAL documentation set |
 | **Diagnosis and recommendation** | **Contract added (M10, M11)** | *Part V.* §24 was already trading a "finding" no document had shaped. §42 defines it as a third profile of the canonical record; §43 adds the success criterion and review date, without which a recommendation can only be graded after the fact |
 | **Owner-initiated investigation** | **Contract added (M13, M14)** | *Part VI.* Every diagnostic path was system-initiated; an owner could not report a problem and have it become recorded, routed work. §48 adds an identity, an owner-authored event and a lifecycle — and §49 keeps the reported symptom from becoming the diagnosis by default |
+| **Temporal reconstruction / hindsight** | **Rule added (M15)** | *Part VII.* §20.7 said *"what was known at the time"* and nothing made it true: references resolve to current values and Operating State is recomputed. §54 adds as-of evidence references and the evaluation boundary |
+| **Aggregate evaluation of recommendation quality** | **Architecture added (M16)** | *Part VII.* M11 grades one recommendation; the naive aggregate is biased upward by construction. §55 fixes the denominator and names the metric set before any data exists |
+| **Counterfactual reachability** | **Seam added (M17)** | *Part VII.* The corpus contained only cases where NiteOwl acted, making §23's own *designed experiment* basis unconstructable. §56 adds `action_status: withheld` |
+| **Evidence scope / learning hierarchy** | **Axis added (M18)** | *Part VII.* Provenance says *how* a claim was established, never *whose experience* supports it. §57 adds `evidence_scope`, onto which the six learning levels map |
+| **Rights over derived intelligence** | **Rule added (M19)** | *Part VII.* §27's gate 4 promised removal of contribution from anything already derived, and nothing could keep it. §58 adds rebuildability, deletion by rebuild-without, and the rights split |
 | Event schema evolution | **N/A — nothing to evolve** | `schema_version` from the first event is what keeps it that way |
 | Provenance | **Weak outside the Knowledge Base — M4** | The pattern exists and is proven; it is simply not applied elsewhere. *Part IV extends the vocabulary's reach to the outcome half of a decision (M9) and to the negative attribution result (M8)* |
 | Model/version traceability | **Absent** | Model ids are hardcoded at nine call sites (L11). No stored record of which model produced which value |
@@ -2830,6 +2917,13 @@ the checklist:
 | **P23** | **`problem.reported` as the seventh canonical event** (§22, §48.1) | *Part VI.* Owner-authored and **not recomputable** (P3) — reconstructing what the owner said from what NiteOwl concluded is M1 applied to the sentence the case hangs on |
 | **P24** | **Report / interpretation / hypothesis kept separate at intake** (§49.1, M14) | *Part VI.* A design rule, not a field. It is what stops NiteOwl confirming the owner's guess, and it cannot be retrofitted onto cases that already did |
 | **P25** | **The case lifecycle, with no `recommended` state** (§48.4) | *Part VI.* *Advice given* must never read as progress. Free now; a corrupted learning signal later |
+| **P26** | **As-of evidence references** (§54.1, M15) — every `evidence_ref` carries `observed_at`; where the referenced record is mutable, the whitelisted relied-upon values travel with it | *Part VII.* Free before the first decision row. Afterwards the earliest decisions — those with the longest measured history — are the ones that can never be re-judged |
+| **P27** | **The input whitelist is a temporal control as well as a privacy one** (§54.1) | *Part VII.* One sentence now. Stated only as a privacy control, the whitelist gets drawn to exclude exactly the derived, non-identifying values a retrospective judgement needs |
+| **P28** | **The evaluation boundary** (§54.2) — *was it reasonable* is judged only on evidence at or before `decided_at`; *did it work* on the outcome against the predeclared criterion. Never merged | *Part VII.* Stops hindsight leakage, which is the silent failure mode of every decision-learning system |
+| **P29** | **The evaluation metric set and the denominator rule** (§55.1, §55.2, M16) — the population is every recommendation *issued*; disposition partitions it | *Part VII.* A metric chosen after the results are visible is chosen to flatter them — M11's argument applied to the aggregate |
+| **P30** | **`action_status: withheld`** with reason codes, for a candidate evaluated by a named rule or model and not taken (§56.1, M17) | *Part VII.* The only possible source of a comparison group and of a false-negative rate. Unreconstructable later at any price |
+| **P31** | **`evidence_scope` alongside `provenance`** (§57.1, M18) — `tenant` / `cohort` / `platform` / `external`; narrowest sufficient scope wins; scope never widens silently | *Part VII.* One enumeration now; a per-row archaeology the moment the first cohort statistic exists |
+| **P32** | **Derived artefacts rebuildable by a recorded recipe; deletion by rebuild-without; no artefact whose inputs cannot be enumerated** (§58.1, M19) | *Part VII.* It is what makes §27's gate 4 a keepable promise rather than a stated one. Free while no artefact exists |
 
 ### LATER — build when the trigger fires
 
@@ -2847,6 +2941,8 @@ the checklist:
 | **L25** | **A model/provider gateway recording `model_version` per stored value** | L11's trigger, unchanged — sharpened by §41.2's finding that nine hardcoded call sites make a forced migration worse than it needs to be |
 | **L26** | **Business Problem Cases implemented** — intake, head, lifecycle, routing | The first product feature that investigates rather than reports. Behind L24, which is behind Remy's calendar reliability |
 | **L27** | **Cross-domain synthesis via Atlas** | Two products live for one tenant — X2's precondition, unchanged |
+| **L28** | **Aggregate evaluation reporting** — the §55.2 metrics computed over the corpus, per tenant first | *Part VII.* Enough resolved recommendations for a rate to mean anything. Behind L24, which is behind Remy's calendar reliability |
+| **L29** | **Derived-artefact registry** — recipe, corpus boundary, scope and consents behind P32 | *Part VII.* The first derived artefact. The rule must precede the artefact; the registry need not, exactly as P11 precedes L23 |
 
 ### MUCH LATER — requires legitimate accumulated outcome data
 
@@ -2857,6 +2953,7 @@ the checklist:
 | **X3** | Privacy-safe cohort benchmarks | All five §27 gates, in code, before the first statistic |
 | **X4** | Proprietary outcome-trained models | X1 plus explicit, revocable agreements — and never at a provider (§28) |
 | **X5** | Opt-in business network / referral routing | Part I §3.9 plus consent and permissions |
+| **X6** | **Controlled experimentation and counterfactual estimation** — holdouts, assignment, incremental effect, regret | *Part VII.* X1, plus a `withheld` population recorded as it occurred (P30), plus §23's admissible bases. **Not a platform to be built; a capability P30 keeps reachable** |
 
 ---
 
@@ -2905,6 +3002,21 @@ re-priced, and each corresponds to a finding rather than to a speculation:
 | **Confirming the owner's guess** | **New — M14.** The reported symptom arrives first and with the highest apparent authority in the system, so the natural implementation investigates *around* it and recommends a remedy for a problem the business may not have. Mitigated by §49.1's separation of report, interpretation and hypothesis, and by §49.3 making reframing a first-class outcome |
 | **"Advice given" counted as progress** | **New — M13.** A case whose recommendation shipped can look resolved while the condition worsens, and every learning signal downstream inherits the error. Mitigated by §48.4 having no `recommended` state and §51.1 requiring an observed outcome against a predeclared criterion |
 | **The case as a second system of record** | **New — M13.** A Business Problem Case is the most natural place in the architecture to start copying evidence into, and the copy would be a rival history over the same events. Mitigated by §48.3 — the head is a derivable projection, references only, no case-level judgement schema |
+
+---
+
+**Part VII delta, 2026-09-03.** Five further entries. The first two share a property that makes
+them the most dangerous on this page: **both improve the reported metrics while making decisions
+worse**, and neither produces an error anyone can find.
+
+| Risk | Change |
+|---|---|
+| **Hindsight leakage into decision evaluation** | **New — M15.** A retrospective judgement reads evidence that did not exist at `decided_at`, so a learner comes to rely on information it will not have next time. Offline evaluation looks excellent, the live system underperforms it, and there is no defect to find. Mitigated by as-of evidence references and the evaluation boundary (§54) |
+| **A filtered evaluation denominator** | **New — M16.** Scoring successes over *recommendations that produced an outcome* silently drops the rejected, the expired, the failed and the `unattributed` — where nearly all of the bad news is. The reported success rate then **rises as reliability falls**. Mitigated by §55.1 |
+| **A corpus of only the actions taken** | **New — M17.** Nothing records a candidate that was evaluated and withheld, so false negatives are uncountable, threshold changes leave no trace, and §23's own *designed experiment* basis is unconstructable. Mitigated by `action_status: withheld` (§56.1), with the guard that it is never scored as a failure |
+| **A cohort claim read as a fact about this business** | **New — M18.** Provenance cannot distinguish a pattern from this tenant's own history from one averaged over forty other businesses; the two carry different consent regimes and different value. Mitigated by `evidence_scope` and the no-silent-widening rule (§57.1) |
+| **An unkeepable erasure promise over derived artefacts** | **New — M19.** §27's gate 4 already promises to remove a tenant's contribution from anything already derived, and a fitted model cannot be un-fitted for one tenant. Mitigated by rebuildability and deletion-by-rebuild-without (§58.1) — free now, impossible to retrofit onto an artefact whose inputs were never enumerated |
+| **Moat framing distracting from the product** | **Unchanged, and still the largest practical risk.** This is the seventh such review. The product still has zero paying businesses, and the correct response to all seven remains a reliable phone call |
 
 ---
 
@@ -4406,4 +4518,816 @@ Three things are worth taking from this pass:
 
 And unchanged for the sixth document running: none of this is urgent, none of it is built, the
 corpus accumulates only at the speed of real businesses with real problems, and the next
+milestone is still a reliable phone call.
+
+---
+
+# Part VII — Cross-Product Outcome Learning and Decision Intelligence
+
+Added 2026-09-03 against commit `8906564`. Same rules as Parts I–VI: **documentation only.**
+No schema was created, no table was added, no route was changed, no flag was introduced, no
+provider configuration was touched, and no working code was modified. Nothing below was
+implemented, and nothing below asks for implementation now.
+
+Governing principle for this part, which is the brief's own and is adopted unchanged:
+
+> **MINIMUM CHANGE NOW, MAXIMUM COMPOUNDING INTELLIGENCE LATER.**
+
+This is the seventh review. Its honest headline is that **most of what it asked for already
+exists**, and the useful work is therefore not to restate it but to say precisely where each
+requirement already lives, and to isolate the few that genuinely do not. Five do:
+**M15–M19**. They are the smallest set that, left undone, would make the intelligence layer
+either unverifiable, unmeasurable, unfalsifiable, unexplainable or unlawful to honour — and
+every one of them is a **write-time rule or an enumerated field, free while the corpus is
+empty and a migration afterwards.**
+
+**NOW: none.** Remy's reliability roadmap is untouched (§32, §61.3).
+
+---
+
+## 53. Current-state assessment — where the seventh review's requirements already live
+
+The review asked for a progression:
+
+```
+Business Graph → Business State → Business Memory → Diagnosis → Decisions
+  → Actions → Measured Outcomes → Outcome Learning → Proprietary Decision Intelligence
+  → Better Future Decisions
+```
+
+Every arrow in that chain already has a home in this document, and the chain itself is the
+one §21 draws. **No new layer is created by this part, and §21 is unchanged.** "Outcome
+Intelligence" is not a tenth layer to be inserted above Business Memory: it is layers **4, 5,
+6 and 9** — the Outcome Spine, Decision & Outcome Memory, Provenance, and the Learning Layer —
+under a name. Naming it is worth doing; creating a service to hold the name is not, and §20's
+opening rule ("each is a conceptual boundary, not a table, a service or a package") already
+forbids it.
+
+### 53.1 Placement — the review's twenty-four sections against what exists
+
+| Review section | Already answered by | Standing |
+|---|---|---|
+| 1 · Strategic objective — the moat above baseline capability | §17, §25 | **Exists.** §17 reaches the same verdict from the same copy test |
+| 2 · Closed loop *observe → diagnose → explain → recommend → approve/act → measure → learn* | §20.9, §42, §43, §44, §51 | **Exists**, including the explanation set (evidence, confidence, likely cause, trade-offs, authority, success criteria) |
+| 3A · Decision Records | §20.7 — the single canonical `DecisionRecord` | **Exists.** Every field the review lists is present |
+| 3B · Outcome Records | §20.7 Outcome group; §20.5 spine | **Exists**, with `outcome_provenance` and the learnability rule (M9) |
+| 3C · Decision → Outcome relationships without false causation | §23 — five tiers, no automatic promotion | **Exists**, and is stronger than the review asked: `unattributed` (M8) has no counterpart in the brief |
+| 3D · Learning that starts statistical and grows | §20.9, X1 | **Exists**, deferred with a stated precondition |
+| 4 · Business-specific decision intelligence; four separated categories | §25, §24 *direction of the moat*, §20.6 | **Partial — M18.** Tenant isolation and the moat direction are settled. The requirement to *explain which category contributed* has no field |
+| 5 · Per-product outcome signals | §25 moat map | **Partial.** The moat map answers *is it defensible*; the *signal* map is added at §59.1 as documentation |
+| 6 · Cross-product outcome chains | §24, §20.5 `correlation_id` | **Partial.** The contract and the binding exist; the chain model is stated at §59.2 |
+| 7 · Business State between Graph and Memory | §20.4 | **Exists in full**, including the four categories and the placement table |
+| 8 · Provenance as moat and safety requirement | §20.6, §20.7, §23 | **Exists.** Nine source types, and the rule that inference never becomes fact |
+| 9 · Temporal intelligence; no hindsight leakage | §20.7 (`decided_at`, "what was known at the time") | **GAP — M15.** The intent is stated; nothing makes it true |
+| 10 · Conservative attribution levels | §23 | **Exists**, at five tiers rather than four |
+| 11 · Learning hierarchy, Levels 1–6 | §20.6, §24, §27 | **Partial — M18.** All six exist as separate mechanisms; nothing names the axis |
+| 12 · Privacy-safe network effects | §27 — five gates, two absolute prohibitions | **Exists.** §59.3 adds two future mechanisms to the same gated list, and builds nothing |
+| 13 · Decision-model portability | §28, §14, §41 | **Exists.** §28's ownership table gains one row (§57.4) |
+| 14 · Evaluation architecture | §20.7 rule 7 (`success_criterion`), §43.2 | **GAP — M16.** Per-recommendation grading exists; aggregate evaluation does not |
+| 15 · Counterfactuals and experimentation path | §23's admissible causal bases | **GAP — M17.** An experiment is *admissible* and, as the corpus is currently specified, **unconstructable** |
+| 16 · Authority; recommend ≠ approved ≠ executed ≠ successful | §20.7 Authority and Execution groups, §43.4, AAL §3, §18 | **Exists**, and is the distinction the whole access layer is built on |
+| 17 · Failure learning; rejection is evidence, not error | §43.4, §51.2, §23 `unattributed` | **Mostly exists.** The structural half — that rejected and unmeasured recommendations stay in the denominator — is M16 |
+| 18 · Moat architecture, three bands | §25 | **Exists**, with the copy test applied to products, access layer and distribution |
+| 19 · Control over the decision/outcome corpus as a strategic resource; customer rights | §29, L22, L23, P11, §27 | **GAP — M19.** History is covered. **Derived artefacts are not**, and §27's gate 4 currently promises something nothing can deliver |
+| 20 · Minimum-change classification | §30's four bands | **Exists.** Part VII uses them unchanged |
+| 21 · Remy protection | §32 | **Exists**, and is verified again at §61.3 |
+| 22 · Deliverables | This part | — |
+| 23 · Final architectural test | §61.1 | Ten questions, answered |
+| 24 · Canonical strategic principle | §61.4 | Adopted |
+
+Sixteen of twenty-four require nothing. Three are documentation placements that create no
+architecture. **Five are findings**, and they are below.
+
+### 53.2 What must not be touched
+
+The review's own instruction, restated against this codebase, because a reader arriving at
+Part VII first should not have to reconstruct it from six earlier parts:
+
+- **One booking engine behind four channels** (§1.2). A second path forks the outcome
+  history, not merely the code.
+- **The single canonical `DecisionRecord`** (§20.7). Part VII adds fields and rules to it and
+  creates **no second store** — the mistake this architecture has now refused five times.
+- **§21 is the single canonical diagram**, and Part VII does not redraw it. Every finding
+  below lands inside a node that is already on it.
+- **The eight products stay eight products** (§24's five prohibitions).
+- **`org_id` scoping and the two trust models** (§1.4), verified against production and
+  untouched.
+- **Truthful degradation** (§11) and the standing rule it generalised into: *not knowing is a
+  finding, and is never rendered as its nearest confident neighbour* (§23).
+
+---
+
+## 54. M15 — Nothing preserves what was knowable at decision time
+
+*Finding. Added by Part VII, 2026-09-03.*
+
+§20.7 already says a decision record captures *"what was known at the time"*, and carries
+`decided_at`, `evidence_refs`, `confidence` and `policy_version`. That is the intention. The
+finding is that **nothing in the architecture makes it true**, and two existing and correct
+decisions are what prevent it:
+
+- **`evidence_refs` are references, deliberately** (P11, M7) — history stores references and
+  never copies, so erasure can redact an entity without destroying the record. But a
+  reference resolves to the entity's **current** value, and `leads` is destructively
+  overwritten with no transition history (**M1**). Replaying a decision therefore reads
+  today's row.
+- **Business Operating State is a read model, deliberately** (§20.4) — recomputed per query,
+  never stored authoritatively. So the state a decision was made against is, by design, not
+  retrievable. Recomputing it *now* yields today's state, which is a different fact wearing
+  the same name.
+
+Both decisions are right and neither should be reversed. The consequence is what matters:
+
+> **Given only what NiteOwl knew at 10:00 that day, was this recommendation reasonable?** —
+> the review's own test — is currently **unanswerable**, and every retrospective judgement of
+> a decision silently reads information that did not exist when it was made.
+
+**Why this is worse than a missing feature.** A learner trained on outcome-graded decisions
+without a temporal boundary learns to rely on information that will not be available the next
+time a decision of that kind is made. Offline evaluation then looks excellent and the live
+system underperforms it, with no defect anywhere to find. This is the single most common way
+a decision-learning system fails, it fails silently, and it is unrecoverable after the fact
+because the corpus cannot be re-cut.
+
+### 54.1 The correction — two rules, no new structure
+
+**Rule 1 — the input digest is a temporal control, not only a privacy control.**
+
+§20.7 already requires that *"inputs are stored as a digest plus explicitly whitelisted
+fields, never raw"*, and states one reason: a decision log holding raw customer data becomes
+the product's largest PII surface. That reason is correct and incomplete, and the omission
+decides what goes in the whitelist. Stated only as a privacy control, the whitelist will be
+drawn as narrowly as possible — which is exactly the wrong optimisation, because it will drop
+the derived, non-identifying values a retrospective judgement needs:
+
+> **The whitelist holds the values the decision actually turned on, as they stood at
+> `decided_at` — not the values that identify anyone.** Capacity remaining, the count of
+> external conflicts, the reason code from `checkBookingSlot`, whether hours were configured,
+> the freshness of the calendar read. These carry no personal data, are not recomputable
+> later, and are precisely what "was this reasonable?" requires.
+
+The two purposes point in opposite directions and are satisfied by the same field. Naming
+only one of them is how the field gets built correctly for privacy and uselessly for
+evaluation.
+
+**Rule 2 — an evidence reference is an as-of reference.**
+
+Every `evidence_ref` carries the instant the value was **read** (`observed_at`), alongside the
+entity reference. Where the referenced record is immutable — an event on the spine, a provider
+response — the reference alone is sufficient and nothing is copied. Where it is mutable
+(`leads` today), the reference is not sufficient on its own and rule 1's whitelist carries the
+relied-upon values. **This is the same rule P3 already adopted** — *record what cannot be
+recomputed* — applied to the inputs of a decision rather than to its transitions.
+
+### 54.2 The evaluation boundary
+
+One further rule, which is free and prevents the whole class:
+
+> **Two different questions, two different cut-offs, never merged.**
+>
+> - **Was the decision reasonable?** Judged **only** on evidence with `observed_at <=
+>   decided_at`. Nothing recorded afterwards may enter it, however obviously relevant it later
+>   became.
+> - **Did it work?** Judged on the outcome, which is necessarily later, against the
+>   `success_criterion` declared before the outcome was known (§20.7 rule 7).
+
+A decision can be **reasonable and unsuccessful** — that is the normal case for any honest
+recommender, and a corpus that cannot express it will teach the Learning Layer to avoid
+correct decisions that happened to end badly. It can also be **unreasonable and successful**,
+which is the more dangerous row, because nothing about the outcome flags it.
+
+This is the temporal counterpart of the two rules that precede it: **M9** stopped a *predicted*
+outcome being read as a *measured* one; **M11** stopped a *measured* outcome being graded
+against an *invented* target; **M15** stops a *reasonable* decision being judged against
+evidence that did not exist. All three are needed, and none substitutes for another.
+
+---
+
+## 55. M16 — A recommendation can be graded; recommendation quality cannot be measured
+
+*Finding. Added by Part VII, 2026-09-03.*
+
+M11 gave every recommendation a `success_criterion` and a `review_at`, written in advance. That
+grades **one** recommendation. Nothing defines how the corpus is read in aggregate, and the
+naive aggregate is not merely imprecise — it is **biased upward by construction**:
+
+```
+success rate  =  recommendations that succeeded
+                 ─────────────────────────────────────────
+                 recommendations that produced an outcome
+```
+
+Every recommendation the owner **rejected**, every one that **expired unreviewed**, every one
+whose action **failed to execute**, and every one that ran and produced **no establishable
+link** (`unattributed`, M8) drops out of that denominator. Those are the four populations that
+contain nearly all of the bad news. A recommender scored this way reports an excellent success
+rate on the day it is worst, and the number rises as reliability falls.
+
+**This is the review's own distinction**, and it is worth keeping in its words:
+
+> *Did the AI sound intelligent?* is not *Did the recommendation actually improve the
+> business?* — and only the second is a moat.
+
+### 55.1 The denominator rule
+
+> **The population is every recommendation issued. Disposition is a partition of that
+> population, never a filter applied before counting.**
+
+| Disposition | Meaning | Carried today by |
+|---|---|---|
+| `accepted_executed_measured` | Approved, acted on, outcome established | `action_status` + `outcome_refs` |
+| `accepted_executed_unattributed` | Acted on; attribution ran and established nothing | §23 `unattributed` (M8) |
+| `accepted_execution_failed` | Approved, action did not complete | `action_status` |
+| `rejected` | A human declined it | Authority group + `approved_by` absent |
+| `expired_unreviewed` | `review_at` passed with no outcome | §20.7 rule 7 — *"an empty outcome after the review date is itself a result"* |
+| `withheld` | Considered and deliberately not surfaced | **M17** — does not exist yet |
+| `superseded` | Replaced by a later decision before it resolved | `action_status` |
+
+Six of seven are already representable. The seventh is M17, and it is the one that also
+carries the comparison group.
+
+### 55.2 The metric set — named now, computed much later
+
+Named now for the reason M11 exists at all: **a metric chosen after the data is visible is
+chosen to flatter it.** None of these is built, and none requires anything beyond fields
+§20.7 already defines.
+
+| Metric | Definition | Reads |
+|---|---|---|
+| **Acceptance rate** | Approved ÷ issued | Authority group |
+| **Execution rate** | Executed ÷ approved | Execution group |
+| **Success rate** | Met `success_criterion` ÷ **issued** (§55.1) | Outcome group |
+| **Calibration** | Realised success rate within each stated-`confidence` band, versus the band | `confidence` + `policy_version` |
+| **Measurement coverage** | Outcome established ÷ issued past `review_at` | Outcome group |
+| **False-positive rate** | Recommended, executed, criterion not met | Outcome group |
+| **False-negative rate** | Conditions later shown to warrant action where none was recommended | **Requires M17.** Otherwise permanently uncomputable |
+| **Time to outcome** | `outcome_measured_at − decided_at`, by decision type | Both |
+| **Incremental effect** | Measured effect against a comparison group | **Requires M17** and §23's admissible bases |
+| **Regret** | Realised outcome versus the best available alternative | Requires `alternatives_considered` **and** M17 |
+
+**Calibration is the one to protect**, and it is nearly free. A system whose stated confidence
+means nothing is worse than one that states none, because the number is acted on. Calibration
+needs only that `confidence` be a bounded number stored with the scale and the
+`policy_version` that produced it — which §20.7 already requires — and that the metric be
+named before anyone has an incentive to pick a different one.
+
+### 55.3 Two rules that keep evaluation honest
+
+- **Evaluate per tenant first, platform second.** A global success rate is a vanity metric
+  and, worse, it averages away the only thing that compounds: *this* business's decision
+  history. §24's *direction of the moat* rule applies unchanged — the per-tenant number is the
+  asset; the platform number is a health check.
+- **Evaluation results are decisions about NiteOwl, not facts about the business.** They are
+  `platform`-scoped (M18), they carry provenance like everything else, and they may never be
+  displayed to an owner as a claim about their business.
+
+---
+
+## 56. M17 — Nothing records a decision not to act, so the comparison group can never exist
+
+*Finding. Added by Part VII, 2026-09-03.*
+
+§23 lists **a designed experiment or A/B test** among the admissible bases for a `caused_by`
+claim, and **an isolated before/after with controls** among the others. §20.7 rule 2 says the
+decision is written **at the choke point**, once — and a choke point is, by definition, code
+that runs when something is being done.
+
+Put together, the corpus as currently specified contains **only cases where NiteOwl acted**.
+That has three consequences, and the third is the expensive one:
+
+1. **False negatives are uncomputable.** The opportunities never surfaced cannot be counted,
+   because nothing records that they were considered and declined. §55.2's row is not merely
+   empty — it is unreachable.
+2. **Threshold behaviour is invisible.** A confidence threshold that suppresses displaying a
+   recommendation is one of the highest-leverage parameters in the product, and moving it
+   leaves no trace on either side.
+3. **The experiment §23 admits cannot be constructed.** A holdout requires knowing which cases
+   were deliberately **not** acted on, and why, and that they were otherwise eligible. If that
+   is not recorded as it happens, it cannot be reconstructed later at any price — the eligible
+   population is exactly the thing that was not written down. **§23 therefore currently admits
+   a basis the corpus makes unreachable**, which is the kind of gap that is invisible until
+   the day someone tries to use it.
+
+The review asked for an *evolutionary path* toward causal learning and explicitly said not to
+build an experimentation platform. Agreed, and none is proposed. But the review's other
+instruction — **avoid architectural decisions that would make future causal evaluation
+impossible** — has already been made and needs one cheap correction.
+
+### 56.1 The correction — enumerate `action_status`, and record the withheld candidate
+
+`action_status` is referenced throughout §20.7 and never enumerated. It is enumerated here:
+
+| Value | Meaning |
+|---|---|
+| `proposed` | Recommended, awaiting authority. **Reserves nothing** (§20.4, §20.7 rule 4) |
+| `approved` | Authorised, not yet executed |
+| `executed` | The action completed |
+| `failed` | Attempted and did not complete |
+| `rejected` | A human declined it |
+| **`withheld`** | **Evaluated by a named rule or model, and deliberately not proposed** |
+| `superseded` | Replaced by a later decision before resolving |
+
+And one write-time rule, deliberately bounded so the log does not fill with non-events:
+
+> **A candidate action that was evaluated by a named rule or model and not taken is a decision
+> record with `action_status: withheld` and its `reason_codes`.** *Evaluated* is the bound: a
+> threshold that suppressed it, a policy that excluded it, a capability that declined it, a
+> confidence below the display bar. **Actions nobody considered are not decisions and are
+> never written.**
+
+Two guards, without which this makes the corpus worse rather than better:
+
+- **`withheld` is not a failure and must never be scored as one.** It is the comparison group
+  and, for §55.2's false-negative row, the only possible source. A learner that reads
+  `withheld` as a negative outcome will learn to act more often, which is the precise opposite
+  of what the record is for.
+- **`withheld` is not `unable_to_authorise`, and neither is `rejected`.** *We chose not to*,
+  *a human said no*, and *we could not tell whether we were permitted* are three different
+  facts. This is the same refusal the booking engine makes between `lookup_failed` and
+  `capacity_full`, and the governance kernel makes between `unable_to_authorise` and `deny`
+  (AAL §4).
+
+### 56.2 Non-foreclosure — what is deliberately not decided now
+
+No experiment framework, no assignment mechanism, no holdout policy, no arm identifiers and no
+causal-inference machinery. Those are **X6** (§60), behind X1 and behind real accumulated
+outcomes.
+
+What is settled now is only that they remain **possible**: a future experiment records its arm
+and its `experiment_id` as additional fields on the same `DecisionRecord`, alongside a
+`withheld` control population that was recorded as it occurred. Nothing else about
+experimentation is designed here, and §23's default stands — **promotion to `caused_by` is
+never automatic, and a stated experiment does not become an admissible basis merely by being
+called one.**
+
+---
+
+## 57. M18 — Provenance says how a claim was established, never whose experience supports it
+
+*Finding. Added by Part VII, 2026-09-03.*
+
+§20.6's nine source types answer *how do we know this* — observed, derived deterministically,
+business-provided, AI-inferred, AI-predicted, and so on. The review asks a different question
+in two places (§4: *"preserve the ability to explain which category contributed"*; §11: the six
+levels), and **provenance cannot answer it**:
+
+> A pattern learned from *this business's own two hundred outcomes* and a pattern learned from
+> *a cohort of forty other businesses* can both be `derived_deterministic`, with identical
+> confidence, and are **not the same claim**.
+
+The difference decides whether a recommendation is the moat or is a plausible generic average,
+and — for a cohort-derived claim — whether §27's consent and gating regime applies at all. It
+is currently unrepresentable.
+
+### 57.1 The correction — one orthogonal axis
+
+> **Every stored assertion carries an `evidence_scope` alongside its `provenance`. The two are
+> orthogonal and neither substitutes for the other.**
+
+| `evidence_scope` | Meaning | Governed by |
+|---|---|---|
+| `tenant` | This business's own rules, history, decisions and outcomes | §1.4 isolation. No consent question — it is the business's own data |
+| `cohort` | A privacy-safe aggregate across businesses | **§27's five gates, all of them, before a single statistic** |
+| `platform` | NiteOwl's own logic, defaults, evaluation results and models built without tenant data | §55.3 |
+| `external` | Third-party or public knowledge | Provenance `third_party`; never promoted by use |
+
+Two rules, and they are where the value is:
+
+- **Narrowest sufficient scope wins.** Where a `tenant`-scoped pattern and a `cohort` benchmark
+  both bear on a decision, the tenant one governs, and the benchmark may only be offered as
+  context. This is §24's *direction of the moat* made operational: NiteOwl's asset is that it
+  knows *this* business, not that it knows the average business.
+- **Scope never widens silently.** A `cohort`-derived claim may not be rendered as a fact about
+  this business, and a `tenant` claim may not enter a cohort statistic without the §27 gates.
+  Widening is an explicit, recorded, revocable act — never a side effect of a claim being
+  copied into a surface that lost the field (§24's fifth prohibition).
+
+### 57.2 The learning hierarchy — six levels, no new vocabulary
+
+The review's Levels 1–6 are `evidence_scope` crossed with existing structures. Naming the
+levels is useful; building a mechanism per level is not.
+
+| Level | Review's name | = | Exists? |
+|---|---|---|---|
+| **1** | Explicit rules | `tenant` × `business_provided` — the Operating Profile and Business Memory | **Yes** (§3.2, §20.9) |
+| **2** | Observed behaviour | `tenant` × `observed` — the Outcome Spine | Specified, not built (§20.5, L17) |
+| **3** | Outcome associations | `tenant` × §23 `correlated_with` / `attributed_to` | Specified (§23), needs L18/L24 |
+| **4** | Business-specific decision models | `tenant` × `derived_*`, over that tenant's own corpus | **X1** |
+| **5** | Privacy-safe benchmark intelligence | `cohort`, behind all five §27 gates | **X3** |
+| **6** | Cross-product decision intelligence | `tenant`, spanning products via §24 exchanges | **X2** |
+
+**Level 6 is a tenant scope, not a wider one**, and that is the point most easily got wrong:
+cross-*product* learning happens **inside one business**, and involves no cross-tenant anything.
+Only Level 5 crosses a tenant boundary, and only Level 5 is gated by §27. Conflating the two is
+how a cross-product feature acquires a cross-tenant privacy exposure nobody intended.
+
+The architecture must progress through these without requiring the higher ones to exist —
+which it does, because each level reads the level below through structures already specified,
+and **no level may write to a level below it** (§20.9's rule against a learner editing the
+facts it learns from, applied to the whole hierarchy).
+
+### 57.3 Why this is not deferrable with the cohort work
+
+X3 is MUCH LATER, so the field looks deferrable with it. It is not:
+
+> The moment the **first** cohort statistic exists, every claim already in the corpus lacks the
+> field that says it was **not** one — and retrofitting it means guessing, per row, from the
+> code that no longer exists in that form.
+
+The field costs one enumeration now. It costs a per-row archaeology later, on exactly the rows
+with the longest history and therefore the highest value.
+
+### 57.4 One addition to §28's ownership table
+
+The review's §13 asks that decision intelligence survive replacing any model provider. §28
+already settles this and its list is correct; **one row is added**, because Part VII creates the
+asset it names:
+
+| Concern | Owner | Note |
+|---|---|---|
+| **Evaluation datasets, metric definitions and calibration history** | **NiteOwl** | §55. The record of which recommendations worked, cut for evaluation, with the metrics defined before the results were visible. It is the artefact a replacement model is *measured against* — which is what makes the model replaceable at all |
+
+---
+
+## 58. M19 — Derived intelligence has no rights model, and §27 already promises one
+
+*Finding. Added by Part VII, 2026-09-03.*
+
+The architecture is thorough about the **corpus**: erasure by reference not copy (P11/M7),
+redaction of the referenced entity (L23), export including history (L22, §29). It says nothing
+about **derived artefacts** — a per-business decision model, a calibration table, a scoring
+policy, an index, an embedding — beyond §28's guardrail that they must live in NiteOwl's own
+database rather than a provider's.
+
+That omission collides with a promise this document has already made. §27, gate 4:
+
+> *"Opt-out that actually removes contribution, **including from anything already derived**."*
+
+A model fitted over many tenants cannot be un-fitted for one. As things stand, **gate 4 is a
+promise nothing in the architecture can keep** — and it is load-bearing, because it is one of
+the five gates that must hold before any cross-business statistic is computed. The same
+problem, in a smaller form, applies to a single tenant's own artefacts on deletion.
+
+### 58.1 The correction — rebuildability, and deletion by rebuild-without
+
+> **Every derived artefact is rebuildable from the corpus by a recorded recipe, and is never
+> the sole record of anything.**
+
+Each artefact carries: the **recipe** (method and version), the **corpus boundary** it was
+built over (the `decided_at` / `occurred_at` window, which M15's rule makes meaningful), its
+**`evidence_scope`** (M18), and the **consents** it depends on where the scope is `cohort`.
+
+Three rules follow, and they are the whole mechanism:
+
+- **Deletion is honoured by rebuild-without, never by unlearning.** A tenant's withdrawal
+  removes their rows from the corpus and schedules the artefact's rebuild from what remains.
+  Until it is rebuilt, the artefact is marked as carrying withdrawn contribution and may not be
+  used for a **new** cross-tenant claim. This is the only construction that makes gate 4 true,
+  and it costs nothing today because no artefact exists.
+- **An artefact whose inputs cannot be enumerated may not be built.** This forbids, in
+  advance, the specific tempting shortcut: a fine-tune or an embedding index over "everything",
+  which is unrebuildable, unauditable and un-erasable the moment it exists. §28's guardrail
+  ("rebuildable from that database alone") already implies it; M19 states it as a precondition
+  on construction rather than a property to check afterwards.
+- **An artefact never outlives the consent it depends on.** Scope-`cohort` artefacts inherit
+  the shortest-lived consent among their inputs.
+
+### 58.2 The rights split, stated plainly
+
+The review asks NiteOwl to be explicit about ownership, portability, deletion, derived data,
+model artefacts and lock-in ethics. It is worth one short, unambiguous statement, because every
+one of these will eventually be asked by a customer, a regulator or an acquirer:
+
+| Thing | Whose | Rights |
+|---|---|---|
+| The business's operational data — customers, appointments, calls, knowledge, configuration | **The business's** | Exportable including history (L22), deletable (L23), portable in open formats. Not contingent on remaining a customer |
+| The business's own decision and outcome history | **The business's**, held by NiteOwl | Exportable with it. It is *their* record of *their* operations |
+| NiteOwl's derived intelligence — models, calibrations, scoring policies, evaluation datasets | **NiteOwl's** | Subject to rebuild-without (§58.1), to §27's gates where cohort-scoped, and to the prohibition on training on confidential tenant data without specific, informed, revocable agreement |
+| Privacy-safe cohort statistics | **NiteOwl's** | Only ever aggregates, computed inside the boundary, never raw cross-tenant access |
+
+And the ethical line, which is a **product** commitment and not merely a legal one:
+
+> **The moat is superior accumulated judgement, never expensive exit.** NiteOwl may not defend
+> its position by withholding a business's data, by exporting it in a deliberately unusable
+> shape, or by making the history hostage to the subscription. A business that leaves takes
+> everything it put in and everything recorded about its own operations. What it loses is the
+> **benefit of NiteOwl's accumulated judgement** — which is the honest form of the advantage,
+> and the only form worth having, because it is the only one a customer would voluntarily come
+> back for.
+
+This is also the commercially correct position, not merely the decent one: a moat that depends
+on trapping customers is priced by every buyer as a churn risk, and is destroyed by one
+regulation or one competitor's migration tool.
+
+---
+
+## 59. Cross-product contribution, chains, and the network mechanisms
+
+This section creates **no architecture**. It places the review's per-product signal lists and
+its chain example onto structures that already exist, in the manner of §20.4's placement table:
+*placing them is the whole exercise*, and every row that reads "already computed" is a row that
+would otherwise have become an instrumentation project.
+
+### 59.1 Contribution map — what each product would contribute, and what it costs
+
+Each product contributes **events** to the spine (§20.5) and **decisions** to the record
+(§20.7). Nothing else. A product does not contribute a table, a schema, or a read of another
+product's data (§24).
+
+**REMY — AI Receptionist.** The only product that exists, so this row is stated against the
+real code and the review's instruction is honoured exactly: *identify future-compatible seams
+only; do not expand the roadmap to collect signals now.*
+
+| Signal | Status today | Seam |
+|---|---|---|
+| Call answered, call ended, transcript, extraction | **Already computed and stored** | `voice_events`, `voice_calls`, `processCallEnded` |
+| Lead captured; booking requested; booking settled or refused, with reason | **Already computed** — `BookingOutcome`, `CalendarConfirmOutcome`, `UnavailableReason`, `checkBookingSlot`'s `lookup_failed` | `capturePartialLead`, `settleCalendarBacking` — M2's point exactly: computed, then discarded |
+| Alternative offered, and whether it was accepted | **Partly** — the offer is computed; acceptance is not distinguished from a first-choice booking | Would need one field at the existing choke point |
+| Reschedule, cancellation | **Already happens**, both routes | `/api/leads`, `/api/bookings/manage`, both via `checkBookingSlot` |
+| Required-field completion, closing-gate behaviour, callback urgency | **Already resolved deterministically** | `nameIntegrity`, `addressIntegrity`, `callbackTiming` — the guards `PROJECT_CONTEXT.md` records |
+| **Attendance / no-show** | **Not captured anywhere. No field exists** | New instrumentation. **Not now** — it needs an owner-facing feature to record it, and inventing one to feed a corpus is the failure this document forbids |
+| **Caller sentiment / quality** | Not captured | Model-derived, therefore `ai_inferred` and **never learnable** (§20.7 rule 5). Low value, real privacy cost. **Not recommended** |
+| Downstream conversion, repeat revenue | Not visible to Remy | Ledger's, via §24 exchanges. Never a Remy column |
+
+> **Remy's contribution needs no new instrumentation to begin.** Everything in the first five
+> rows is already computed at a choke point and thrown away. That is M1/M2, it is already
+> classified L16/L18, and its trigger is unchanged: **the first paying business, behind
+> calendar reliability.** Part VII adds nothing to Remy's roadmap.
+
+**The other seven do not exist.** Their rows are the review's signal lists placed onto the
+canonical vocabulary, so that when one is built it lands correctly. Each answers a long-term
+question, and each question is the product's moat statement from §25.
+
+| Product | Contributes (events → decisions) | The question it must eventually answer |
+|---|---|---|
+| **Ledger** | Invoice issued / paid / late; revenue and margin realised; cash position changed; expense changed | *Did an action taken anywhere in NiteOwl produce economic value?* Ledger is the **outcome validator** for every other product — the one place a claim of business improvement can be checked against money. It is therefore the product with the strictest §23 discipline: financial outcomes are the most tempting to over-attribute |
+| **Atlas** | Findings and recommendations (§42, §43); syntheses across domains | *What is happening, why, what previously worked, and what should be done now?* §42.3 already binds it: **synthesis does not raise a tier.** Atlas is the strongest consumer of the corpus and must never become a second producer of facts |
+| **Scout** | Opportunity discovered / pursued / ignored; outreach; won / lost with reason; cycle duration; margin | *Which signals actually predict valuable outcomes for this business?* Strengthens the existing Opportunity Graph — the accumulating asset is scoring calibrated on **realised profit and retention**, which is precisely §55's calibration metric applied to one domain |
+| **Pulse** | Campaign run; response; lead; customer; and then **Ledger's** revenue and margin, by reference | *Which interventions create profitable customers rather than attention?* The chain is the product. Click and lead attribution is a commodity (§25); the profit-and-retention half requires two other products' outcomes for the same tenant, and §23's multi-touch rule ("several `attributed_to` links, not one winner") applies most sharply here |
+| **Forge** | Task started / completed / delayed / failed; capacity, utilisation, cycle time, error, exception | *Which operational interventions reliably improve performance, under which conditions?* Slowest to accumulate and **most dependent on honest exception recording** — a product that quietly drops failed jobs produces a corpus that proves every intervention works |
+| **Nova** | Recommendation accepted / completed / deferred; goal progress | *Which prioritisation genuinely helps?* **The hardest boundary in the line.** §20.8 stands absolutely: personal-scope data never widens to business scope except by explicit, recorded, revocable consent. No keystroke, screen or presence monitoring — the review's "avoid invasive behavioural surveillance" is adopted as a **prohibition**, not a preference. §25 already prices it: weakest moat, strongest privacy risk |
+| **Beacon** | Risk detected; intervention recommended / executed; customer response; renewal, expansion, churn | *Which intervention, at which time, prevents churn?* The clearest case for M17: a retention corpus containing only customers who **were** contacted can never establish that contacting them helped |
+
+**One rule spanning all eight**, which is where the eight-product line either compounds or
+collapses into a monolith:
+
+> **A product emits its own events and decisions and reads others' only as permissioned derived
+> claims through Core (§24). It never reads another product's tables, never holds a foreign key
+> into one, and never waits on one in a customer-facing path.**
+
+### 59.2 Outcome chains — a chain is a reconstruction, not an entity
+
+The review's example:
+
+```
+Pulse campaign → Scout opportunity → Remy interaction → appointment
+  → Forge delivery → Beacon follow-up → Ledger revenue → Atlas evaluation
+```
+
+The temptation is a `chain` table. **There is none, and there should be none** — it would be
+the fifth appearance of the mistake this architecture has refused four times (§52.4): a second
+system of record over the same history. A chain is **reconstructed** from what already exists:
+
+- **`correlation_id`** (§20.5) binds an episode across products. It is already the binding for
+  a call, and already the binding for a Business Problem Case (§48.2).
+- **Canonical entity references** (`subject_type`/`subject_id`) link the appointment, the
+  customer and the opportunity without any product copying another's row.
+- **§23's five tiers** carry every hop. This is the load-bearing part: **a chain is a sequence,
+  and a sequence is not a cause.** Eight steps of `correlated_with` do not compose into
+  `caused_by` at the end — §42.3's rule that accumulating correlation never becomes cause
+  applies to chains explicitly, because a long chain is exactly where the composition feels
+  justified.
+- **The weakest link governs the claim.** A chain whose hops are `caused_by`, `attributed_to`
+  and `hypothesised` is a **hypothesis**, presented as one, whatever the total revenue at the
+  end.
+
+What the reconstruction can then answer — and these are the questions worth having:
+
+| Question | Answered from |
+|---|---|
+| What initiated it? | The first event on the `correlation_id` |
+| Which products participated, and what did each decide? | Decision records, by `originating_product` |
+| What measurably followed? | Outcome group, with `outcome_provenance` |
+| **Where did it break?** | The last event before the sequence stops — and this is the most valuable output of the whole model, because a broken chain is a **Finding** (§42), not a missing row |
+| What should be different next time? | A recommendation (§43), with a `success_criterion` written before the next attempt |
+
+Chain reconstruction is **X2**, unchanged, and its precondition is unchanged: two products live
+for one tenant.
+
+### 59.3 Privacy-safe network effects — two mechanisms added to §27's gated list
+
+§27 stands unchanged, including both absolute prohibitions. The review names mechanisms §27 did
+not, and they are recorded as **future options behind the same five gates**, not as design:
+
+- **Differential privacy** — a candidate technique for publishing cohort statistics, *in
+  addition to* §27's minimum-cohort and suppression gates, never instead of them. A privacy
+  budget is not a substitute for consent (gate 3) or for opt-out (gate 4).
+- **Federated learning** — a candidate for a future in which tenant data must not leave its
+  boundary at all. It does **not** dissolve M19: a federated update is still a derived artefact,
+  still needs a rebuild recipe, and gate 4 still applies to it.
+
+Both remain **MUCH LATER (X3)** and neither is designed here. The strategic principle is
+unchanged and is worth restating exactly as the review put it:
+
+> **Cross-customer learning must create aggregate intelligence, not cross-customer data
+> leakage.**
+
+---
+
+## 60. Classification
+
+Using §30's four bands unchanged, and continuing the existing numbering.
+
+**ALREADY EXISTS — no change needed**
+
+The sixteen review sections in §53.1's table marked *Exists*, plus §20.4's Business State,
+§23's five tiers, §20.7's canonical record, §24's contract, §27's five gates, §28's ownership
+table, §32's roadmap protection, and §21 as the single diagram — **unchanged, unredrawn, and
+not extended by this part.**
+
+**DOCUMENTATION STRENGTHENING — applied in this pass**
+
+The Outcome Intelligence layer is named and placed as existing layers 4/5/6/9 rather than
+created (§53) · the contribution map for eight products (§59.1) · the outcome-chain
+reconstruction model and the weakest-link rule (§59.2) · differential privacy and federated
+learning placed behind §27's existing gates (§59.3) · `action_status` enumerated (§56.1) · the
+learning hierarchy's six levels mapped onto existing structures (§57.2) · the rights split and
+the anti-lock-in commitment (§58.2) · evaluation datasets added to §28's ownership table
+(§57.4).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P26** | **As-of evidence references** (§54.1, M15) — every `evidence_ref` carries `observed_at`; where the referenced record is mutable, the whitelisted relied-upon values are captured with it | *Part VII.* Free before the first decision row. Afterwards the earliest decisions — those with the longest measured history — are exactly the ones that can never be re-judged |
+| **P27** | **The input whitelist is a temporal control as well as a privacy one** (§54.1) | *Part VII.* Costs one sentence now. Stated only as a privacy control, the whitelist gets drawn to exclude precisely the derived, non-identifying values a retrospective judgement needs |
+| **P28** | **The evaluation boundary** (§54.2) — *was it reasonable* is judged only on evidence at or before `decided_at`; *did it work* is judged on the outcome against the predeclared criterion. Never merged | *Part VII.* The rule that stops hindsight leakage, which is the silent failure mode of every decision-learning system |
+| **P29** | **The evaluation metric set and the denominator rule** (§55.1, §55.2, M16) — the population is every recommendation *issued*; disposition partitions it; the metrics are named before any data exists | *Part VII.* A metric chosen after the results are visible is chosen to flatter them — M11's argument, applied to the aggregate instead of the instance |
+| **P30** | **`action_status: withheld`, with reason codes, for a candidate evaluated and not taken** (§56.1, M17) — bounded to candidates a named rule or model actually evaluated | *Part VII.* The only possible source of a comparison group and of a false-negative rate. Unreconstructable later at any price, because the eligible population is the thing that was not written down |
+| **P31** | **`evidence_scope` alongside `provenance`** (§57.1, M18) — `tenant` / `cohort` / `platform` / `external`; narrowest sufficient scope wins; scope never widens silently | *Part VII.* One enumeration now; a per-row archaeology the moment the first cohort statistic exists |
+| **P32** | **Derived artefacts are rebuildable by a recorded recipe; deletion is honoured by rebuild-without; an artefact whose inputs cannot be enumerated may not be built** (§58.1, M19) | *Part VII.* It is what makes §27's gate 4 a keepable promise rather than a stated one. Free while no artefact exists |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L28** | **Aggregate evaluation reporting** — the §55.2 metrics computed over the corpus, per tenant first | Enough resolved recommendations for a rate to mean anything. Behind L24, which is behind Remy's calendar reliability |
+| **L29** | **Derived-artefact registry** — the recipe, corpus boundary, scope and consents behind P32 | The first derived artefact. The **rule** (P32) must precede the artefact; the registry need not, exactly as P11 precedes L23 |
+
+**MUCH LATER**
+
+X1–X5 unchanged. One addition:
+
+| # | Item | Precondition |
+|---|---|---|
+| **X6** | **Controlled experimentation and counterfactual estimation** — holdouts, assignment, incremental effect, regret | X1, plus a `withheld` population recorded as it occurred (P30), plus §23's admissible bases. **Not a platform to be built; a capability that P30 keeps reachable** |
+
+**NOW: none.** No code, no schema, no migration, no flag, no provider change, no prompt change,
+no test change.
+
+| Band | Part VII items |
+|---|---|
+| ALREADY EXISTS | 16 review sections, unchanged |
+| DOCUMENTATION STRENGTHENING | 8, all applied |
+| PREPARE | 7 (P26–P32) |
+| LATER | 2 (L28–L29) |
+| MUCH LATER | 1 new (X6) |
+| **NOW** | **0** |
+
+**Simplicity check.** Part VII proposes zero new tables, zero new services, zero new providers,
+zero new abstractions, zero new documents and **no change to §21's diagram**. Every
+recommendation is an enumerated field on a record that does not exist yet, or a write-time rule
+about how it will be filled in. Seven of them together are smaller than one migration.
+
+---
+
+## 61. Final test, status and verdict
+
+### 61.1 The ten architectural tests
+
+| Test | Answer |
+|---|---|
+| **Competitor reproduction** — copy the UI, prompts, agents and integrations tomorrow: what is still missing? | The corpus. Every capability in §25's commodity list is weeks; *this business's* measured decision-to-outcome history is unbuyable and cannot be started retroactively. **PASS**, with the uncomfortable corollary §25 already states: **none of it exists yet**, and it starts accumulating only when real businesses book real appointments |
+| **Provider replacement** — swap the model, voice or infrastructure provider | Intelligence survives. §28's ownership table plus its guardrail (*never let a provider hold NiteOwl's memory*); §57.4 adds the evaluation datasets, which are what a replacement model is measured *against*. **PASS.** The one real coupling remains OpenAI at nine hardcoded call sites (§41.2, L25) — a migration cost, not an intelligence loss |
+| **Standalone product** — can each work alone? | Yes. §24's degradation rule: Remy books appointments with the whole of the rest of NiteOwl down, and cross-product intelligence is additive only. **PASS** |
+| **Compounding** — can every meaningful interaction improve future decisions? | Structurally yes, **actually not yet** — M1 destroys transitions today and M2 discards the decision. Both are named, priced and triggered (L16, L18). **PASS as architecture; FAIL as current implementation**, and that is stated rather than smoothed over |
+| **Outcome** — activity distinguished from improvement? | Yes, and more sharply after this pass: `success_criterion` written in advance (M11), only observed outcomes learnable (M9), *we looked and found nothing* recorded (M8), and the denominator that stops rejected and unmeasured recommendations vanishing (**M16**). **PASS** |
+| **Evidence** — can a recommendation be traced to evidence and prior outcomes? | Yes: `evidence_refs`, `provenance`, `confidence`, §23 tiers displayed with the claim, and **M15**'s as-of references, without which the trace resolved to today's values. **PASS, and it required M15** |
+| **Privacy** — cross-product and eventual cross-business learning without exposing tenant data? | Yes. Cross-*product* learning is `tenant`-scoped and crosses no boundary (§57.2); only cohort learning does, and it is behind five gates and two absolute prohibitions. **M19** makes gate 4 keepable, which it was not. **PASS, and it required M19** |
+| **Temporal** — can NiteOwl reconstruct what was known when a decision was made? | **Only after M15.** Before it, the answer is no, and every retrospective judgement reads the present. **PASS on the corrected architecture** |
+| **Authority** — learn aggressively while acting conservatively? | Yes, and the two are deliberately decoupled: the learning layer reads everything; action is gated by permission, authority, approval and reversibility (§20.7, AAL §3/§18), and *recommend / approved / executed / successful* are four distinct states. **PASS** |
+| **Moat** — intelligence that cannot be bought from a model provider or reproduced with MCP integrations? | Yes, and §25 already prices the alternative honestly: the protocol, the registry and the tool are commodities to be built cheaply; the decision record, run-linkage and provenance are the only parts that compound. **PASS** |
+
+Two answers are conditional on findings from this pass (**M15**, **M19**), and one is an honest
+**FAIL on the current implementation** rather than on the architecture. That is the correct
+shape for a product with zero paying businesses: the architecture is ready, the corpus is empty,
+and the corpus cannot be filled by writing documents.
+
+### 61.2 Explicit recommendation
+
+> **NO IMPLEMENTATION REQUIRED NOW.**
+
+No code change is needed. No CRITICAL NOW finding was produced by this review — nothing here
+creates immediate production, data-integrity, security, tenant-isolation, architectural
+dead-end or irreversible moat risk. Every finding is a **write-time rule or an enumerated
+field on a record that does not exist yet**, and each is recorded in PREPARE with the reason it
+is free now and expensive later.
+
+The next milestone is unchanged and is not in this document: **a reliable phone call.**
+
+### 61.3 Phone-call work — verified, not assumed
+
+Checked at `8906564` on branch `docs/outcome-learning-decision-intelligence`:
+
+- `git status --porcelain` reports only `docs/ARCHITECTURE.md` and the documentation files
+  listed in §61.5, plus `supabase/.temp/cli-latest` — the pre-existing Supabase CLI version
+  cache, untouched by this pass. **Nothing under `src/`, `tests/`, `supabase/migrations` or
+  `docs/sql/` was modified or opened for edit.**
+- No Vapi, Google Calendar, Supabase, OpenAI or Resend behaviour changed; no provider
+  configuration, no transcriber setting, no voice prompt, no feature flag, no environment
+  variable, no schema, no RLS policy.
+- The live assistant tool surface remains exactly `check_availability` and `endCall` — Part V
+  §46.1's verification stands, and this pass touched no file that could affect it.
+- The deferred service-matching false positive and the `requested_service` seam in
+  `PROJECT_CONTEXT.md` are unchanged, and none of the rejected approaches was retried.
+- F4 Step 3 and F5 are unchanged and were not started.
+
+### 61.4 The canonical strategic principle
+
+Adopted, and it is the closing statement of the architecture set:
+
+> **NiteOwl's deepest moat is not the agent, the model, the workflow, the integration, the
+> graph or the memory individually. It is the accumulated evidence connecting business
+> context, decisions, actions and measured outcomes across time and across products —
+> evidence that lets NiteOwl make progressively better, business-specific decisions than any
+> system without that history can make.**
+
+Four qualifications, which are what six previous parts were for and without which the
+principle becomes a slogan:
+
+1. **The evidence must be honest, or it is worse than none.** A corpus that cannot separate
+   *we refused* from *we could not tell*, a predicted outcome from a measured one, a
+   correlation from a cause, *nobody looked* from *we looked and found nothing*, or
+   *reasonable* from *lucky*, teaches confident wrong lessons faster than an empty one teaches
+   nothing.
+2. **It must be business-specific first.** A platform average is a commodity; *this business's*
+   history is not (§24, §57.1).
+3. **It must be earned, never trapped.** The advantage is superior judgement, and a business
+   that leaves takes its data with it (§58.2).
+4. **It accumulates only at the speed of real use.** Which is why, for the seventh document
+   running, none of this is urgent, none of it is built, and the priority is a reliable phone
+   call.
+
+### 61.5 Documentation changes
+
+| File | Change |
+|---|---|
+| `docs/ARCHITECTURE.md` | Header records Part VII. **§19** gains M15–M19. **§28** gains the evaluation-dataset ownership row (via §57.4). **§29** gains five rows. **§30** gains P26–P32, L28–L29, X6. **§31** gains the Part VII delta. **New §53–§61** |
+| `PROJECT_CONTEXT.md` | Canonical-set line extended to Parts I–VII, plus a short paragraph recording M15–M19 and that Part VII is NOW: none |
+| `CHANGELOG.md` | One dated entry for this pass, recording the five findings and that nothing was implemented |
+| `CHECKLIST.md` | Architecture-map signpost extended to Part VII, with the no-NOW-item note |
+
+**`docs/AGENT_ACCESS_LAYER.md` is unchanged by this pass** — Part VII introduces no new agent
+capability, no new principal kind and no new governance rule. The `withheld` status (M17) is a
+value on the canonical `DecisionRecord`, which the access layer extends but does not own
+(§20.7). **Created: none** — a seventh review producing a seventh document is the failure mode
+§31 already fired twice on.
+
+### 61.6 Verdict
+
+The seventh review asked for a compounding intelligence layer above memory and orchestration.
+**Sixteen of its twenty-four sections were already answered**, several more completely than
+they were asked — five causal tiers rather than four, `unattributed` where the brief had no
+equivalent, an outcome-provenance rule the brief did not think to require. Three needed
+placing. Five were real, and they share a shape worth naming:
+
+> **Every one of the five is a gap between something the architecture already *says* and
+> something it can actually *do*.** §20.7 says "what was known at the time" and cannot
+> reconstruct it (M15). M11 grades a recommendation and nothing counts the ones that never
+> reached a grade (M16). §23 admits an experiment the corpus makes unconstructable (M17). §20.6
+> explains how a claim was established and not whose experience supports it (M18). §27 promises
+> to remove a tenant's contribution from anything already derived, and nothing could keep that
+> promise (M19).
+
+That is the expected failure mode of a document set that has been extended six times: the
+statements are right, and the mechanisms that would make them true were each one layer below
+where anyone was looking. **None of them costs anything today**, because every structure they
+constrain is still empty. All five become archaeology or a broken promise on the day the corpus
+has value.
+
+Three things are worth taking from this pass:
+
+1. **The most dangerous defect in a learning system is the one that improves the metrics.**
+   Hindsight leakage (M15) and a filtered denominator (M16) both make evaluation look better
+   while making decisions worse, and neither produces an error anybody can find. They are the
+   two findings most likely to be skipped and the two least recoverable afterwards.
+2. **A comparison group is created by writing down what you did not do.** No later effort
+   reconstructs it. M17 costs one enumerated value now and is the difference between a system
+   that can eventually say *this worked* and one that can only ever say *this happened*.
+3. **A moat that requires trapping the customer is not the moat.** §58.2 is stated as a product
+   commitment because the alternative is both wrong and commercially weaker — accumulated
+   judgement a customer would return for, versus an exit cost every buyer prices as churn risk.
+
+And unchanged for the seventh document running: nothing here is urgent, nothing here is built,
+the corpus accumulates only at the speed of real businesses doing real work, and the next
 milestone is still a reliable phone call.
