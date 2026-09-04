@@ -6063,3 +6063,467 @@ not — with the two qualifications above, which is exactly why they are written
 
 The eighth document running ends the same way: nothing here is urgent, nothing here is built, and
 the next milestone is still a reliable phone call.
+
+---
+---
+
+# Part IX — The Intelligence Ownership Layer
+
+Added 2026-09-04 against commit `b39d798`, immediately after Part VIII merged as PR #64. Same
+rules as Parts I–VIII: **documentation only.** No provider was migrated, no vendor was added,
+no service was replaced, no infrastructure was self-hosted, no working integration was touched,
+and no schema, route, flag, prompt, test or production code was changed. Nothing below was
+implemented, and nothing below asks for implementation now.
+
+Governing principle, extending Part VIII's:
+
+> **MINIMUM CHANGE NOW — MAXIMUM OWNERSHIP, RECOVERABILITY, PORTABILITY AND PROVIDER
+> REPLACEABILITY LATER.**
+
+**Part VIII is treated as canonical and is extended, not revisited.** Its register, its A/B/C
+classification, its recoverability set and its verdict all stand unchanged. This part does not
+re-audit providers, does not redraw §21, and does not restate the sovereignty principle.
+
+It asks one question Part VIII did not, and the question turns out to matter more than any
+remaining provider:
+
+> Part VIII proved that NiteOwl's intelligence **survives** a provider substitution. It never
+> asked whether that intelligence stays **usable, comparable and compounding** across one.
+
+Those are different properties, and the gap between them is where a moat quietly dies. The
+rows survive; the corpus can still fragment into *before the swap* and *after the swap*, at
+which point the accumulated learning has been preserved and lost at the same time.
+
+**NOW: none.** No CRITICAL NOW defect was found. Remy's development priority, the five
+deterministic guards and every information-integrity protection from PRs #39–#62 are untouched.
+
+---
+
+## 69. What this part adds, and what it does not
+
+### 69.1 Placement against Parts I–VIII
+
+The pattern of the last three reviews holds again: most of the requirement already exists, and
+the work is to place it rather than restate it.
+
+| The objective asks for | Where it already lives | This part |
+|---|---|---|
+| Sovereignty principle, escape routes, exit test | Part VIII §63, §65, §67 | **Unchanged.** Canonical, extended only |
+| Ownership of graph, memory, outcomes, provenance, permissions | §28, §57.4, §64.1 | **Unchanged** |
+| Never let a provider hold NiteOwl's memory | §28's guardrail | **Unchanged, and generalised** in §72.1 to artefacts that *replace* NiteOwl's own |
+| Learner never writes to the Graph or Memory | §20.9 | **Generalised** to the whole layer — §70.2 |
+| Products usable with Core intelligence unavailable | §24 Degradation | **Extended inward**: also true *within* a product — §70.2 |
+| Derived artefacts rebuildable; deletion by rebuild-without | §58.1, P32 | **Promoted** from a privacy mechanism to the layer's defining property — §70.1 |
+| Each product's moat real on its own | §24 *Direction of the moat* | **Unchanged** |
+| Cross-product measured-outcome learning as a layer | §24, §59, §63.1's hierarchy | **Made binding** — §70 |
+| **Outcome continuity across a provider substitution** | *nowhere* | **NEW — §71 (S1)**, the finding this part exists for |
+| **Provider-resident artefacts that silently replace NiteOwl's own** | *nowhere as a rule* | **NEW — §72.1 (S2)**, with a real 2026-07-10 incident behind it |
+| **Classifying a dependency at adoption rather than at review** | *nowhere* | **NEW — §72.2 (S3)** |
+| **Prompts and guards named as the assets they are** | band A in §64.1 | **NEW rule — §72.1 (S4)** |
+
+### 69.2 What must not be touched, and what this part refuses to propose
+
+Restated because a document about ownership is exactly the kind that invites overreach:
+
+- **No provider migrated, none replaced, no infrastructure self-hosted, no vendor added.**
+  Explicitly not proposed here and explicitly deferred: telephony or SIP changes, any Supabase
+  change, an AI Model Gateway, an independent voice pipeline, self-hosted models, moving Git
+  hosting, and Part VIII's own HARDEN SOON items, which remain exactly where §68.1 left them.
+- **No new table, service, provider, abstraction or document.** Every item below is a
+  write-time rule or an enumerated field on a record that does not exist yet.
+- **The five deterministic guards, the convergence point in `toExtractedLead`, the calendar
+  contract, the credential keyring and the idempotency mechanisms are untouched.** They are what
+  makes substitution possible; a sovereignty pass is the last thing that should disturb them.
+- **§21 remains the single canonical architecture diagram.** Part IX does not redraw it, and
+  §63.1's hierarchy is a projection of it along the dependency axis, not a second diagram.
+
+---
+
+## 70. The Intelligence Ownership Layer, made binding
+
+§63.1 drew the hierarchy. It drew it as a **sovereignty** diagram — the direction dependency
+must point so that no provider becomes an architectural owner. That is correct and it is not
+sufficient, because a layer can sit at the top of a diagram and still be the most fragile,
+least portable thing in the system.
+
+This section states what it means for the top two layers — **cross-product measured-outcome
+learning** and **proprietary Decision Intelligence** — to genuinely sit above Business Memory
+and orchestration, as three invariants that can each be checked.
+
+### 70.1 INVARIANT 1 — the layer is DERIVED, never PRIMARY
+
+> **Everything in the Intelligence Ownership Layer must be rebuildable, by a recorded recipe,
+> from the Outcome Spine, Decision & Outcome Memory and Business Memory alone. No learned
+> artefact may be the only place a fact exists.**
+
+P32 already requires derived artefacts to be rebuildable, and it was introduced as a **privacy**
+mechanism — the thing that makes §27's erasure promise keepable. Part IX **promotes the same
+property to the layer's defining characteristic**, because it turns out to buy four unrelated
+things at once, and only the first was claimed:
+
+1. **Erasure is honourable** — deletion by rebuild-without (§58.1). The original reason.
+2. **Provider loss cannot reach it.** A derived layer has no provider-resident state to lose,
+   which is precisely why §67's exit test found no intelligence in any "capability lost" cell.
+3. **It is portable by construction.** Anything rebuildable from NiteOwl's own database can be
+   rebuilt after any hosting, database or compute migration. It never becomes migration work.
+4. **It can never become a lock-in of NiteOwl's own making.** This is the one nobody expects. A
+   learned artefact that is a *primary* store is unswappable even by its owner — you cannot
+   retire a model whose weights are the only record of what it learned. **A derived layer stays
+   disposable, and disposable is what keeps it improvable.**
+
+The corollary is the rule that governs everything below: **if a value exists only inside a
+learned artefact, it is a fact that was never written down**, and it belongs in the Spine or in
+Business Memory first. §20.9's existing prohibition — *a learner never writes to the Graph or
+Business Memory directly* — is the write-side half of the same rule, unchanged.
+
+### 70.2 INVARIANT 2 — dependency points DOWNWARD only, and the layers below must be complete without it
+
+> **Orchestration, permissions, the deterministic guards and every customer-facing decision path
+> must remain complete and correct with the entire Intelligence Ownership Layer absent.
+> Intelligence is strictly ADDITIVE.**
+
+§24 already says this **across products**: *"Every product must be fully usable with Core
+intelligence unavailable… Remy books appointments if the entire rest of NiteOwl is down."* Part
+IX states the same rule **within** a product, which §24 had no reason to cover and which is the
+easier one to lose, because the intelligence and the orchestration would live in the same
+codebase.
+
+**The test, and it is a sharp one:**
+
+> Removing the intelligence layer may make an outcome **worse**. It must never make an outcome
+> **wrong**, and it must never make one **impossible**.
+
+Applied to what exists today: Remy must book, refuse, escalate and degrade truthfully with no
+learned input whatever. A learned prior may **rank** a suggestion; it may never **decide**
+availability, never relax a booking gate, never satisfy a required-field gate, and never
+substitute for a deterministic guard's refusal. The moment a learned value is load-bearing for
+correctness, the arrow has inverted — and an inverted arrow is worse than a provider
+dependency, because a provider can at least be replaced by another provider.
+
+**Why this belongs in a sovereignty document at all:** an intelligence layer that becomes
+load-bearing is an internal lock-in with no supplier and no exit. Part VIII asked what happens
+when a vendor disappears. This asks what happens when the smartest part of the system is wrong,
+stale, or being rebuilt — and the answer must be *the business keeps running*.
+
+### 70.3 INVARIANT 3 — rent the COMPUTATION, own the CORPUS, the RECIPE and the EVALUATION
+
+> **Model weights may be computed anywhere. The training corpus, the recipe that produced the
+> artefact, the evaluation dataset and the measured outcomes are NiteOwl's, and none of them may
+> live in a provider's account.**
+
+This is the precise form of *the intelligence must compound inside NiteOwl rather than inside a
+provider*, and it deliberately does **not** say "never use a provider's compute" — which would
+be ideology, and would fail §66.5's own test that self-hosting must earn its place.
+
+The line falls exactly where §28's existing guardrail and §57.4 already put it:
+
+| May be rented | Must be NiteOwl's |
+|---|---|
+| Inference and training **compute** | The **corpus** — Spine, decisions, outcomes |
+| A model's **weights**, when derived from a NiteOwl recipe over a NiteOwl corpus | The **recipe** — inputs, boundary, scope, consents (P32, L29) |
+| Embedding computation | The **index**, rebuildable from NiteOwl's database alone (§28) |
+| Evaluation **execution** | The **evaluation dataset and metric definitions** (§57.4) |
+| — | The **measured outcomes** and their provenance (§20.6, §20.7) |
+
+**What this forbids remains what §28 already forbade**, and is repeated only because the
+temptation arrives as a convenience rather than as a migration: provider-hosted assistant
+threads, managed conversation state, hosted vector stores, provider-side "memory" features and
+provider-resident fine-tunes over tenant data.
+
+**The one-sentence test:** *if the provider deleted the account tonight, could NiteOwl rebuild
+this artefact tomorrow from its own database?* If yes, the compute was rented. If no, the asset
+was surrendered.
+
+### 70.4 Why the layer being on top is what makes providers replaceable
+
+The three invariants close a loop that Parts III, VII and VIII each described one arc of, and
+it is worth stating once, plainly, because it is the whole argument for the ordering the
+objective asks for:
+
+**A rented provider is replaceable exactly to the degree that NiteOwl can tell whether the
+replacement is worse.** Evaluation datasets, metric definitions and measured outcomes (§57.4,
+§55.2) are what turn *"we swapped the model and it feels fine"* into a measurement. That
+capability lives in the top layer.
+
+So the hierarchy is not decoration and not merely defensive: **the intelligence layer sitting
+above everything is the mechanism that keeps everything below it swappable.** Put it underneath
+— let outcomes be judged by a provider's own analytics, or let a provider hold the evaluation
+set — and every layer beneath silently becomes permanent, because nothing can score its
+replacement.
+
+---
+
+## 71. S1 — A provider substitution preserves the rows and can still reset the learning
+
+**This is the finding this part exists for, and it is the one place where Part VIII's verdict is
+true but incomplete.**
+
+§67 asked, per provider, *what would NiteOwl lose?* and answered — correctly — that no canonical
+state, outcome history or decision intelligence appears in any "capability lost" cell. Every row
+survives. **Survival was the only property tested.**
+
+The property that actually matters to a compounding moat is **continuity**: after the
+substitution, is the corpus still *one* corpus?
+
+### 71.1 The mechanism
+
+An outcome record is only comparable across a provider change if the provider's identity is an
+**attribute** of the record rather than a **dimension of the concept**. The failure is not
+dramatic and produces no error:
+
+- a canonical concept keyed, partitioned or typed by provider — `vapi_call`, a lead source that
+  fuses channel with vendor, an outcome bucketed by transcriber — silently splits the corpus at
+  the swap. Every statistic computed over "reception outcomes" now spans two populations that
+  are not comparable, and nothing says so.
+- a measured outcome whose **definition** depends on a provider-specific signal cannot be
+  computed at all after the swap. The metric does not become wrong; it becomes unavailable, and
+  the history it was computed over becomes an island.
+- a decision record whose `evidence_ref` points at a provider-resident artefact (a hosted
+  transcript, a provider dashboard record) fails P26's as-of reconstruction the moment the
+  account closes — the row survives, and the evidence behind it does not.
+
+The result in each case is the same, and it is the specific shape a moat dies in: **the data was
+never lost, and the learning still reset.** Two years of measured outcomes become "before" and
+"after", and the comparison that would have justified the substitution is the exact comparison
+the substitution destroyed.
+
+### 71.2 The rule
+
+> **S1 — PROVIDER IDENTITY IS AN ATTRIBUTE, NEVER A DIMENSION.** A canonical NiteOwl concept —
+> event type, decision, outcome, metric definition, entity key — is named and shaped in NiteOwl's
+> terms and never carries a provider in its identity, its key or its partitioning. The provider
+> that served a record is recorded **on** the record, as a filterable attribute, so it can be
+> controlled for and never becomes the thing the corpus is divided by.
+
+The distinction is exact, and both halves are required:
+
+- **Record the provider.** Part III §29 already wants this — *model/version traceability:
+  absent* — and Part VIII §65.7 names it as half the OpenAI exposure. Knowing which model or
+  engine produced a stored value is necessary to judge a substitution at all, and P26's
+  as-of evidence requires it.
+- **Never let it become the dimension.** `appointment.booked` is the event, with `provider:
+  google` as an attribute; there is no `google.appointment.booked` and never will be — which is
+  §20.5's existing naming convention and §41.6's capability rule, now shown to carry a second
+  purpose nobody had named. **The convention that was adopted for clean boundaries turns out to
+  be the thing that keeps the corpus continuous.**
+
+### 71.3 What follows, and what does not
+
+**Nothing to build.** Every structure S1 constrains is still empty: the Spine, the decision
+record and the metric set are all defined and unimplemented. This is a **write-time rule**, free
+today and a corpus-wide migration the day after the first substitution.
+
+**Today's code already complies, verified rather than assumed** — and the cleanest instance is
+worth showing, because it is the rule already being followed by instinct:
+
+```
+leads.source          voice · chat · web_widget · dashboard_preview     ← the CHANNEL
+provider              "vapi"                                            ← the ATTRIBUTE
+```
+
+`"vapi"` appears in `src/` only as a `provider` field on a parsed webhook result and as the
+`VoiceProvider` union in `types.ts`. **It never reaches `leads.source`**, which records the
+channel a lead arrived through. Substituting the voice provider therefore leaves every
+`source: "voice"` lead in one comparable population — which is precisely what P33 exists to
+preserve, achieved here with no rule in force.
+
+Likewise: `integration_links` holds provider ids as references beside NiteOwl's own records
+rather than as identity, and the five resolved caller fields are NiteOwl values regardless of
+which engine transcribed them. **S1 is therefore a rule to keep, not a defect to fix.**
+
+**Two carve-outs, so this does not become dogma:**
+
+- **`integration_links` is exactly right and must not change.** A reference to a provider's
+  record, held beside NiteOwl's own, is how a provider id is *supposed* to appear. S1 forbids
+  provider identity in the **concept**, not in a link table built to hold it.
+- **A genuinely provider-specific operational metric may be provider-dimensioned** — transcriber
+  word-error rate is *about* the transcriber. It simply may not be promoted into a **business**
+  outcome, which is the boundary §23's tiers already police.
+
+---
+
+## 72. Two sovereignty leaks the escape-route register cannot see
+
+Part VIII's register asks, per provider, *what would NiteOwl lose if this disappeared?* Both
+leaks below are invisible to that question, because in each the provider does not disappear —
+it quietly **acquires** something instead.
+
+### 72.1 S2 and S4 — a provider-resident artefact that silently replaces a NiteOwl-owned one
+
+§28's guardrail says *never let a provider hold NiteOwl's memory*. The leak it does not cover is
+narrower and has already happened once in this product:
+
+> **S2 — A provider-side artefact must never be able to stand in for a NiteOwl-owned one on a
+> production path.** The risk is not that the provider *stores* something; it is that the
+> provider *serves* something instead of NiteOwl, and the result looks like success.
+
+**This is documented history, not a hypothesis.** `docs/VOICE_SETUP_RUNBOOK.md` Step 3 records
+that on **2026-07-10** a dashboard-built assistant was attached to the Vapi number. Vapi answered
+with that canned assistant and **never contacted NiteOwl's server**: the call "worked" and
+bypassed the Knowledge Base, call records, lead capture and summary emails entirely — *"looks
+deceptively like a successful test."*
+
+Read as a sovereignty event rather than a setup error, that incident is the whole failure mode in
+one page. **A provider-resident artefact replaced NiteOwl's orchestration on a live production
+path, and the only symptom was the absence of records nobody was looking for.** No outage, no
+error, no alert. Every band-A asset was intact and none of them ran.
+
+**The generalised rule, and the asset it protects (S4):**
+
+> **S4 — PROMPTS, ASSISTANT CONFIGURATION, GUARDS AND ORCHESTRATION POLICY ARE BAND-A ASSETS
+> WHOSE ONLY SOURCE OF TRUTH IS THE REPOSITORY.** A prompt edited in a provider's dashboard is an
+> ungoverned fork of a band-A asset: unreviewed, unversioned, invisible to tests, absent from
+> every clone, and lost with the account.
+
+The architecture already does the right thing and now has the reason written down:
+`buildVoiceAssistantConfig()` builds the assistant **live, per call, from NiteOwl's own org
+profile and Knowledge Base**, and the number's assistant field must be **empty**. That design
+choice is usually described as multi-tenancy. It is also the single control that makes S2 and S4
+enforceable, and it should be recognised as such before anyone simplifies it.
+
+**The standing test for any future provider:** *can this provider serve a customer-facing
+outcome without NiteOwl in the path?* Where the answer is yes, the configuration that keeps
+NiteOwl in the path is **production-critical**, and belongs in the repository and the runbook —
+not in a dashboard field somebody remembers to leave blank.
+
+### 72.2 S3 — classify a dependency at ADOPTION, not at review
+
+Part VIII found three of its own named providers — GitHub, the telephony carrier and the phone
+number, STT/TTS — in **no existing table**. The cause is worth naming precisely, because it is
+structural rather than an oversight: **every prior inventory was built by looking at runtime
+coupling**, and none of the three is imported by the application. A method that enumerates
+`import` statements cannot see a provider that holds the source code, the phone number, or a
+sub-contracted engine.
+
+Three reviews across eight months applied that method and missed the same three providers each
+time. The fix is not a better review; it is **not depending on a review**:
+
+> **S3 — A dependency is classified when it is ADOPTED, not when it is next reviewed.** Before a
+> new external dependency reaches production it carries four lines: its **A/B/C band** (§64), its
+> **criticality band** (§41.3), **what NiteOwl retains if it disappears** (§67), and **whether it
+> can serve a customer-facing outcome without NiteOwl in the path** (§72.1).
+
+Four lines, written once, by whoever adopts the dependency. **It is not a governance process, an
+approval gate or a committee** — the proportionality rule (§41.3) governs here as everywhere, and
+a document that demands ceremony for a new email provider will simply be ignored.
+
+The test of whether S3 works is concrete and cheap: **applied at adoption, it would have caught
+all three of Part VIII's missing providers, because it asks who holds the asset rather than who
+appears in an import.**
+
+---
+
+## 73. Classification and verdict
+
+### 73.1 Classification
+
+Using §30's four bands unchanged, continuing the existing numbering (Part VII ended at P32, L29,
+X6).
+
+**ALREADY EXISTS — no change needed**
+
+Part VIII's register, A/B/C classification, recoverability set, exit test and verdict · §28's
+ownership table and provider-memory guardrail · §24's four exchanges, five prohibitions and
+degradation rule · §20.9's write-direction prohibition · §58.1/P32's rebuildability · §57.4's
+evaluation datasets · §20.5's event-naming convention · §41.6's capability rule · §21 as the
+single diagram. **All unchanged, unredrawn and not extended.**
+
+**DOCUMENTATION STRENGTHENING — applied in this pass**
+
+The Intelligence Ownership Layer's three invariants (§70.1–§70.3) · P32 promoted from a privacy
+mechanism to the layer's defining property, with the four things it buys (§70.1) · §24's
+degradation rule extended inward to hold *within* a product (§70.2) · the rent-compute /
+own-corpus split stated as a table (§70.3) · why the top layer is what keeps lower layers
+swappable (§70.4) · the 2026-07-10 incident read as a sovereignty event rather than a setup
+error (§72.1).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P33** | **Provider identity is an attribute, never a dimension** (§71.2, S1) — no canonical concept, key, partition or metric definition carries a provider in its identity; the serving provider is recorded **on** the record so it can be controlled for | *Part IX.* Free while the Spine and decision record are empty. After the first substitution it is a corpus-wide migration, and the comparison that would have justified the swap is the one the swap destroyed |
+| **P34** | **Intelligence is derived, never primary** (§70.1) — nothing in the top layer may be the only place a fact exists; everything rebuildable by a recorded recipe from Spine + Memory | *Part IX.* Extends P32 from artefacts to the layer. Buys erasure, provider-loss immunity, portability and the ability to retire a model at all |
+| **P35** | **Orchestration completeness without intelligence** (§70.2) — removing the layer may make an outcome worse, never wrong and never impossible; a learned value is never load-bearing for correctness | *Part IX.* Costs nothing before the first learned input exists, and is unpickable afterwards. An inverted arrow is a lock-in with no supplier |
+| **P36** | **Rent the computation, own the corpus, recipe and evaluation** (§70.3) — weights and compute may be rented; corpus, recipe, index, evaluation dataset and metric definitions may not live in a provider's account | *Part IX.* The concrete form of §28's guardrail, stated before the first hosted-memory convenience is offered |
+| **P37** | **Classify a dependency at adoption** (§72.2, S3) — four lines: A/B/C band, criticality, what NiteOwl retains, and whether it can serve a customer-facing outcome without NiteOwl in the path | *Part IX.* Would have caught all three of Part VIII's missing providers. Four lines is cheaper than a fourth review that misses them again |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L30** | **Provider attribution on stored derived values** — which model, engine or provider version produced a stored value (Part III §29's absent traceability; Part VIII §65.7's other half) | The AI Model Gateway (L11), or the first substitution requiring a before/after comparison. **P33 must precede it**: the rule about where provider identity may live has to exist before values start carrying it |
+
+**MUCH LATER**
+
+X1–X6 unchanged. Nothing added.
+
+**NOW: none.** No code, no schema, no migration, no flag, no provider change, no prompt change,
+no test change, no configuration change.
+
+| Band | Part IX items |
+|---|---|
+| ALREADY EXISTS | Part VIII entire, plus 9 earlier structures — unchanged |
+| DOCUMENTATION STRENGTHENING | 6, all applied |
+| PREPARE | 5 (P33–P37) |
+| LATER | 1 (L30) |
+| MUCH LATER | 0 |
+| **NOW** | **0** |
+
+**Simplicity check.** Part IX proposes zero new tables, zero new services, zero new providers,
+zero new abstractions, zero new documents and no change to §21's diagram. Four of its five
+PREPARE items are write-time rules about records that do not exist yet; the fifth is four lines
+written by whoever adopts a dependency. **All five together are smaller than one migration**, and
+one of them (P33) is the difference between a corpus that compounds across a provider change and
+one that starts again.
+
+### 73.2 The three questions this part answers
+
+**Is the intelligence layer actually on top?** Yes, and now by rule rather than by diagram. It
+reads from Memory and the Spine and writes to neither (§20.9, §70.1); the layers below are
+complete without it (§70.2); and its corpus, recipe and evaluation are NiteOwl's even when the
+compute is rented (§70.3).
+
+**Does it compound inside NiteOwl rather than inside a provider?** Yes — subject to P36 being
+kept. The failure mode is not a decision anyone would announce; it arrives as a provider feature
+that is genuinely convenient, and §70.3's one-sentence test is deliberately blunt enough to
+apply in the moment: *if the account were deleted tonight, could NiteOwl rebuild this tomorrow
+from its own database?*
+
+**Can every critical rented provider eventually be replaced without losing canonical state, the
+Graph, Memory, workflows, outcome history, decision intelligence, permissions, provenance,
+orchestration policy, prompts, guards or customer data?** Part VIII answered **yes, with two
+qualifications** — the untested Supabase restore and the phone number's account of record. Both
+stand exactly as §68.1 and §68.4 left them, still HARDEN SOON, still deliberately deferred, and
+**neither is touched by this part.**
+
+Part IX adds a **third condition, of a different kind**, and it is the honest amendment to that
+verdict:
+
+> Replaceability requires more than the rows surviving. It requires the **outcome corpus to stay
+> comparable across the substitution** (P33), the intelligence to be **rebuildable rather than
+> resident** (P34), the layers below to be **complete without it** (P35), and the provider to be
+> unable to **serve a customer-facing outcome without NiteOwl in the path** (S2/§72.1).
+>
+> The first three are free today and unpurchasable later. The fourth is already true, was already
+> violated once on 2026-07-10, and is held in place by a single design choice — building the
+> assistant live, per call, from NiteOwl's own data — that should never be simplified away.
+
+### 73.3 Verdict
+
+The strongest thing that can be said about this architecture after nine reviews is that **the
+ordering was right before the reasons for it were written down.** Events are named in NiteOwl's
+verbs, `leads.source` records the channel and not the vendor, provider ids live in a link table
+beside NiteOwl's records rather than inside them, the voice assistant is built live from
+NiteOwl's own data, and the learner was forbidden from writing to the facts it learns from
+before any learner existed. Part IX did not have to correct any of that. It had to notice that
+each one is load-bearing for a reason nobody had stated — and to write the reason down while
+the structures are still empty enough for it to be free.
+
+The one genuinely new finding is worth restating on its own, because it is the kind that is
+invisible until it is expensive: **a provider substitution can preserve every row and still reset
+the learning.** Part VIII proved the data survives. P33 is what keeps it *one corpus* afterwards,
+and it costs a naming convention today.
+
+And unchanged for the ninth document running: nothing here is urgent, nothing here is built, no
+provider is replaced, nothing is self-hosted, the corpus still accumulates only at the speed of
+real businesses doing real work — and the next milestone is still a reliable phone call.

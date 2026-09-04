@@ -13,13 +13,13 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–VIII.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–IX.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
   cross-product outcome learning and decision intelligence, Part VIII sovereignty and
-  provider escape routes. **§21 is the single canonical architecture diagram**, and neither
-  Part VII nor Part VIII redraws it.
+  provider escape routes, Part IX the Intelligence Ownership Layer. **§21 is the single
+  canonical architecture diagram**, and Parts VII, VIII and IX do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -54,6 +54,33 @@ Vapi's**, which is the one identified loss no backup restores. Neither is a reas
 anything — see §68.1's HARDEN SOON list. Part VIII also corrected two stale facts in place:
 §12's *"no `vercel.json`"* (one now exists, with a single cron) and the OpenAI call-site count
 (**11 sites across 9 files**, not 9).
+
+Part IX (added 2026-09-04) treats Part VIII as canonical and extends it, making **cross-product
+measured-outcome learning and proprietary Decision Intelligence** binding as the layer above
+Business Memory and orchestration. Three invariants: the layer is **derived, never primary**
+(rebuildable from Spine + Memory, which is what makes it erasable, provider-loss-proof, portable
+and — the part nobody expects — retirable by NiteOwl itself); dependency points **downward
+only**, so removing the layer may make an outcome *worse* but never *wrong* and never
+*impossible*; and NiteOwl **rents the computation while owning the corpus, the recipe and the
+evaluation**. §70.4 states the payoff: the intelligence layer sitting on top is the mechanism
+that keeps every layer beneath it swappable, because evaluation datasets are what let NiteOwl
+tell whether a replacement provider is worse.
+
+**The one genuinely new finding is S1 (§71): a provider substitution can preserve every row and
+still reset the learning.** Part VIII proved the data survives; it never asked whether the corpus
+stays *comparable* across a swap. If a provider is a **dimension** of a canonical concept rather
+than an **attribute** of a record, the corpus silently splits into before/after and the
+comparison that would have justified the substitution is the one it destroyed. Today's code
+already complies — `"vapi"` never reaches `leads.source`, which records the **channel** — so
+**P33 is a rule to keep, not a defect to fix.** Also new: S2/S4, that a provider-resident
+artefact must never stand in for a NiteOwl-owned one on a production path (the **2026-07-10
+dashboard-assistant incident**, re-read as a sovereignty event — a call that "worked" while
+bypassing the Knowledge Base, lead capture and every record), and S3, classify a dependency at
+**adoption** rather than at review, which would have caught all three providers Part VIII found
+unregistered. **NOW: none** — five PREPARE items (P33–P37), one LATER (L30), no code, schema,
+flag, prompt, provider or configuration change. Part VIII's two HARDEN SOON qualifications
+(untested Supabase restore, phone-number account of record) stand exactly as §68.1 left them and
+are **deliberately deferred**.
 
 ---
 
