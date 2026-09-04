@@ -13,12 +13,13 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–VII.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–VIII.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
-  cross-product outcome learning and decision intelligence. **§21 is the single canonical
-  architecture diagram**, and Part VII does not redraw it.
+  cross-product outcome learning and decision intelligence, Part VIII sovereignty and
+  provider escape routes. **§21 is the single canonical architecture diagram**, and neither
+  Part VII nor Part VIII redraws it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -33,6 +34,26 @@ recommendations in the count; `action_status: withheld` so a comparison group ca
 `evidence_scope` so a claim says whose experience supports it; and rebuild-without deletion so
 the erasure promise over derived artefacts is keepable. All seven of its items are **PREPARE**
 (P26–P32). **NOW: none** — no code, schema, flag, prompt or provider change.
+
+Part VIII (added 2026-09-04) is the sovereignty and provider-escape-route pass. Like Part VII,
+most of what it was asked for already existed — §41 wrote the sovereignty principle, §28 the
+ownership line, Part II the whole provider-independence assessment — so its new work is narrow:
+it **registers the three providers that appeared in no previous table** (GitHub, the telephony
+carrier and the phone number, and STT/TTS, all missed because none is a runtime import), adds
+the **A/B/C ownership classification** and the **recoverability set** §41.3 had deferred, and
+answers the exit test per provider. **NOW: none** — no provider replaced, no vendor added, no
+self-hosting adopted, no code, schema, flag, prompt or provider change. Its canonical rule is
+the **NiteOwl Sovereignty Principle** (§63): *rent commodity capability, own strategic state,
+intelligence and control.*
+
+**Every band-A asset is NiteOwl-resident today**, so a provider loss cannot reach the moat. Two
+qualifications are recorded rather than softened, and both are cheap: the Supabase **restore has
+never been tested** and depends on an encryption keyring whose separate custody is **unverified**
+(B6 plus §11, both pre-existing); and the **phone number's account of record appears to be
+Vapi's**, which is the one identified loss no backup restores. Neither is a reason to migrate
+anything — see §68.1's HARDEN SOON list. Part VIII also corrected two stale facts in place:
+§12's *"no `vercel.json`"* (one now exists, with a single cron) and the OpenAI call-site count
+(**11 sites across 9 files**, not 9).
 
 ---
 

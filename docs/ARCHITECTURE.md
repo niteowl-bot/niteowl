@@ -673,7 +673,7 @@ when something below it breaks, and about state that exists nowhere durable.
 | **Supabase** (Postgres + RLS + Auth + Storage) | System of record, identity, file storage | Everything | Deep, and deliberately so | **No.** It *is* the source of truth, not a swappable capability |
 | **Vercel** | Hosting, serverless runtime | Everything | Thin — see §12 | No |
 | **Google Calendar** | Calendar | `providers/google.ts` only | **Fully isolated** behind `CalendarCapability` | Already done |
-| **OpenAI** | Language, extraction, datetime parsing | **9 direct `fetch` call sites** | Direct, repeated, no shared client | Later — §8 |
+| **OpenAI** | Language, extraction, datetime parsing | **11 direct `fetch` call sites across 9 files** *(re-counted 2026-09-04 at `e97a751`; read 9 in 2026-08-08 — Part VIII §68.3)* | Direct, repeated, no shared client | Later — §8 |
 | **Vapi** | Telephony + voice AI | `lib/voice/*` (adapter layer exists) | Moderate; prompt lives in our code | Later — §9 |
 | **Resend** | Email | `lib/email.ts` (single seam) | One module, module-scope client | Later; the seam already exists |
 | **Stripe** | Billing | `lib/billing/{stripe,provider}.ts` | Behind a provider indirection already | No |
@@ -1044,7 +1044,11 @@ Sentry item is B4, which is about cost, not availability.
 
 ### Vercel — **ACCEPTABLE**
 
-No `@vercel/*` import anywhere. No `vercel.json`. No KV, Blob, Edge Config or Cron. The
+No `@vercel/*` import anywhere. ~~No `vercel.json`.~~ No KV, Blob or Edge Config. **Corrected
+2026-09-04 (Part VIII §65.2, §68.3): a `vercel.json` now exists, declaring one daily cron
+(`/api/cron/voice-replay`).** The verdict below is unchanged — the route is a plain HTTP
+endpoint guarded by `CRON_SECRET`, so on another host it needs one `curl` from a system timer.
+It is struck rather than deleted so a later reader can see the reading move. The
 only platform-shaped things are `export const maxDuration = 300` on one route (a no-op
 elsewhere) and `after()` from `next/server` (framework, not platform). This is a standard
 Next.js application that would run on any Node host. **Do not sacrifice current simplicity
@@ -1162,7 +1166,7 @@ trigger remains a second real consumer.**
 | Provider | Level 1 Portable | Level 2 Recoverable | Level 3 Gracefully degradable |
 |---|---|---|---|
 | Google Calendar | ✅ | ✅ | ✅ *(truthful, but invisible — B1)* |
-| OpenAI | ⚠️ 9 sites | ✅ | ✅ |
+| OpenAI | ⚠️ 11 sites, 9 files | ✅ | ✅ |
 | Vapi | ⚠️ real work | ✅ | ✅ |
 | Resend | ✅ | ⚠️ no delivery state | ⚠️ B2 |
 | Sentry | ✅ | ✅ | ✅ |
@@ -3437,7 +3441,7 @@ Checked against the tree at `9bdfaf3`, not carried forward from the 2026-08-08 r
 |---|---|---|
 | **Google Calendar** | Provider identifiers appear in `src/lib/integrations/providers/google.ts` and nowhere else in `src/` (the only other hit is a marketing privacy page naming Google in prose) | **Isolated.** The `CalendarCapability` contract holds |
 | **Vapi** | `buildVoiceAssistantConfig()` returns a **provider-neutral** `VoiceAssistantConfig` — prompt, first message, language, voice, structured-data schema, summary instructions — built in our code per call from our own org profile, knowledge and settings. `buildVapiAssistantResponse()` maps it to the provider's shape as the **last** step, in `vapi.ts`. `src/lib/voice/types.ts` names Vapi only in comments and one `VoiceProvider` union value; it carries no provider schema. Outside `src/lib/voice/`, one cron route imports one flag helper | **Adapter-isolated.** The reception intelligence is NiteOwl's, not the provider's. This is the single most important sovereignty fact in the product and it is currently true |
-| **OpenAI** | **9 direct `fetch` call sites** across chat, widget, sales chat, voice extraction, knowledge import, FAQ generation, lead capture and datetime parsing. Model ids hardcoded at each | **The real coupling.** Already recorded as L11 and Part II §8. Unchanged, and still not urgent |
+| **OpenAI** | **11 direct `fetch` call sites across 9 files** — chat, widget, sales chat, voice extraction, knowledge import, FAQ generation, lead capture and datetime parsing. Model ids hardcoded at each. *(Re-counted 2026-09-04 at `e97a751`; this row read 9 sites on 2026-08-31 — Part VIII §68.3. The assessment is unchanged)* | **The real coupling.** Already recorded as L11 and Part II §8. Unchanged, and still not urgent |
 | **Supabase** | System of record, by design | **Not a coupling — it is the record.** Part II §12's assessment stands |
 | **Resend, Stripe, Sentry, Vercel** | Single seam / provider indirection / thin / thin | Adequate, unchanged |
 
@@ -5331,3 +5335,731 @@ Three things are worth taking from this pass:
 And unchanged for the seventh document running: nothing here is urgent, nothing here is built,
 the corpus accumulates only at the speed of real businesses doing real work, and the next
 milestone is still a reliable phone call.
+
+---
+---
+
+# Part VIII — Sovereignty and Provider Escape Routes
+
+Added 2026-09-04 against commit `e97a751`. Same rules as Parts I–VII: **documentation only.**
+No provider was migrated, no vendor was added, no working integration was touched, no schema
+was created, no route was changed, no flag was introduced and no production code was modified.
+Nothing below was implemented, and nothing below asks for implementation now.
+
+Governing principle for this part, which is the brief's own and is the same one Part II
+adopted on 2026-08-08:
+
+> **MINIMUM CHANGE NOW, MAXIMUM RECOVERABILITY AND PORTABILITY LATER.**
+>
+> **RENT COMMODITY CAPABILITY. OWN STRATEGIC STATE, INTELLIGENCE AND CONTROL.**
+
+This is the eighth review, and its honest headline matches the seventh's: **most of what it
+asks for already exists.** Provider independence was Part II's entire subject, §28 established
+the ownership line, and Part V §41 already wrote the sovereignty principle, the criticality
+bands and the survives-the-provider test. Restating those would add a third architecture voice
+to a document set that deliberately has one.
+
+The useful work is therefore threefold, and only the second and third are new:
+
+1. **Say where each requirement already lives** (§62), so this part does not re-decide settled
+   questions.
+2. **Register the providers nobody registered**, because they were never runtime imports:
+   **GitHub**, **the telephony carrier and the phone number**, and **STT/TTS**. Three of the
+   brief's named providers appear in **no** existing table in this document. Two of them hold
+   an asset classified MUST OWN or carry the product's customer-facing identity (§65.1, §65.5,
+   §65.6).
+3. **Write the recoverability set** — backup, export, restore, translation, lock-in level —
+   which §41.3 called PREPARE and which no single place currently holds (§66).
+
+**NOW: none.** No CRITICAL NOW code defect was found, so **no production-code change is made
+or recommended by this part.** Remy's reliability roadmap and the information-integrity work
+are untouched (§32, §61.3), and the next milestone is still a reliable phone call.
+
+---
+
+## 62. Current-state assessment — where this brief's requirements already live
+
+Checked against the working tree at `e97a751`, not carried forward from a previous reading.
+
+| The brief asks for | Where it already lives | Status |
+|---|---|---|
+| Sovereignty principle | §41.1 — *no provider may become the sole representation of a NiteOwl business concept* | **Exists.** §63 adds the rent/own sentence and the required layer hierarchy, nothing more |
+| Provider-owned boundary per dependency | §3.8, §6, §14, §41.6 | **Exists** |
+| Canonical internal representation | §41.1's `provider → adapter → canonical → Graph` direction; `integration_links` | **Exists** |
+| Never let a provider hold NiteOwl's memory | §28's adopted guardrail | **Exists, and is the load-bearing one** |
+| Ownership of graph, memory, outcomes, decisions, provenance | §28 ownership table, extended by §57.4 | **Exists** |
+| Criticality bands (consequence, not likelihood) | §41.3 REPLACEABLE / DEGRADABLE / CRITICAL | **Exists** |
+| Commercial and policy risk axis | §41.4 | **Exists**, still unapplied to the table — deliberate |
+| What survives losing a provider | §41.5 | **Exists** for Google, Vapi and Resend; §67 extends it to every critical provider |
+| Documented failure behaviour / truthful degradation | §11, §15 | **Exists** |
+| Calendar gateway, appointment source of truth, provider ids as links | §1.5, §3.8, §41.2 | **Exists and verified** |
+| AI model boundary, output as evidence not truth | §8; the five deterministic voice guards | **Exists**, and is stronger than the brief assumes — see §65.7 |
+| Vercel portability | §12 | **Exists**, with two stale facts corrected in §68.3 |
+| Supabase portability, Auth lock-in | §12 | **Exists** |
+| Data export / portability | §12 *"gap, documented not built"*; §29 | **Exists as a known gap** |
+| Agent capabilities never expose provider operations | §41.6 | **Exists** |
+| Moat sits above provider infrastructure | §25, §28, §41.5 | **Exists** |
+| **GitHub escape route** | *nowhere* | **NEW — §65.1** |
+| **Telephony carrier / number ownership** | recorded only as *"Twilio: not integrated"* (§6) | **NEW — §65.5.** That entry is true and its conclusion is incomplete |
+| **STT / TTS providers** | *nowhere* | **NEW — §65.6** |
+| **A / B / C ownership classification** | §28 names owners, not portability bands | **NEW — §64** |
+| **Consolidated recoverability set** | §41.3 requires it as PREPARE; no single place holds it | **NEW — §66** |
+| **Environment-variable catalogue for redeployment** | scattered across the runbook and code | **NEW — §66.3** |
+
+### 62.1 What must not be touched
+
+Unchanged from §61.2, and restated because this brief could be read as licensing migration:
+
+- **No provider is replaced.** Not Vercel, not Vapi, not Supabase, not GitHub, not the model
+  provider. No self-hosting is adopted. No vendor is added — including one added *to prove*
+  portability, which would be the same mistake in the opposite direction.
+- **The five deterministic voice guards, the canonical convergence point in `toExtractedLead`,
+  and every information-integrity protection from PRs #39–#62 stand untouched.**
+- The calendar contract, `IntegrationError`, `integrationFetch`, the credential keyring and the
+  idempotency mechanisms (§13) are the parts that make substitution possible at all. They are
+  the last things a sovereignty pass should disturb.
+
+---
+
+## 63. The NiteOwl Sovereignty Principle
+
+Adopted as a canonical architecture rule, extending §41.1 rather than replacing it:
+
+> **NITEOWL SOVEREIGNTY PRINCIPLE.** Rent external capability wherever it is economically and
+> operationally sensible, but retain ownership and control of NiteOwl's canonical data,
+> identity, provenance, business state, orchestration contracts, measured outcomes and decision
+> intelligence.
+>
+> Every strategically important external dependency must have: a defined NiteOwl-owned
+> boundary; a canonical internal representation independent of the provider; an export or
+> recovery path for critical state; documented failure behaviour; a substitution path;
+> observability sufficient to detect its failure or degradation; and a documented self-hosting
+> or alternative-provider route **where strategically justified**.
+>
+> The last four words are load-bearing. A documented route is a requirement; taking it is not.
+
+### 63.1 The required hierarchy
+
+Documented so the direction of dependency is explicit and can be checked. **This is the
+existing architecture drawn along one axis, not a new structure** — §21 remains the single
+canonical architecture diagram and this does not redraw it.
+
+```
+  NiteOwl Proprietary Decision Intelligence            §20.7, §43
+                    ↓
+  Cross-product measured outcome learning              §24, §59
+                    ↓
+  Business Memory                                      §20.9, §3.6
+                    ↓
+  Business Graph                                       §20.2
+                    ↓
+  NiteOwl Core — permissions · audit · orchestration   §20.8, §3.4, §41.6
+                    ↓
+  NiteOwl-owned provider gateways and contracts        §3.8, §8, §9
+                    ↓
+  Replaceable third-party or self-hosted providers
+```
+
+**The binding rule on this hierarchy:** a higher layer must never depend on the proprietary
+internal data model of a single lower provider. Dependency points **downward through a
+NiteOwl-defined contract**, never upward from a provider's schema into product logic.
+
+Two consequences worth stating, because both are already true and both are easy to lose:
+
+- **A canonical event is named `appointment.booked`, never a provider's verb** (§20.5, §41.6).
+  The history therefore survives a provider swap without translation.
+- **The layers above Core are provider-*less*, not merely provider-*independent*.** The Graph,
+  Memory, Spine and decision records have no provider concept in them at all. That is why
+  §41.5's test passes: provider loss cannot reach a layer that never referenced a provider.
+
+---
+
+## 64. Ownership classification
+
+The A/B/C bands the brief asks for. These classify **portability posture**, and are orthogonal
+to §41.3's REPLACEABLE / DEGRADABLE / CRITICAL bands, which classify **consequence of loss**. A
+subsystem can be band A and REPLACEABLE, or band C and CRITICAL — Vapi is exactly the latter.
+
+| Band | Meaning | Test |
+|---|---|---|
+| **A — MUST OWN** | Strategic proprietary asset. NiteOwl-controlled, NiteOwl-resident, never provider-hosted | *If this lived in a vendor's account, would NiteOwl still have a business?* |
+| **B — MUST CONTROL / KEEP PORTABLE** | May run on rented or open-source infrastructure, but NiteOwl controls the configuration, the data and the migration path | *Could NiteOwl move this to another operator with engineering effort and no permission?* |
+| **C — REPLACEABLE COMMODITY** | Capability safely rented, provided it sits behind a NiteOwl boundary | *Is this a capability rather than a record?* |
+
+### 64.1 Classification of every major subsystem
+
+| Subsystem | Band | Resident where today | Note |
+|---|---|---|---|
+| Business Graph, Business Operating State | **A** | NiteOwl (Postgres) | Defined §20.2/§20.4; **not yet built** |
+| Business Memory, institutional knowledge | **A** | NiteOwl | §20.9. Never provider-hosted — §28's guardrail |
+| Outcome Spine, decision & outcome records | **A** | NiteOwl | §20.5, §20.7. The moat itself |
+| Cross-product measured outcomes, learned rules | **A** | NiteOwl | §24, §59 |
+| Evaluation datasets, metric definitions, calibration history | **A** | NiteOwl | §57.4 — what makes a model *replaceable* |
+| Provenance, confidence, classification | **A** | NiteOwl | §20.6 |
+| Permissions, consent, audit history | **A** | NiteOwl | §20.8, §3.4 |
+| Canonical business state — orgs, leads, appointments, knowledge, calls | **A** | NiteOwl (Postgres) | Built and live |
+| Business identity model (`organisations.id`, membership) | **A** | NiteOwl, **except** `owner_id → auth.users` | The one place identity crosses into a provider — §65.3 |
+| Orchestration policy, booking rules, reception behaviour, prompts | **A** | NiteOwl source | §14 — *Remy-owned permanently* |
+| Deterministic integrity guards (the five, plus urgency) | **A** | NiteOwl source | The reason model output is evidence, not truth |
+| Provider-selection logic, gateways, contracts | **A** | NiteOwl source | `CalendarCapability`, `IntegrationError`, `integrationFetch` |
+| **Product source code and architecture documents** | **A** | NiteOwl + **every clone** | §65.1 |
+| Database engine and hosting | **B** | Supabase | Plain Postgres — §65.3 |
+| Canonical schema and its change history | **B** | Git (`docs/sql/`) | §66.2 records the gap |
+| Application runtime and deployment | **B** | Vercel | §65.2 |
+| Git hosting, PR and review workflow | **B** | GitHub | §65.1 |
+| Authentication (sessions, OAuth, reset) | **B** | Supabase Auth | The real lock-in; deliberate — §65.3 |
+| File storage (knowledge import) | **B** | Supabase Storage | 2 call sites |
+| Secret custody (`INTEGRATION_TOKEN_ENCRYPTION_KEY`) | **B** | Vercel env | §66.4 — the restore dependency |
+| Event/job infrastructure | **B** | Postgres (`integration_jobs`) | Built, undrained (B3) |
+| LLM inference | **C** | OpenAI | §65.7 |
+| Telephony carrier and voice-agent runtime | **C** | Vapi | §65.4, §65.5 |
+| Speech-to-text | **C** | Deepgram, via Vapi | §65.6 |
+| Text-to-speech | **C** | ElevenLabs, via Vapi | §65.6 |
+| Calendar provider API | **C** | Google | Fully contracted — §3.8 |
+| Email delivery | **C** | Resend | Single seam |
+| Payments | **C** | Stripe | Provider indirection exists |
+| Error observability | **C** | Sentry | Non-blocking — §10 |
+
+**The classification's own test, applied honestly: every band-A subsystem is NiteOwl-resident
+today, and none is provider-hosted.** That is the single most important sovereignty fact in
+this part, and it is a fact rather than a plan. The band-A rows that do not exist yet are
+unbuilt, not misplaced.
+
+---
+
+## 65. Provider escape-route register
+
+One entry per critical provider. Each answers: what it does, what NiteOwl owns behind it, the
+current lock-in level, the escape route, and — the brief's exit test — **what would actually be
+lost.**
+
+Lock-in is scored **NONE / LOW / MODERATE / HIGH**, and each entry states a **desired** level.
+Where current already equals desired, that is the answer and no work follows.
+
+### 65.1 GitHub — NEW, registered here for the first time
+
+**Function:** source hosting, PR workflow, review history, and — verified below — the
+**deployment trigger**.
+
+**Why it never appeared:** every previous table was built from *runtime* coupling, and GitHub
+is not imported by the application. That framing missed the provider holding the band-A asset
+*source code*, plus this document set itself.
+
+**What NiteOwl owns behind it:** everything that matters. Git is a **distributed** version
+control system, so every clone is a complete replica of the full commit history, every branch
+and every file. The canonical `docs/sql/` schema history and both architecture documents are
+inside that history.
+
+**Lock-in: LOW. Desired: LOW.** Already met for the code itself.
+
+**What is NOT in the Git object store, and is therefore GitHub-resident:**
+
+- pull-request bodies, review threads and merge metadata — the *reasoning* record. This project
+  deliberately carries the substance of each PR's reasoning in `PROJECT_CONTEXT.md` and in
+  unusually complete commit messages, both of which **are** in the object store. That is what
+  makes this a **LOW** rather than a MODERATE exposure.
+- issue history and labels — **not used by this project**, so nothing is at risk.
+- branch protection and repository settings — configuration, trivially recreated.
+
+**The one real coupling, and it is not the code: deployment is GitHub-mediated.** Vercel builds
+production from pushes to `main` through its Git integration; every deployment recorded for PRs
+#54–#63 was triggered that way. Moving Git hosting would break the deploy trigger until
+reconnected — which is exactly the *"CI/deployment assumptions must not make GitHub itself
+indispensable"* concern, and it is worth naming because it is invisible from the code.
+
+**Escape route:** push the existing clone to Forgejo, Gitea, GitLab or a self-hosted bare
+remote — a `git remote add` and a push, with full history intact. Vercel supports GitLab and
+Bitbucket natively; for a self-hosted forge, deployment moves to `vercel deploy` from CI or a
+workstation, which needs no repository provider at all. **Effort: hours, not a project.** No
+application code changes.
+
+**Exit test — if GitHub disappeared tomorrow, NiteOwl would lose** PR discussion threads and
+the automatic deploy trigger until reconnected. **It would lose no source code, no history, no
+schema, no architecture document and no business state.**
+
+### 65.2 Vercel
+
+**Function:** application hosting, serverless runtime, cron scheduling, environment custody.
+
+**Verified at `e97a751`:** **no `@vercel/*` import anywhere in `src/`.** No KV, Blob or Edge
+Config. `after()` is `next/server` — framework, not platform. Two `maxDuration` exports (a
+no-op on other hosts). One `vercel.json`, declaring a single daily cron.
+
+**Lock-in: LOW. Desired: LOW.** Met.
+
+**Escape route:** this is a standard Next.js application; `next build` / `next start` runs on
+any Node host, in a container, on Coolify, or on bare infrastructure. Two things must travel
+with it, both enumerated in §66.3: the **environment variables**, and a **scheduler** for the
+one cron.
+
+**The cron is the only genuinely platform-shaped product dependency, and it is small.**
+`vercel.json` schedules `/api/cron/voice-replay` daily at 07:00. The route is a plain HTTP
+endpoint guarded by `CRON_SECRET`, so on any other host it needs one `curl` from a system timer
+— **a line of infrastructure configuration, not a rewrite.** It is recorded because §12
+predates it, and because it is precisely the pattern to watch: platform features that quietly
+become product logic. It has not become that, and should not be allowed to.
+
+**Exit test — if Vercel disappeared tomorrow:** a **service interruption** and a redeployment.
+The repository is the application, and no state lives at Vercel except environment variables,
+which must be independently held anyway (§66.4). **Nothing in bands A or B is lost.**
+
+**Self-hosting assessment:** technically straightforward, **not strategically worthwhile now.**
+Vercel supplies TLS, CDN, preview deployments, atomic rollback and near-zero operational burden
+for a single-operator company whose stated priority is Alpha launch. Moving trades all of that
+for an ongoing operations job. Reassess if hosting cost becomes material, or if a platform-only
+feature starts holding product logic.
+
+### 65.3 Supabase — CRITICAL
+
+**Function:** system of record (Postgres + RLS), authentication, file storage.
+
+**This is not a coupling — it is the record** (§41.2), so the point of an escape route here is
+not substitution but **recoverability**.
+
+**Lock-in: MODERATE, concentrated entirely in Auth. Desired: MODERATE** — with a proven
+restore, which is the part that is missing.
+
+| Layer | Portability | Note |
+|---|---|---|
+| Postgres, SQL, RLS policies | **High** — plain Postgres | Portable to any Postgres |
+| PostgREST query builder | **Moderate** — mechanical | Spread wide but shallow (§12) |
+| **Supabase Auth** | **The real lock-in** | 32 `getUser()` sites, middleware, OAuth, reset, `auth.admin`, and `organisations.owner_id → auth.users` |
+| Storage | High — 2 call sites | Knowledge import only |
+| Realtime / Edge Functions / RPC | **Not used** | Nothing to unpick |
+
+**Escape route:** the data is plain Postgres and `pg_dump` restores it anywhere. Auth is the
+work — an identity provider, session handling, and a migration of `auth.users` identities
+preserving the foreign key. The architecture already contains what makes this survivable:
+**`organisations.owner_id` is the only place identity crosses into business data**, verified and
+still true. Business records do not reference `auth.users` individually, so an Auth migration is
+a bounded identity remap rather than a rewrite of every table.
+
+**Exit test — if Supabase disappeared tomorrow:** without a **verified restore** this is the one
+provider whose loss could be **unacceptable** rather than merely expensive. With one, it is
+migration work: stand up Postgres, restore the dump, replace Auth, repoint the client. The
+honest answer today is that the restore is **unproven** (B6, open since Part II).
+
+**Self-hosting assessment:** possible (Supabase is open-source, or plain Postgres plus an auth
+library) and **not worthwhile now** — it converts a managed, backed-up, RLS-enforcing system of
+record into an operations burden for a company with no operations team. **The correct investment
+is not self-hosting; it is proving the restore.**
+
+### 65.4 Vapi — CRITICAL for the phone channel, DEGRADABLE for the product
+
+**Function:** voice-agent runtime, telephony termination, STT/TTS orchestration, call webhooks.
+
+**What NiteOwl owns behind it, and this is the strongest sovereignty fact in the product:**
+`buildVoiceAssistantConfig()` returns a **provider-neutral** `VoiceAssistantConfig` — prompt,
+first message, language, voice, structured-data schema, summary instructions — built in
+NiteOwl's own code from NiteOwl's org profile, knowledge and settings.
+`buildVapiAssistantResponse()` maps it to the provider's shape as the **last** step, in
+`vapi.ts`. The reception intelligence, every deterministic guard, the booking rules and the
+availability tool are NiteOwl's.
+
+Equally: `voice_calls` and `voice_events` hold what happened, the transcript reaches
+`toExtractedLead` as NiteOwl state, and the five guards resolve every caller-supplied field **in
+NiteOwl code from NiteOwl-held evidence**. Vapi carries the call; it does not hold the record of
+it.
+
+**Lock-in: MODERATE. Desired: MODERATE.** The adapter boundary is correct and needs no work.
+What raises it above LOW is not code — it is the **account-resident configuration**: the phone
+number, the assistant-to-number binding and the webhook wiring live in the Vapi dashboard, and
+the setup runbook records that as a manual sequence.
+
+**Escape route:** substitute a managed provider (or, much later, a NiteOwl-owned real-time
+pipeline) by writing a second adapter to the existing `VoiceAssistantConfig`. The
+provider-neutral config **is** the contract, and `vapi.ts` is the only file that would be
+replaced. **The business logic does not move, because it was never there.**
+
+**Exit test — if Vapi disappeared tomorrow:** the **phone channel stops**. Web, widget,
+dashboard, calendar and email continue. NiteOwl keeps every `voice_call`, every `voice_event`,
+every lead the phone produced, every appointment, the full prompt and reception logic, and all
+accumulated intelligence. **The channel is critical; the company is not** (§41.3). The
+irrecoverable item is not data — it is the **phone number**, and it gets its own entry.
+
+### 65.5 Telephony and the phone number — NEW, and the highest-value finding in this part
+
+**§6 records "Twilio — not integrated. Not a dependency." That is factually true and its
+conclusion is incomplete.** NiteOwl has no Twilio integration and no code references a carrier.
+But the product terminates real PSTN calls, so telephony **is** a dependency — it is
+**sub-contracted through Vapi**, which is a different risk shape from *absent*.
+
+**Verified:** `docs/VOICE_SETUP_RUNBOOK.md` Step 2 instructs the owner to **buy the phone number
+inside the Vapi account**. `voice_settings.phone_number` stores the E.164 string and NiteOwl
+resolves which business a call belongs to by the dialled number — so NiteOwl holds the number as
+*data*, while the **account of record for the number is Vapi's**.
+
+**Why this matters more than the runtime coupling:** a phone number is not a capability, it is a
+**business identity**. It is printed on vans, listed on Google, and saved in customers' phones.
+Every other Vapi loss is a migration; losing the number is a loss of *reachability* that no
+engineering effort restores. It is also the asset with the highest switching cost *for the
+customer*, which makes it a moat consideration as well as a sovereignty one (§25).
+
+**Lock-in: HIGH — administratively, not technically. Desired: LOW-to-MODERATE.** This is the one
+gap in this part where current and desired genuinely diverge.
+
+**Escape route, and the honest state of it:** UK and Irish numbers are portable by regulation, so
+a port-out is a *right* rather than a favour — but it is executed by the **account holder of
+record**, and whether that is NiteOwl or Vapi for numbers purchased inside Vapi **has not been
+verified** and is not knowable from this repository. It is a question for Vapi's terms and the
+account settings, not for the codebase. **This is recorded as a question to answer, not a fact
+established.**
+
+**The smallest mechanism that would close it — and it is commercial, not code:**
+
+1. Establish and record **who is the account holder of record** for each production number, and
+   whether port-out is available on request.
+2. If it is not, the future direction is a **direct carrier account** (Twilio or equivalent) with
+   the number held by NiteOwl or by the business, and the call **SIP-forwarded** into whichever
+   voice runtime is in use. This inverts the dependency: the number stops being
+   provider-resident, and the voice runtime becomes genuinely swappable.
+3. **Do not do this now.** It adds a vendor, a bill and a failure mode to a working phone line
+   during Alpha, which the non-goal rule forbids. **Record it, answer question 1, and revisit
+   when a second business is onboarded** — because the cost of moving numbers rises with every
+   business that publishes one.
+
+**Exit test — if the number were lost:** every existing customer calling the business reaches a
+dead line, and NiteOwl's records are entirely intact but unreachable-from. **This is the only
+identified case where a provider loss damages something no backup restores.**
+
+### 65.6 STT and TTS — NEW, registered here for the first time
+
+**Verified at `src/lib/voice/vapi.ts:413–419`:** the transcriber is **`provider: "deepgram",
+model: "nova-2", language: "en-GB"`** and the voice is **`provider: "11labs"`** with a
+NiteOwl-supplied `voiceId`. Neither appears in §6, §6.1, §41.2 or §41.3.
+
+**The important nuance, which `PROJECT_CONTEXT.md` already corrected once:** these are **chosen
+by NiteOwl in NiteOwl's repository**, not defaults inherited from a dashboard. The selection is
+repository-side and version-controlled, which is better than it looks — the escape route for
+*choice* already exists.
+
+**What is Vapi-mediated is the relationship, not the choice.** NiteOwl has no direct Deepgram or
+ElevenLabs account, no direct billing, no direct fallback and no independent observability of
+either. They are **sub-providers**: losing Vapi loses both simultaneously, and a Vapi-side change
+to supported engines would change NiteOwl's speech stack without a NiteOwl deployment.
+
+**Lock-in: LOW for substitution, MODERATE for the relationship. Desired: unchanged.**
+
+**What NiteOwl keeps regardless:** the **transcript is NiteOwl state** — it arrives on the
+webhook, is persisted with the call, and is read by `resolveCallerName`, `resolveServiceAddress`
+and `resolveCallerEmail` as canonical caller evidence. Speech engines produce input; **NiteOwl
+owns the resulting canonical caller information**, which is exactly the posture §41.1 requires.
+
+**Escape route:** changing engine within Vapi is a config-object edit in `vapi.ts` — and the
+options not currently set (keyterm boosting, endpointing, confidence thresholds, fallback
+transcriber) are available at that same seam. Changing engine *outside* Vapi comes with the
+§65.4 adapter.
+
+**Exit test:** losing either engine degrades transcription or voice quality until the config is
+changed. **No canonical state is lost**, because transcripts and every resolved caller field are
+already NiteOwl-resident.
+
+**Recorded, unchanged from `PROJECT_CONTEXT.md`:** the 2026-09-01 house-number mangling was
+provider-side STT noise, **Nova-3 has not been evaluated**, and no provider or transcriber change
+is proposed here.
+
+### 65.7 AI models — CRITICAL
+
+**Function:** chat, widget, sales chat, voice extraction, knowledge import, FAQ generation, lead
+capture, datetime parsing.
+
+**Verified at `e97a751`: 11 direct `fetch` call sites across 9 files**, with model ids `gpt-4o`
+and `gpt-4o-mini` hardcoded at each. (§6, §41.2 and §15 record *9 sites* — that reading is now
+stale; see §68.3.)
+
+**Lock-in: MODERATE, and it is not about replaceability. Desired: LOW**, eventually, via the AI
+Model Gateway (L11) — still not urgent.
+
+The exposure is precisely as §41.2 states: a forced migration touches nine files under time
+pressure, and **no record exists of which model produced which stored value** (§29 —
+model/version traceability absent). A gateway fixes both. It is not built because the trigger — a
+second model provider, or a policy change — has not fired.
+
+**What makes this genuinely safe today is stronger than the brief assumes:** NiteOwl already
+treats **model output as evidence, not business truth.** That is not a principle here, it is
+shipped code — `resolveCallerName`, `resolveCallerEmail`, `resolveServiceAddress`,
+`resolveRequestedService`, `sanitisePreferredDatetime` and `resolveCallbackUrgency` are
+deterministic, model-free, network-free guards at a single convergence point, each able to
+**refuse** a model's output. The prompts and extraction contracts are NiteOwl's (`assistant.ts`,
+`extraction.ts`), and §57.4's evaluation datasets are the artefact a replacement model would be
+*measured against*.
+
+**A model provider is therefore a commodity supplier of inference, which is the correct posture**
+— and it is the deterministic guards, not an abstraction layer, that make it true.
+
+**Exit test — if OpenAI disappeared tomorrow:** every channel loses the ability to answer and
+extract until a replacement is wired across nine files. Truthful degradation holds (§11) — Remy
+fails honestly rather than fabricating. **No canonical state, no outcome history and no
+intelligence is lost.** Values already stored remain, with the known caveat that they carry no
+model-version provenance.
+
+**Self-hosting assessment:** technically possible, **not worthwhile** — self-hosted inference at
+this quality bar means GPU capacity, evaluation and operations a single-operator company cannot
+carry, in exchange for portability a gateway would deliver far more cheaply.
+
+### 65.8 Google Calendar — DEGRADABLE, and the reference implementation
+
+Unchanged from §3.8, §1.5 and §41.2, restated only for register completeness. Provider
+identifiers appear in `providers/google.ts` and nowhere else in `src/`. `CalendarCapability`
+expresses NiteOwl domain semantics. NiteOwl is the **appointment source of truth**, and provider
+event ids live in `integration_links` as references, never as business identity. Degradation is
+truthful and verified: an unreadable calendar yields `lookup_failed`, and the phone stops
+confirming rather than confirming wrongly.
+
+**Lock-in: NONE. Desired: NONE.** Met. **Outlook or another provider is a second implementation
+of an existing interface** — the contract already exists and needs no redesign.
+
+**Exit test:** external busy-time and event creation are lost. **Every appointment, lead, decision
+and the whole booking history survive**, because the appointment is NiteOwl's record.
+
+### 65.9 Resend, Stripe, Sentry
+
+Registered briefly; none carries strategic exposure and none needs work.
+
+| Provider | Band | Lock-in | Escape route | Exit test — what is lost |
+|---|---|---|---|---|
+| **Resend** | C / DEGRADABLE | **LOW** — one seam (`lib/email.ts`), domain is NiteOwl's, sender portable | Swap the client in one module | Delivery. **The record of what was sent and why survives.** Known gap, unchanged: sends are **not retried and delivery state is not recorded** (B2), so the failure is invisible to the business |
+| **Stripe** | C / DEGRADABLE | **LOW** — provider indirection already exists (`billing/provider.ts`) | Second implementation behind it | Checkout and portal. Granted access continues (grandfathered); commercially severe, operationally invisible |
+| **Sentry** | C / REPLACEABLE | **VERY LOW** — `instrumentation*.ts` and one config wrapper | Any OTLP-compatible sink | Monitoring visibility. Operations verified unaffected (§10) |
+
+---
+
+## 66. Recoverability
+
+What must be backed up, in what format, and what a restore actually requires. §41.3 named this
+set as PREPARE; this is the first place it is written down.
+
+### 66.1 The critical state inventory
+
+| What | Where | Format | Backed up how | Restore proven? |
+|---|---|---|---|---|
+| Source code, full history, `docs/sql/`, architecture docs | Git — GitHub **and every clone** | Git object store | Inherently replicated by every clone | **Yes, by construction** |
+| Canonical business data — orgs, leads, appointments, knowledge, voice calls/events, integration links | Supabase Postgres | Postgres | Supabase managed backups | **NO — B6, open** |
+| Credential blobs (`credentials_encrypted`) | Supabase Postgres | AES-256-GCM ciphertext | With the database | **NO — and useless without §66.4** |
+| Encryption keyring | Vercel environment | base64 env vars | **Not verified as separately held** | **NO — §66.4** |
+| Environment configuration | Vercel environment | env vars | **No catalogue existed** — §66.3 | n/a |
+| Per-tenant export for customers | — | — | **No export feature** (§12, §29) | n/a |
+| PR / review discussion | GitHub only | GitHub-proprietary | Not backed up | Substance duplicated in `PROJECT_CONTEXT.md` and commit messages |
+
+### 66.2 The schema gap — verified, and small
+
+**Verified at `e97a751`: there is no `supabase/migrations/` directory.** `supabase/` holds only
+`.temp/` scratch files. The schema's change history is **25 hand-applied `.sql` files in
+`docs/sql/`**, dated `2026-07-09` through `2026-08-12`, several paired with `_verify.sql`
+counterparts.
+
+**The important half of this is already right:** the schema is **in Git**, reviewed, and
+NiteOwl-controlled — not clicked into a dashboard and lost. That is the requirement *"canonical
+schema and migrations controlled by NiteOwl"*, and it is met.
+
+**The gap is reconstruction, not control.** There is no single artefact stating what the schema
+*currently is*, and no record of which files have been applied to which environment. Rebuilding
+production schema from the repository alone means replaying 25 files in hand-inferred order and
+hoping the sequence matches what was actually run.
+
+**Smallest mechanism: commit a generated `docs/sql/schema.sql` snapshot** — a `pg_dump
+--schema-only` of production, refreshed when the schema changes. One file. No tooling adopted,
+no migration framework introduced, and no change to how SQL is applied. It turns a 25-file
+replay into a single authoritative statement, and it is the prerequisite that makes a restore
+*testable* at all. **HARDEN SOON**, and it pairs naturally with B6.
+
+### 66.3 Redeployment requirements — the environment catalogue
+
+The brief asks that required environment variables be documented for the Vercel escape route.
+Enumerated from the tree at `e97a751`; **names only, no values, and no secret appears in this
+document or in the repository.**
+
+| Group | Variables | Loss consequence |
+|---|---|---|
+| **Database / identity** | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Total — no system of record |
+| **Credential custody** | `INTEGRATION_TOKEN_ENCRYPTION_KEY`, `INTEGRATION_TOKEN_ENCRYPTION_KEY_VERSION`, `INTEGRATION_TOKEN_ENCRYPTION_KEY_V<n>` (retired, decrypt-only) | **Every stored calendar credential becomes permanently unreadable** — §66.4 |
+| **AI** | `OPENAI_API_KEY` | All chat, extraction and import |
+| **Voice** | `VAPI_WEBHOOK_SECRET`, `VOICE_ENABLED` | Phone channel |
+| **Email** | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `SALES_NOTIFICATION_EMAIL`, `ADMIN_EMAIL` | Confirmations and notifications |
+| **Billing** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` | Checkout |
+| **Scheduling** | `CRON_SECRET` | The one cron route |
+| **Observability** | `NEXT_PUBLIC_SENTRY_DSN` | Error reporting |
+| **Application** | `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_REMY_BOOKING_URL`, `NEXT_PUBLIC_REMY_DEMO_VIDEO_URL` | Links and redirects |
+| **Feature flags** | `VOICE_CALENDAR_BOOKING_ENABLED`, `CALENDAR_AVAILABILITY_BLOCKING`, `CALENDAR_EVENT_CREATION_ORG_IDS` | **Fail closed** — anything but the literal `"true"` reads as off (§13) |
+
+**The flags failing closed is a recoverability property, not only a safety one:** a redeployment
+missing a flag yields "no integrations", never "half an integration against real customers".
+
+### 66.4 The one recoverability defect that would actually bite
+
+**A database backup restored without `INTEGRATION_TOKEN_ENCRYPTION_KEY` is a database whose
+customer calendar credentials are permanently unreadable.** The keyring is env-resident and the
+ciphertext is database-resident, so the two halves are backed up by different mechanisms — and
+the key's independent custody is **not verified**.
+
+This is already known: §11 records key custody relative to backups as the open item, and §13
+records the restore as unproven. It is worth stating once in recoverability terms, because the
+combination is what matters: **the restore that has never been tested is also the restore whose
+success depends on a secret nobody has confirmed is separately held.**
+
+Consequence if it were lost: every affected business must **re-authorise Google Calendar**.
+Business data survives; connections do not. **Not existential, and entirely avoidable.**
+
+**Smallest mechanism: confirm the keyring is held somewhere outside Vercel, and record where —
+not in this repository.** No code, no schema. **HARDEN SOON**, and the cheapest item in this
+part.
+
+### 66.5 Managed vs alternative vs self-hosted — the honest comparison
+
+The brief asks that self-hosting not be assumed superior. Assessed against reliability, cost,
+security, operational burden, portability, data control, disaster recovery and switching cost:
+
+| Layer | Managed (today) | Alternative provider | Self-hosted | Recommendation |
+|---|---|---|---|---|
+| Hosting | Vercel — zero ops, TLS, CDN, rollback | Netlify, Cloudflare, Fly | Coolify/Docker — full control, ongoing ops job | **Stay.** Escape route documented and cheap |
+| Database | Supabase — managed backups, RLS, Auth | Neon, RDS + auth library | Postgres — highest data control, highest burden | **Stay.** Invest in the *restore*, not the move |
+| Git hosting | GitHub — PR workflow, Vercel integration | GitLab, Bitbucket | Forgejo/Gitea — cheap, easy | **Stay.** Escape is hours; nothing at risk |
+| Voice runtime | Vapi — working phone line | Retell, Bland, Twilio + pipeline | Own real-time pipeline — very high effort | **Stay.** Adapter already isolates it |
+| **Number ownership** | **Vapi-held** | **Direct carrier + SIP forward** | n/a | **Answer the account-holder question** (§65.5) |
+| STT / TTS | Deepgram / ElevenLabs via Vapi | Any Vapi-supported engine | Whisper, Piper — quality and latency cost | **Stay.** Selection already repository-side |
+| LLM inference | OpenAI | Anthropic, Google | Open weights + GPU — not viable at this size | **Stay.** Gateway later (L11) |
+| Email | Resend | Postmark, SES | SMTP — deliverability is the hard part | **Stay** |
+
+**Self-hosting is the right answer in exactly zero cases today.** In every row the managed option
+wins on reliability and operational burden, and the portability gap it creates is closed by
+documentation rather than by migration. That is the whole thesis of this part.
+
+---
+
+## 67. The exit test
+
+> **If this provider disappeared tomorrow, what exactly would NiteOwl lose?**
+
+Answered per provider, distinguishing *interruption*, *migration work* and *lost commodity
+capability* from **unacceptable loss** — source code, canonical records, Graph, Memory, outcomes,
+learning, decision intelligence, permissions, audit history.
+
+| Provider | Interruption | Migration work | Capability lost | **Unacceptable loss?** |
+|---|---|---|---|---|
+| **GitHub** | Deploy trigger, until reconnected | Hours — push to a new remote | PR discussion threads | **NO** — every clone is a full replica |
+| **Vercel** | Site down until redeployed | Low — standard Next.js + env + one cron | None | **NO** |
+| **Supabase** | Total while down | **High** — Postgres restore + Auth replacement | None if restored | **NOT IF THE RESTORE WORKS.** Unproven — §66.1 |
+| **Vapi** | Phone channel stops | Moderate — second adapter to the existing config | Voice reception | **NO for data.** See the number, below |
+| **Phone number** | Customers reach a dead line | Port-out, if available | Reachability | **POTENTIALLY YES** — the one item no backup restores (§65.5) |
+| **Deepgram / ElevenLabs** | Transcription and voice quality | Config edit in `vapi.ts` | Speech quality | **NO** — transcripts are NiteOwl state |
+| **OpenAI** | Answering and extraction stop | Moderate — 11 sites, 9 files | Language capability | **NO** — degradation is truthful |
+| **Google Calendar** | External busy-time; phone stops confirming | Low — the contract exists | External calendar sync | **NO** — appointments are NiteOwl's |
+| **Resend** | Confirmations undelivered (**invisibly** — B2) | Low — one seam | Delivery | **NO** — the send record survives |
+| **Stripe** | Checkout unavailable | Moderate | New subscriptions | **NO** — access grandfathered |
+| **Sentry** | Monitoring blind | Very low | Visibility | **NO** |
+
+### 67.1 The moat test
+
+The brief requires that provider independence protect the moat. Applied:
+
+**The moat is not the rented model or the hosting.** It is the compounding combination of
+Business Graph + persistent Business Memory + cross-product measured outcomes + proprietary
+learning + Decision Intelligence + embedded workflows and switching costs. Every one of those is
+classified **band A** (§64.1), every one is NiteOwl-resident, and **not one appears in a single
+"capability lost" cell above.**
+
+That is not a coincidence, and the structural reason is worth naming: those layers **contain no
+provider concept at all** (§63.1). A provider cannot take back what never referenced it. The rule
+that keeps this true is already adopted and must survive the next eight products — **no
+provider-hosted memory, threads, vector stores or resident fine-tunes over tenant data, and any
+derived index rebuildable from NiteOwl's database alone** (§28).
+
+The one live temptation to watch, since the brief invites the question: a provider-hosted
+"memory" or "assistant thread" feature would be the fastest way to lose this, because it arrives
+disguised as a convenience rather than as a migration. **The answer is already written; it needs
+only to be kept.**
+
+---
+
+## 68. Classification, corrections and verdict
+
+### 68.1 Prioritised gaps
+
+**CRITICAL NOW — none.**
+
+No sovereignty defect was found that endangers canonical state, and **no production-code change
+is made or recommended by this part.** (Part II's R1 remains open and is a truthfulness defect,
+not a sovereignty one; it is unchanged and still the owner's call.)
+
+**HARDEN SOON** — three items, all cheap, none of them code:
+
+1. **Answer the phone-number account-holder question** (§65.5). Who holds the number of record,
+   and is port-out available on request? Commercial rather than technical, and the only
+   identified exposure no backup restores. The cost rises with every business that publishes a
+   number.
+2. **Prove the database restore, once** (§66.1; B6, open since Part II). Not a programme: one
+   restore into a scratch project, confirming it completes and the data is intact.
+3. **Confirm the encryption keyring is held outside Vercel, and record where** (§66.4). Without
+   it, item 2 restores unusable credentials. Cheapest item in this part.
+
+**DOCUMENT NOW / IMPLEMENT LATER** — done by this pass; no follow-up required:
+
+- The GitHub, telephony and STT/TTS register entries (§65.1, §65.5, §65.6) — three named
+  providers that appeared in no previous table.
+- The A/B/C ownership classification (§64) and the environment catalogue (§66.3).
+- The `docs/sql/schema.sql` snapshot (§66.2) — one generated file, when convenient, and ideally
+  before the next schema change.
+- Applying §41.4's commercial/policy axis to the §6.1 matrix when that table is next revised.
+  **Still deliberately not done**, and the model and voice providers remain the two where the
+  category is live rather than theoretical.
+
+**OPTIONAL FUTURE SOVEREIGNTY** — recorded, explicitly **not recommended**, no trigger active:
+
+- A direct carrier account with SIP forwarding (§65.5) — the *shape* of the eventual answer if
+  port-out proves unavailable, and premature before a second business is onboarded.
+- The AI Model Gateway (L11) — trigger is a second model provider, or a policy change.
+- A NiteOwl-owned real-time voice pipeline (§65.4) — trigger is scale, or provider policy.
+- Self-hosting anything (§66.5) — no row where it currently wins.
+
+### 68.2 What this part deliberately did not do
+
+No provider replaced, no vendor added, no self-hosting adopted, no migration begun, no redundancy
+proposed, no second provider wired, no abstraction introduced ahead of its second consumer, no
+production behaviour altered, no refactor performed — and Remy's development priority and
+information-integrity work left exactly where they were.
+
+### 68.3 Two stale facts corrected
+
+Corrected in place in §12 and §41.2 rather than left to mislead, and recorded here because this
+document set keeps its errors visible:
+
+- **§12 stated "No `vercel.json`."** One now exists, declaring a single daily cron (§65.2). The
+  portability verdict is unchanged — **ACCEPTABLE** — because the route is a plain HTTP endpoint
+  and the replacement is a system timer.
+- **§6, §41.2 and §15 state "9 OpenAI call sites."** The verified count at `e97a751` is **11 call
+  sites across 9 files**. The assessment is unchanged; only the number moved, and it moved in the
+  direction the finding already predicted.
+
+### 68.4 Verdict — the question the brief asks
+
+> **Can NiteOwl replace each critical provider without losing its canonical business state,
+> Business Graph, Business Memory, outcome history or proprietary Decision Intelligence?**
+
+**For every provider except one: YES — and by construction rather than by luck.** The band-A
+assets are NiteOwl-resident, contain no provider concept, and appear in no "capability lost" cell
+in §67. GitHub holds a full replica in every clone; Vercel holds no state; Vapi carries calls
+while `voice_calls`, `voice_events` and the five deterministic guards hold the record; Google
+holds events while NiteOwl holds appointments; OpenAI supplies inference to a pipeline that can
+refuse its output.
+
+**Two qualifications, stated precisely rather than softened:**
+
+1. **Supabase — YES, conditionally.** The data is plain Postgres and the identity crossing is a
+   single foreign key, so the migration is bounded. But *replaceable* here rests on a restore that
+   **has never been tested**, whose success depends on a key whose separate custody is
+   **unverified**. The gap is not architectural — it is two hours of verification nobody has done.
+   **Smallest mechanism: perform one restore, and record where the keyring lives** (§68.1, items 2
+   and 3).
+2. **The phone number — NOT YET, and it is not a data question.** Every record survives losing
+   Vapi. The number may not, because the account of record appears to be Vapi's, and a number is a
+   business identity rather than a capability. **Smallest mechanism: establish whether port-out is
+   available; if it is not, the eventual answer is a NiteOwl- or business-held carrier account with
+   SIP forwarding — documented now, built later, and explicitly not now** (§65.5).
+
+Both gaps are **small, known and cheap**, and neither is a reason to migrate anything. The
+architectural target §41.5 states is met: **a provider failure may interrupt capability, but must
+not destroy NiteOwl's identity, state, knowledge or proprietary intelligence.** Today it would
+not — with the two qualifications above, which is exactly why they are written down.
+
+The eighth document running ends the same way: nothing here is urgent, nothing here is built, and
+the next milestone is still a reliable phone call.
