@@ -479,12 +479,31 @@ describe("an empty envelope no longer costs the caller's information", () => {
     assert.equal(stubs.only().email, "jasontest@gmail.com");
   });
 
-  test("D. PARTIAL structuredData is NOT completed from the transcript", async () => {
-    // The scope boundary of this whole change, pinned deliberately. The
-    // transcript plainly contains the email and the time; the provider
-    // supplied only a name and a service. Today's all-or-nothing
-    // producer selection stands — field-by-field merging is a separate
-    // architectural question and must not drift in by accident.
+  test("D. PARTIAL structuredData does not RE-RUN THE EXTRACTOR to fill gaps", async () => {
+    // The scope boundary of PR #58, still pinned — but its email
+    // expectation is superseded and updated rather than deleted.
+    //
+    // What PR #58 forbids is a SECOND INDEPENDENT READING of the call:
+    // running the fallback extractor to complete fields would put two
+    // model outputs in play and merge them, which is the pattern the
+    // canonical-information architecture exists to remove. That rule is
+    // unchanged and is what the first assertion below pins — the
+    // extractor is still never invoked for a substantive payload.
+    //
+    // `email` is now recovered by a DETERMINISTIC guard reading the
+    // caller's own turns (emailIntegrity.ts), which is the same
+    // mechanism resolveCallerName and resolveServiceAddress have always
+    // used on this very path — neither of those was ever considered a
+    // breach of this boundary. No model runs, and nothing is merged.
+    //
+    // The transcript here carries "AI: And your email?" answered by
+    // "User: jason test at gmail dot com", so the recovered value is
+    // the caller's own — and it is exactly what the fallback extractor
+    // would have produced, which is corroboration rather than a second
+    // opinion.
+    //
+    // `preferred_datetime` is still NOT completed: that field has no
+    // deterministic guard, and giving it one is a separate task.
     stubs = installStubs();
     await processCallEnded(
       await admin(),
@@ -503,8 +522,16 @@ describe("an empty envelope no longer costs the caller's information", () => {
     );
     const lead = stubs.only();
     assert.equal(lead.service_needed, "leaking radiator", "what it gave is kept");
-    assert.equal(lead.email, null, "and what it omitted is NOT filled in");
-    assert.equal(lead.preferred_datetime, null);
+    assert.equal(
+      lead.email,
+      "jasontest@gmail.com",
+      "the omitted email is recovered from the caller's own turn — deterministically, with no extractor"
+    );
+    assert.equal(
+      lead.preferred_datetime,
+      null,
+      "a field with no deterministic guard is still NOT completed"
+    );
   });
 
   test("E. F5 still refuses an ungrounded fallback service — no booking", async () => {
