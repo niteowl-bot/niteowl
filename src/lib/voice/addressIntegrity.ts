@@ -195,6 +195,46 @@ function readAddressAnswer(answer: string): string | null {
 }
 
 /**
+ * Every well-formed address the caller gave, in the order they gave
+ * them — each either an answer to an address question or volunteered
+ * ("my address is …").
+ *
+ * The ORDER is the evidence. The last entry is the caller's final word,
+ * and an earlier entry is something they superseded out loud, which is
+ * the only deterministic way to tell a caller's own correction apart
+ * from an ordinary source disagreement.
+ */
+function findSpokenAddresses(transcript: string | null | undefined): string[] {
+  const text = transcript?.trim();
+  if (!text) return [];
+
+  const turns = toTurns(text);
+  const spoken: string[] = [];
+
+  for (let i = 0; i < turns.length; i++) {
+    const turn = turns[i];
+    if (turn.speaker !== "user") continue;
+
+    // Volunteered at any point in the call.
+    if (SELF_DECLARED.test(turn.text)) {
+      const declared = readAddressAnswer(turn.text);
+      if (declared) spoken.push(declared);
+      continue;
+    }
+
+    // Otherwise only an answer to an address question counts.
+    const previous = turns[i - 1];
+    if (!previous || previous.speaker !== "ai") continue;
+    if (!ADDRESS_REQUEST.test(previous.text)) continue;
+
+    const answer = readAddressAnswer(turn.text);
+    if (answer) spoken.push(answer);
+  }
+
+  return spoken;
+}
+
+/**
  * The LAST well-formed address the caller actually gave — either as an
  * answer to an address question, or volunteered ("my address is …").
  *
@@ -205,33 +245,8 @@ function readAddressAnswer(answer: string): string | null {
 export function findSpokenAddress(
   transcript: string | null | undefined
 ): string | null {
-  const text = transcript?.trim();
-  if (!text) return null;
-
-  const turns = toTurns(text);
-  let latest: string | null = null;
-
-  for (let i = 0; i < turns.length; i++) {
-    const turn = turns[i];
-    if (turn.speaker !== "user") continue;
-
-    // Volunteered at any point in the call.
-    if (SELF_DECLARED.test(turn.text)) {
-      const declared = readAddressAnswer(turn.text);
-      if (declared) latest = declared;
-      continue;
-    }
-
-    // Otherwise only an answer to an address question counts.
-    const previous = turns[i - 1];
-    if (!previous || previous.speaker !== "ai") continue;
-    if (!ADDRESS_REQUEST.test(previous.text)) continue;
-
-    const answer = readAddressAnswer(turn.text);
-    if (answer) latest = answer;
-  }
-
-  return latest;
+  const spoken = findSpokenAddresses(transcript);
+  return spoken.length > 0 ? spoken[spoken.length - 1] : null;
 }
 
 /**
@@ -289,6 +304,87 @@ export function addressesDescribeSamePlace(a: string, b: string): boolean {
 }
 
 /**
+ * The leading house/building NUMBER, when the address opens with one
+ * this module can compare — "81 Oakland Drive" → "81", "12a Oak Road"
+ * → "12a".
+ *
+ * Null whenever there is nothing comparable, and that is the important
+ * half. "Oakland Drive" has no number. "Flat 2, 14 Mill Road" opens
+ * with a word, so its number is not in the position this reads.
+ * "eighty one Oakland Drive" spells the number out, and turning that
+ * into 81 would need a number-word table — inference this module does
+ * not do. Each of those yields null and leaves the surrounding
+ * behaviour exactly as it was: conservative, not clever.
+ */
+function houseNumber(address: string): string | null {
+  const first = address.trim().split(/\s+/)[0]?.replace(/[.,;:]+$/, "") ?? "";
+  return /\d/.test(first) ? first.toLowerCase() : null;
+}
+
+/**
+ * Two comparable house numbers that disagree, on what is otherwise the
+ * same street.
+ *
+ * "81 Oakland Drive" and "12 Oakland Drive" are not two renderings of
+ * one address. They are two front doors, and a van sent to the wrong
+ * one is the real-world harm this whole module exists to prevent.
+ *
+ * Only fires when BOTH sides carry a number in the readable position.
+ * A missing or unspelt number is not a conflict — it is an absence,
+ * handled elsewhere.
+ */
+function houseNumbersConflict(spoken: string, candidate: string): boolean {
+  const a = houseNumber(spoken);
+  const b = houseNumber(candidate);
+  return a !== null && b !== null && a !== b;
+}
+
+/**
+ * The provider is holding a number the caller SUPERSEDED out loud.
+ *
+ * "12 Oakland Drive… sorry, 81 Oakland Drive" leaves both values in the
+ * caller's own turns, in order. If the candidate matches an earlier one
+ * and the caller's final word says something else about the same place,
+ * the disagreement is not two sources guessing differently — it is the
+ * model having missed a correction the caller made explicitly, and the
+ * caller's last word is authoritative.
+ *
+ * Evidence, not inference: it reads only addresses the caller actually
+ * spoke, and only their order.
+ */
+function callerSupersededCandidate(
+  candidate: string,
+  spokenAddresses: string[]
+): boolean {
+  const candidateNumber = houseNumber(candidate);
+  if (candidateNumber === null || spokenAddresses.length < 2) return false;
+
+  const earlier = spokenAddresses.slice(0, -1);
+  return earlier.some(
+    (address) =>
+      addressesDescribeSamePlace(address, candidate) &&
+      houseNumber(address) === candidateNumber
+  );
+}
+
+/**
+ * The caller gave a house number the candidate simply does not carry,
+ * and the candidate is otherwise contained in what they said —
+ * "Oakland Drive" against a spoken "81 Oakland Drive".
+ *
+ * Containment as a substring is required, so taking the caller's
+ * wording can only ADD the number and can never drop anything the
+ * candidate held: a candidate of "Oakland Drive, Galway" is not
+ * contained in "81 Oakland Drive" and is therefore left alone.
+ */
+function callerSuppliesMissingNumber(spoken: string, candidate: string): boolean {
+  if (houseNumber(candidate) !== null || houseNumber(spoken) === null) return false;
+  const normalise = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return normalise(spoken).includes(normalise(candidate));
+}
+
+/**
  * The service address to record, given what the model produced and what
  * the caller actually said.
  *
@@ -310,23 +406,34 @@ export function addressesDescribeSamePlace(a: string, b: string): boolean {
  *    wrong address is worse than a rough right one: it books an
  *    engineer to somewhere real that nobody asked for, and reads as
  *    correct on every surface that shows it.
- * 3. The candidate looks like transcription noise AND the caller was
+ * 3. Same street, two different HOUSE NUMBERS, both comparable — a
+ *    genuine conflict, because those are two front doors and not two
+ *    renderings of one. If the caller superseded the candidate's number
+ *    out loud, their final word wins. Otherwise record NOTHING: one of
+ *    the two sources is wrong about which house and no deterministic
+ *    evidence here says which, so the engineer is sent nowhere rather
+ *    than confidently to a stranger's door.
+ * 4. Same street and the caller gave a number the candidate lacks —
+ *    take the caller's wording, which only ADDS the number.
+ * 5. The candidate looks like transcription noise AND the caller was
  *    heard giving a well-formed address — take the caller's own words.
  *    This is the originally observed defect.
- * 4. The candidate looks like transcription noise and there is no such
+ * 6. The candidate looks like transcription noise and there is no such
  *    evidence — record nothing. The owner sees the caller's phone
  *    number, which is true, rather than an address that cannot exist.
- * 5. No candidate at all — fall back to what the caller was heard to
+ * 7. No candidate at all — fall back to what the caller was heard to
  *    say, if anything.
  *
- * This is NOT "the transcript always wins". The transcript overrides a
- * well-formed candidate only when findSpokenAddress produced evidence
- * clearing every structural bar in this module — an answer to an
- * explicit address question or a self-declaration, well formed, and not
- * itself noise — AND that evidence names a different place. Silence, an
- * ambiguous reply, a fragment, a same-street house-number difference,
- * or a candidate that is simply the fuller form all leave the candidate
- * exactly as the model wrote it.
+ * This is NOT "the transcript always wins", and it is not "the provider
+ * always wins" either. The transcript replaces a well-formed candidate
+ * only on evidence clearing every structural bar in this module — an
+ * answer to an explicit address question or a self-declaration, well
+ * formed, and not itself noise — and then only when it names a
+ * different place, corrects a number the caller themselves superseded,
+ * or supplies a number the candidate lacks. Silence, an ambiguous
+ * reply, a fragment, a spelt-out number, or a candidate that is simply
+ * the fuller form all leave the candidate exactly as the model wrote
+ * it. An unresolved numeric conflict picks NEITHER.
  *
  * Deterministic and self-contained: no model call, no network, no
  * imports. There is no second extraction and no merging of two
@@ -337,7 +444,9 @@ export function resolveServiceAddress(
   transcript: string | null | undefined
 ): string | null {
   const address = candidate?.trim() || null;
-  const spoken = findSpokenAddress(transcript);
+  const spokenAddresses = findSpokenAddresses(transcript);
+  const spoken =
+    spokenAddresses.length > 0 ? spokenAddresses[spokenAddresses.length - 1] : null;
 
   if (address && !looksLikeTranscriptionNoise(address)) {
     // A well-formed candidate is not, by itself, authority. Explicit
@@ -346,6 +455,19 @@ export function resolveServiceAddress(
     // email and the engineer's diary with nothing able to contradict
     // it. Absent, ambiguous or same-place evidence changes nothing.
     if (spoken && !addressesDescribeSamePlace(spoken, address)) return spoken;
+
+    if (spoken && houseNumbersConflict(spoken, address)) {
+      // Same street, two different front doors. One of these two
+      // sources is wrong about which house, and nothing here can say
+      // which — unless the caller settled it themselves.
+      if (callerSupersededCandidate(address, spokenAddresses)) return spoken;
+      return null;
+    }
+
+    // The caller gave a number the candidate lacks, and taking their
+    // wording drops nothing the candidate held.
+    if (spoken && callerSuppliesMissingNumber(spoken, address)) return spoken;
+
     return address;
   }
 

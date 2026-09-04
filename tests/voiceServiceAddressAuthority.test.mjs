@@ -261,6 +261,127 @@ describe("resolveServiceAddress — caller authority over a plausible provider v
   });
 });
 
+// ── The house-number conflict ───────────────────────────────────────
+// Found in pre-merge review. "81 Oakland Drive" and "12 Oakland Drive"
+// share every place word, so the place comparison alone called them the
+// same address and the provider's number stood. They are two front
+// doors. Proven on the real path before the fix: the booking succeeded
+// and the calendar event location read "12 Oakland Drive" while the
+// caller had said 81 — a van sent to a stranger's house.
+//
+// Neither "the provider wins" nor "the transcript wins" is defensible
+// here: the transcript's digits are exactly what the 2026-09-01 call
+// mangled, and the provider's are what this review caught. So an
+// unresolved numeric conflict resolves to NOTHING, which is the posture
+// this module already takes for a value it cannot vouch for — the owner
+// still has the caller's number, and the booking is not blocked.
+//
+// The one conflict that CAN be resolved deterministically is the
+// caller's own correction, because both numbers are then in the
+// caller's turns in order.
+
+describe("a house-number conflict is a different destination, not a rendering", () => {
+  test("same street, different numbers, no way to tell — record NOTHING", () => {
+    assert.equal(
+      resolveServiceAddress("12 Oakland Drive", askedAndAnswered("81 Oakland Drive")),
+      null
+    );
+    // Symmetric: this is not a rule about which source is trusted.
+    assert.equal(
+      resolveServiceAddress("81 Oakland Drive", askedAndAnswered("12 Oakland Drive")),
+      null
+    );
+    // A fuller provider rendering does not buy the number a pass.
+    assert.equal(
+      resolveServiceAddress(
+        "12 Oakland Drive, Galway",
+        askedAndAnswered("81 Oakland Drive")
+      ),
+      null
+    );
+  });
+
+  test("the caller's OWN correction resolves the conflict — their last word wins", () => {
+    // Both numbers are in the caller's turns, in order, so this is not
+    // two sources guessing: the model missed a correction the caller
+    // made out loud, and the superseded value is identifiable.
+    const corrected = T(
+      "AI: What's the address where the work is needed?",
+      "User: 12 Oakland Drive.",
+      "AI: Got it. Anything else?",
+      "User: Sorry, my address is 81 Oakland Drive."
+    );
+    assert.equal(resolveServiceAddress("12 Oakland Drive", corrected), CALLER_ADDRESS);
+    // And when the provider FOLLOWED the correction, nothing changes.
+    assert.equal(resolveServiceAddress(CALLER_ADDRESS, corrected), CALLER_ADDRESS);
+  });
+
+  test("agreeing numbers are untouched, and so is a fuller rendering", () => {
+    assert.equal(
+      resolveServiceAddress(CALLER_ADDRESS, askedAndAnswered(CALLER_ADDRESS)),
+      CALLER_ADDRESS
+    );
+    assert.equal(
+      resolveServiceAddress("81 Oakland Drive, Galway", askedAndAnswered(CALLER_ADDRESS)),
+      "81 Oakland Drive, Galway"
+    );
+  });
+
+  test("a number the candidate LACKS is recovered, losslessly", () => {
+    // Omission, not conflict. Taking the caller's wording only adds the
+    // number — the engineer's diary would otherwise carry a street with
+    // no house on it.
+    assert.equal(
+      resolveServiceAddress("Oakland Drive", askedAndAnswered(CALLER_ADDRESS)),
+      CALLER_ADDRESS
+    );
+    // But never when it would DROP something the candidate held: this
+    // candidate is not contained in what the caller said.
+    assert.equal(
+      resolveServiceAddress("Oakland Drive, Galway", askedAndAnswered(CALLER_ADDRESS)),
+      "Oakland Drive, Galway"
+    );
+    // And the caller giving less than the candidate is not a conflict.
+    assert.equal(
+      resolveServiceAddress(CALLER_ADDRESS, askedAndAnswered("Oakland Drive")),
+      CALLER_ADDRESS
+    );
+  });
+
+  test("only COMPARABLE numbers conflict — nothing is inferred", () => {
+    // A spelt-out number would need a number-word table to compare, so
+    // it is not comparable and the candidate stands. Turning "eighty
+    // one" into 81 is inference this module does not do.
+    assert.equal(
+      resolveServiceAddress(CALLER_ADDRESS, askedAndAnswered("eighty one Oakland Drive")),
+      CALLER_ADDRESS
+    );
+    // A number that is not in the leading position is not read, so this
+    // stays exactly as it behaved before — conservative, not clever.
+    assert.equal(
+      resolveServiceAddress("Flat 2, 14 Mill Road", askedAndAnswered("14 Mill Road")),
+      "Flat 2, 14 Mill Road"
+    );
+    // Transcription noise is still not evidence of anything.
+    assert.equal(
+      resolveServiceAddress(
+        CALLER_ADDRESS,
+        T("AI: What's the address where the work is needed?", "User: K e 1 Oakland Drive.")
+      ),
+      CALLER_ADDRESS
+    );
+  });
+
+  test("a DIFFERENT STREET is still Case Q, not a numeric conflict", () => {
+    // The street rule must fire first: this returns the caller's
+    // address, never null.
+    assert.equal(
+      resolveServiceAddress(PROVIDER_ADDRESS, askedAndAnswered(CALLER_ADDRESS)),
+      CALLER_ADDRESS
+    );
+  });
+});
+
 // ── G. The real path, end to end ────────────────────────────────────
 // Helper-level assertions cannot show the corruption reaching a
 // real-world action. These drive processCallEnded for real, with a
@@ -632,6 +753,82 @@ describe("G — the real path: a wrong provider address cannot reach the diary",
       assert.equal(location, PROVIDER_ADDRESS);
     }
     assert.equal(stubs.storedAddress(), PROVIDER_ADDRESS);
+  });
+
+  test("A WRONG HOUSE NUMBER cannot reach the diary — and does not block the booking", async () => {
+    // Before the pre-merge fix this exact call booked successfully with
+    // location "12 Oakland Drive" while the caller had said 81.
+    await processCallEnded(
+      await admin(),
+      ORG_ID,
+      bookingCall(
+        "e5e5e5e5-5555-4555-8555-e5e5e5e5e5e5",
+        T(
+          "AI: Thanks for calling Acme Plumbing. How can I help?",
+          "User: I need a boiler service.",
+          "AI: What's the address where the work is needed?",
+          `User: ${CALLER_ADDRESS}.`,
+          "AI: And when would suit you?",
+          "User: Tuesday 8 September at 11 AM."
+        ),
+        { service_address: "12 Oakland Drive" }
+      )
+    );
+
+    // The booking is NOT abandoned: an unresolved address is not a
+    // reason to lose the appointment. It is sent with no location.
+    assert.ok(stubs.creates.length > 0, "the booking must still reach the calendar");
+    for (const location of stubs.eventLocations()) {
+      assert.equal(
+        location ?? null,
+        null,
+        "an unresolved house number must send NO location, not a guess"
+      );
+    }
+
+    assert.equal(stubs.storedAddress(), null);
+    const html = stubs.summaryHtml();
+    assert.equal(
+      detailsRow(html, "Service address"),
+      null,
+      "the owner is shown no address rather than one of two contradictory ones"
+    );
+    assert.ok(!/12 Oakland Drive/.test(html), "the provider's number must not appear");
+    assert.ok(
+      !new RegExp(CALLER_ADDRESS).test(detailsRow(html, "Service address") ?? ""),
+      "and neither is silently chosen"
+    );
+  });
+
+  test("the caller's own house-number CORRECTION is booked", async () => {
+    await processCallEnded(
+      await admin(),
+      ORG_ID,
+      bookingCall(
+        "f6f6f6f6-6666-4666-8666-f6f6f6f6f6f6",
+        T(
+          "AI: Thanks for calling Acme Plumbing. How can I help?",
+          "User: I need a boiler service.",
+          "AI: What's the address where the work is needed?",
+          "User: 12 Oakland Drive.",
+          "AI: And when would suit you?",
+          "User: Tuesday 8 September at 11 AM.",
+          "AI: Is there anything else I can help you with today?",
+          `User: Sorry, my address is ${CALLER_ADDRESS}.`
+        ),
+        { service_address: "12 Oakland Drive" }
+      )
+    );
+
+    assert.ok(stubs.creates.length > 0);
+    for (const location of stubs.eventLocations()) {
+      assert.equal(
+        location,
+        CALLER_ADDRESS,
+        "a number the caller corrected out loud is resolvable, so it is used"
+      );
+    }
+    assert.equal(stubs.storedAddress(), CALLER_ADDRESS);
   });
 
   test("the caller's spoken CORRECTION is what the diary receives", async () => {
