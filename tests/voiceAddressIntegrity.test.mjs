@@ -296,16 +296,26 @@ describe("resolveServiceAddress — constrain and converge, never rewrite", () =
     assert.equal(resolveServiceAddress("K e 1 Auckland Drive", null), null);
   });
 
-  test("a well-formed candidate is NOT second-guessed against the transcript", () => {
-    // The extractor is told corrections win. A guard that preferred an
-    // earlier spoken value here would resurrect exactly what the caller
-    // replaced — the mistake resolveCallerName is careful to avoid.
+  test("a well-formed candidate naming a DIFFERENT place yields to the caller", () => {
+    // SUPERSEDED EXPECTATION, kept deliberately rather than deleted.
+    //
+    // This case originally asserted "15 Oak Drive" — a well-formed
+    // candidate was never second-guessed, on the reasoning that the
+    // extractor is told corrections win and preferring a spoken value
+    // could resurrect what the caller replaced.
+    //
+    // The first half of that reasoning does not hold: nothing in the
+    // transcript says "15 Oak Drive", so the candidate is not a
+    // correction of anything the caller uttered. The second half is
+    // answered structurally instead — findSpokenAddress returns the
+    // LAST address the caller gave, so a genuine correction is what
+    // wins here, never a stale earlier attempt.
     assert.equal(
       resolveServiceAddress(
         "15 Oak Drive",
         T("AI: What's the address?", "User: 14 Mill Road.")
       ),
-      "15 Oak Drive"
+      "14 Mill Road"
     );
   });
 

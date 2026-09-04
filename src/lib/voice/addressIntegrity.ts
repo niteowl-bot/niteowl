@@ -27,10 +27,20 @@
 // guessed at, because the owner still has the caller's number and a
 // wrong address is worse than none.
 //
-// NOT an address parser. It answers one question — "does the leading
-// house/building identifier look like transcription noise?" — and uses
-// the answer only to refuse a value or to prefer the caller's own
-// later wording.
+// NOT an address parser. It answers two narrow questions — "does the
+// leading house/building identifier look like transcription noise?"
+// and "do these two strings name the same place or two different
+// ones?" — and uses the answers only to refuse a value or to prefer
+// the caller's own wording.
+//
+// The second question was added after the partial-structuredData
+// investigation. Until then a well-formed provider candidate was
+// returned without the transcript ever being read, so a plausible but
+// WRONG extracted address outranked the caller's explicit words and
+// reached the lead, the owner's email and the calendar event location
+// unchallenged. That is information corruption driving a real-world
+// action, and it is worse than the noise this module was built for: an
+// impossible address is at least visibly wrong.
 
 /** A turn in the transcript, as stored: "AI: …" / "User: …". */
 interface Turn {
@@ -225,6 +235,60 @@ export function findSpokenAddress(
 }
 
 /**
+ * The alphabetic tokens of an address — the part that names WHERE, with
+ * the house/building identifier and all punctuation removed.
+ *
+ * "81 Oakland Drive" and "18 Oakland Drive" both reduce to
+ * {oakland, drive}; "12 Meadow Court" reduces to {meadow, court}.
+ */
+function placeTokens(address: string): Set<string> {
+  return new Set(
+    address
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter((token) => /^[a-z]{2,}$/.test(token))
+  );
+}
+
+/**
+ * Whether two addresses are two renderings of the SAME place, rather
+ * than two different places.
+ *
+ * Containment, not overlap, and deliberately: every place word of one
+ * must appear in the other. The fuller form therefore agrees with the
+ * shorter one — "81 Oakland Drive" with "81 Oakland Drive, Galway",
+ * "14 Mill Road" with "Flat 2, 14 Mill Road" — while "Oakland Drive"
+ * and "Meadow Drive" disagree despite sharing a street type.
+ *
+ * A HOUSE-NUMBER disagreement on the same street is deliberately NOT a
+ * different place. That is exactly where the transcript is known to be
+ * least trustworthy: on the 2026-09-01 call the transcriber mangled the
+ * house number twice while the street name resolved correctly both
+ * times. Letting the transcript's digits outrank the model's would
+ * re-open that failure from the other side.
+ *
+ * When either address yields no place word at all, this answers "same"
+ * — the conservative direction, because it leaves the candidate
+ * standing rather than replacing it on evidence it cannot read.
+ *
+ * NOT an address parser. No street vocabulary, no abbreviation table,
+ * no geocoding, no similarity scoring, no threshold. It compares two
+ * token sets and nothing else.
+ */
+export function addressesDescribeSamePlace(a: string, b: string): boolean {
+  const left = placeTokens(a);
+  const right = placeTokens(b);
+  if (left.size === 0 || right.size === 0) return true;
+  const [small, large] = left.size <= right.size ? [left, right] : [right, left];
+  for (const token of small) {
+    if (!large.has(token)) return false;
+  }
+  return true;
+}
+
+/**
  * The service address to record, given what the model produced and what
  * the caller actually said.
  *
@@ -232,33 +296,59 @@ export function findSpokenAddress(
  * value this cannot vouch for is dropped rather than guessed at.** The
  * order:
  *
- * 1. The candidate is ordinary — keep it, byte for byte. This is the
+ * 1. The candidate is ordinary and the caller was not heard naming a
+ *    DIFFERENT place — keep it, byte for byte. This is the
  *    overwhelming majority, including "12A", "Flat 2, 14 Mill Road" and
- *    every named property. The model is told corrections win, so a
- *    well-formed candidate is trusted and a stale earlier value is
- *    never resurrected.
- * 2. The candidate looks like transcription noise AND the caller was
+ *    every named property, and it covers a candidate that is merely the
+ *    fuller form of what the caller said. A later correction still
+ *    wins, because findSpokenAddress reads the LAST address the caller
+ *    gave and never an earlier one, so a stale value is not resurrected.
+ * 2. The candidate is ordinary, but the caller was explicitly heard
+ *    giving a well-formed address naming a DIFFERENT place — take the
+ *    caller's own words. A syntactically tidy extraction is not
+ *    authority over what the caller actually said, and a plausible
+ *    wrong address is worse than a rough right one: it books an
+ *    engineer to somewhere real that nobody asked for, and reads as
+ *    correct on every surface that shows it.
+ * 3. The candidate looks like transcription noise AND the caller was
  *    heard giving a well-formed address — take the caller's own words.
- *    This is the observed defect, and the ONLY case where the
- *    transcript overrides the model.
- * 3. The candidate looks like transcription noise and there is no such
+ *    This is the originally observed defect.
+ * 4. The candidate looks like transcription noise and there is no such
  *    evidence — record nothing. The owner sees the caller's phone
  *    number, which is true, rather than an address that cannot exist.
- * 4. No candidate at all — fall back to what the caller was heard to
+ * 5. No candidate at all — fall back to what the caller was heard to
  *    say, if anything.
  *
+ * This is NOT "the transcript always wins". The transcript overrides a
+ * well-formed candidate only when findSpokenAddress produced evidence
+ * clearing every structural bar in this module — an answer to an
+ * explicit address question or a self-declaration, well formed, and not
+ * itself noise — AND that evidence names a different place. Silence, an
+ * ambiguous reply, a fragment, a same-street house-number difference,
+ * or a candidate that is simply the fuller form all leave the candidate
+ * exactly as the model wrote it.
+ *
  * Deterministic and self-contained: no model call, no network, no
- * imports.
+ * imports. There is no second extraction and no merging of two
+ * readings — one value is chosen, whole, from one of two sources.
  */
 export function resolveServiceAddress(
   candidate: string | null | undefined,
   transcript: string | null | undefined
 ): string | null {
   const address = candidate?.trim() || null;
-
-  if (address && !looksLikeTranscriptionNoise(address)) return address;
-
   const spoken = findSpokenAddress(transcript);
+
+  if (address && !looksLikeTranscriptionNoise(address)) {
+    // A well-formed candidate is not, by itself, authority. Explicit
+    // caller speech naming a different place outranks it — otherwise a
+    // plausible but wrong extraction reaches the lead, the owner's
+    // email and the engineer's diary with nothing able to contradict
+    // it. Absent, ambiguous or same-place evidence changes nothing.
+    if (spoken && !addressesDescribeSamePlace(spoken, address)) return spoken;
+    return address;
+  }
+
   if (spoken) return spoken;
 
   // Either a noisy candidate with nothing better, or no candidate at
