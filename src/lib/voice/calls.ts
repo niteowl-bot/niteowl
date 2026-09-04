@@ -15,7 +15,7 @@ import {
 import { isVoiceCalendarBookingEnabled } from "@/lib/integrations/flags";
 import { extractVoiceLeadFromTranscript } from "@/lib/voice/extraction";
 import { isSameNumber, normaliseSpokenNumber } from "@/lib/voice/callerId";
-import { normaliseSpokenEmail } from "@/lib/voice/spokenEmail";
+import { resolveCallerEmail } from "@/lib/voice/emailIntegrity";
 import { resolveCallerName } from "@/lib/voice/nameIntegrity";
 import { resolveServiceAddress } from "@/lib/voice/addressIntegrity";
 import { resolveRequestedService } from "@/lib/voice/serviceIntegrity";
@@ -245,9 +245,10 @@ function toExtractedLead(
   callerPhone: string | null,
   /**
    * The call transcript, read ONLY as evidence of what the caller
-   * actually said — their name (nameIntegrity.ts) and their address
-   * (addressIntegrity.ts). Nothing else is taken from it here, and it
-   * is optional so every existing caller behaves exactly as before.
+   * actually said — their name (nameIntegrity.ts), their address
+   * (addressIntegrity.ts) and their email (emailIntegrity.ts). Nothing
+   * else is taken from it here, and it is optional so every existing
+   * caller behaves exactly as before.
    */
   transcript: string | null = null
 ): ExtractedLead | null {
@@ -259,7 +260,16 @@ function toExtractedLead(
 
   // Normalised first: the name guard below compares against the address
   // that will actually be stored, not the spoken wording.
-  const email = normaliseSpokenEmail(details.email);
+  //
+  // The provider's value wins whenever it survives normalisation. Only
+  // when nothing usable came from it — the field omitted by a partial
+  // structuredData payload, or holding something no valid address can
+  // be made of — is the caller's own speech read. That was pure loss
+  // before: leads.email is what the customer's booking confirmation is
+  // sent to, and the send is guarded by `if (customerEmail)`, so a null
+  // here meant a booking that completed with the customer told nothing.
+  // See emailIntegrity.ts.
+  const email = resolveCallerEmail(details.email, transcript);
 
   return {
     intent,
