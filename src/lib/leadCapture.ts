@@ -122,6 +122,48 @@ const MERGEABLE_STATUSES: LeadStatus[] = [
   "needs_review",
 ];
 
+/**
+ * The mergeable statuses a lead may hold to be matched ACROSS
+ * conversations — the same list, minus `booked`.
+ *
+ * ── Why a booked lead may not be reached by contact details ────────
+ *
+ * Layer 2 identifies a PERSON, by email or phone, with no time bound
+ * and across every conversation they have ever had. The update path
+ * then treats whatever it finds as the appointment being talked about:
+ * a lead that is already `booked`, given a different requested time,
+ * is read as a RESCHEDULE and `rescheduleAppointmentOnCalendar` moves
+ * the existing Google event.
+ *
+ * So a returning customer booking a SECOND appointment — the ordinary
+ * case for every trade Remy serves — had their FIRST one moved on top
+ * of it. Jane books Tuesday, comes back a month later in a new chat
+ * and books Friday: the Tuesday event is dragged to Friday, the
+ * Tuesday row is overwritten, no confirmation email is sent (that send
+ * tests `existing.status !== "booked"`), and the reply still tells her
+ * "booked". A confirmed commitment destroyed while reporting success.
+ *
+ * Identifying the person is not identifying the appointment. Within
+ * ONE conversation those coincide, which is why layer 1 keeps the full
+ * list and a genuine in-session reschedule still works. Across
+ * conversations they do not, so a booked lead is left alone and the
+ * second booking takes the ordinary new-lead path.
+ *
+ * THE TRADE, DELIBERATE: a genuine reschedule started in a NEW
+ * conversation ("I booked Tuesday, can we move it to Friday?") now
+ * creates a second lead instead of moving the first. That is the safe
+ * direction — two visible records an owner can reconcile, against an
+ * appointment silently destroyed — and the manage-booking link
+ * (`/api/bookings/manage`) remains the designed reschedule path,
+ * unchanged.
+ *
+ * Derived from MERGEABLE_STATUSES rather than written out, so the two
+ * lists cannot drift: a status added above is mergeable in-conversation
+ * by default, and `booked` is the single documented exclusion.
+ */
+const CROSS_CONVERSATION_MERGEABLE_STATUSES: LeadStatus[] =
+  MERGEABLE_STATUSES.filter((status) => status !== "booked");
+
 
 // Statuses that must never be silently overwritten by the merge logic
 const PROTECTED_STATUSES: LeadStatus[] = ["contacted", "qualified"];
@@ -588,12 +630,18 @@ async function findOpenLeadForCapture(
   }
 
   // ── Layer 2: known contact details on a mergeable lead ───────────
+  //
+  // CROSS-CONVERSATION, so a BOOKED lead is deliberately out of reach
+  // here: this layer identifies the person, not the appointment, and
+  // treating the two as the same is what moved a returning customer's
+  // existing calendar event onto their new booking. See
+  // CROSS_CONVERSATION_MERGEABLE_STATUSES.
   if (extracted.email || extracted.phone) {
     let query = supabase
       .from("leads")
       .select(LEAD_SELECT_COLUMNS)
       .eq("org_id", orgId)
-      .in("status", MERGEABLE_STATUSES)
+      .in("status", CROSS_CONVERSATION_MERGEABLE_STATUSES)
       .order("created_at", { ascending: false })
       .limit(1);
 
@@ -631,7 +679,10 @@ async function findOpenLeadForCapture(
     .select(LEAD_SELECT_COLUMNS)
     .eq("org_id", orgId)
     .eq("source", leadSource)
-    .in("status", MERGEABLE_STATUSES)
+    // Also cross-conversation — the 30-minute bound narrows WHICH lead
+    // can be reached, never whose. A booked appointment is excluded for
+    // the same reason as layer 2.
+    .in("status", CROSS_CONVERSATION_MERGEABLE_STATUSES)
     .gte("created_at", thirtyMinutesAgo)
     .order("created_at", { ascending: false })
     .limit(1)
