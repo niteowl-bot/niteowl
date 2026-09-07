@@ -569,17 +569,52 @@ The safer future direction is a distinct upstream signal — conceptually `reque
 
 # Current Work
 
-Currently implementing:
+**Remy V1 implementation is COMPLETE** under the canonical Definition of Done —
+*"Does this stop a normal paying customer from reliably using Remy V1?"* A read-only
+reconciliation across PROJECT_CONTEXT.md, CHECKLIST.md and docs/ARCHITECTURE.md found no
+remaining production-reachable V1 implementation blocker.
 
-- Needs Review email notifications
-- Shared email service using Resend
+**The one remaining launch prerequisite is EXTERNAL and is not Remy work.**
 
-Next planned work:
+- **Google consent screen: PUBLISHED / In production (2026-09-07).** Audience is External;
+  the app is no longer in *Testing*.
+- **Google OAuth / Data access verification: SUBMITTED — UNDER REVIEW BY GOOGLE
+  (2026-09-07).** Branding is verified and Google is reviewing the submitted requirements.
+  **This is NOT approved, and must not be recorded as completed until Google actually
+  approves it.**
+- The sensitive scopes under review are **`calendar.events`**,
+  **`calendar.calendarlist.readonly`** and **`calendar.freebusy`**, plus non-sensitive
+  **`openid`** and **`email`**. (`calendar.readonly` was deliberately dropped and is not
+  requested — `src/lib/integrations/providers/google.ts:42-48, 65-71`.)
+- **No code, scope, credential or configuration change can advance the review.** Nothing
+  further is required from us unless Google's reviewers come back with questions.
+- **The 7-day Testing-mode refresh-token expiry risk is CLOSED**, because publication ended
+  it: a business's calendar connection will no longer silently drop after a week. While
+  review is pending the app may still show an unverified-app warning and remains subject to
+  Google's unverified-app user cap — a friction and scale limit, not the disconnection bug.
 
-- Production deployment
-- Domain
-- Email confirmations
-- Cancellation/Reschedule workflow
+The full record lives in `CHECKLIST.md` (the OAuth items and the published consent screen);
+PR #74 recorded this status and its production closeout passed — deployment Ready on the
+production aliases, `/api/health` HTTP 200 with `"database":"ok"`, homepage HTTP 200.
+
+**WHILE GOOGLE REVIEW IS PENDING, DO NOT INVENT ADDITIONAL V1 WORK TO FILL THE WAITING
+PERIOD.** The correct state is waiting, not building.
+
+- **All V1.1/later items remain deferred and must not be reopened**: transcript urgency
+  recovery, partial-`structuredData` service recovery, the appointment/customer/enquiry
+  identity-model redesign, the `requiredMatches` matcher false positive, booking-confirmation
+  test infrastructure, structured-data observability, `stemServiceWord` morphology, Rule 11 /
+  STT wording, the prompt budget and the dashboard-preview toast.
+- **The timezone-selection UI stays conditional and deferred.** No code path writes
+  `organisations.timezone`, so every organisation inherits `Europe/London`. That is correct
+  for the current Ireland/UK-compatible launch scope and harmless there. **It becomes a V1
+  blocker the moment a business outside that offset is onboarded**, and must ship before any
+  such expansion.
+- **Newly discovered work is judged by the canonical rule, not by appetite.** If it stops a
+  normal paying customer from reliably using Remy V1 **and is reachable in production code**,
+  investigate it as a possible V1 blocker. If it does not, it belongs in V1.1/later — a nicer
+  implementation, a theoretical edge case, cleaner architecture or added convenience is never
+  on its own a reason to promote something into V1.
 
 ---
 
@@ -798,17 +833,22 @@ Alpha Launch
 
 Remaining work:
 
+- **Google OAuth / Data access verification — SUBMITTED, UNDER REVIEW BY GOOGLE.** The one
+  remaining launch dependency, and it is external: see *Current Work* above. Not approved
+- monitoring
+- production testing
+
+Shipped (previously listed as remaining or future):
+
 - production deployment
 - custom domain
 - email confirmations
 - cancellation/reschedule emails
-- monitoring
-- production testing
+- Voice AI
+- Google Calendar
 
 Future:
 
-- Voice AI
-- Google Calendar
 - Outlook Calendar
 - Stripe
 - Multi-staff
