@@ -10,11 +10,24 @@
 // honest: a function that cannot reach anything cannot leak anything.
 //
 // IT DERIVES; IT NEVER INVENTS. Every line traces to something the
-// visitor typed. There is no default opening-hours block, no assumed
-// service list, no "most businesses also…" filler. Where an answer is
-// missing the setup SAYS SO — see `note` — because a gap the owner can
-// see is useful and a gap quietly filled with a plausible guess is a
-// fabricated fact about a real business.
+// visitor typed, or is a neutral structural label organising it. There
+// is no default opening-hours block, no assumed service list, and no
+// "most businesses also…" filler.
+//
+// AND IT RECOMMENDS NOTHING. This is the correction that matters, because
+// the first version of this file got it wrong: it appended advice to six
+// sections — "an enquiry not on this list is one to pass to a person",
+// "when it is not clear whether something is urgent, treat it as urgent"
+// — none of which the visitor supplied. That is INVENTED OPERATING
+// POLICY. It reads as the business's own rule, it is what someone would
+// act on, and a plausible guess about how a real business should escalate
+// an emergency is exactly the thing this tool must never manufacture.
+// Sensible-sounding advice is not a lesser fabrication than a wrong fact;
+// it is a more persuasive one.
+//
+// Where an optional answer is missing the setup either OMITS the content
+// or states the absence neutrally ("You did not provide any booking
+// rules"). It never fills the gap with a suggestion.
 //
 // NOTHING IS VERIFIED. Everything here is what somebody typed into a
 // public form. The wording says "you told us" and "based on what you
@@ -121,7 +134,6 @@ export function buildReceptionistSetup(
       id: "hours",
       title: "Opening hours",
       lines: [clean(profile.openingHours)],
-      note: "Anyone answering enquiries should know these hours, and know what to do outside them.",
     });
   }
 
@@ -132,7 +144,6 @@ export function buildReceptionistSetup(
       id: "services",
       title: "Services and enquiries handled",
       lines: services,
-      note: "An enquiry that is not on this list is one to pass to a person rather than answer.",
     });
   }
 
@@ -143,7 +154,6 @@ export function buildReceptionistSetup(
       id: "questions",
       title: "Common questions and answers",
       lines: questions.map((q) => `${q.question} — ${q.answer}`),
-      note: "These are the answers you want given. Anything not covered here should not be guessed at.",
     });
   }
 
@@ -156,7 +166,6 @@ export function buildReceptionistSetup(
       id: "collect",
       title: "Information to collect",
       lines: collect,
-      note: "Ask for anything still missing before the conversation ends — it is far harder to get afterwards.",
     });
   }
 
@@ -169,16 +178,18 @@ export function buildReceptionistSetup(
     }
   } else {
     appointment.push(
-      "This business does not take appointment or booking enquiries. Anyone asking to book should be told a person will follow up."
+      "This business does not take appointment or booking enquiries."
     );
   }
   sections.push({
     id: "appointments",
     title: "Appointment handling",
     lines: appointment,
+    // The only note this tool produces, and it states an ABSENCE rather
+    // than advice: what the visitor did not provide, and nothing more.
     note:
       profile.acceptsAppointments && !isPresent(profile.appointmentRules)
-        ? "You did not give any booking rules. Worth adding what you will and will not accept — how much notice you need, and anything you never book without checking first."
+        ? "You did not provide any booking rules."
         : undefined,
   });
 
@@ -204,7 +215,6 @@ export function buildReceptionistSetup(
       id: "escalation",
       title: "Escalation instructions",
       lines: escalation,
-      note: "When it is not clear whether something is urgent, treat it as urgent and pass it on.",
     });
   }
 

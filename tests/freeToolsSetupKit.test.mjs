@@ -214,7 +214,7 @@ describe("an unanswered question produces no answer", () => {
     });
     const section = sectionById(setup, "appointments");
     assert.equal(section.lines.length, 1, "no invented rule");
-    assert.match(section.note, /did not give any booking rules/i);
+    assert.match(section.note, /did not provide any booking rules/i);
   });
 
   test("no note ever asserts a fact about the business", () => {
@@ -227,6 +227,119 @@ describe("an unanswered question produces no answer", () => {
         `note asserts something: ${section.note}`
       );
     }
+  });
+
+  // ── No invented operating policy ─────────────────────────────────
+  //
+  // The first version of this file appended advice to six sections —
+  // "an enquiry that is not on this list is one to pass to a person",
+  // "when it is not clear whether something is urgent, treat it as
+  // urgent and pass it on". None of it came from the visitor. It reads
+  // as the business's own rule and is exactly what somebody would act
+  // on, which makes sensible-sounding advice a MORE persuasive
+  // fabrication than a wrong fact, not a lesser one.
+
+  test("NO RECOMMENDATION anywhere in the generated output", () => {
+    // Every profile shape, not just the full one: a gap is precisely
+    // where advice used to get inserted.
+    const profiles = [
+      FULL,
+      emptyProfile(),
+      { ...emptyProfile(), acceptsAppointments: true },
+      { ...FULL, appointmentRules: "", escalation: "", urgentCriteria: "" },
+      { ...FULL, acceptsAppointments: false },
+    ];
+    for (const profile of profiles) {
+      const text = allText(buildReceptionistSetup(profile));
+      assert.doesNotMatch(
+        text,
+        /\bshould be\b|\bshould not\b|\bworth adding\b|\bmake sure\b|\bremember to\b|\bwe recommend\b|\bbest practice\b|\btreat it as\b|\bit is far harder\b|\bought to\b/i,
+        `generated output contains a recommendation:\n${text}`
+      );
+    }
+  });
+
+  test("the ONLY note the tool produces is a neutral statement of absence", () => {
+    const profiles = [
+      FULL,
+      emptyProfile(),
+      { ...emptyProfile(), acceptsAppointments: true },
+      { ...FULL, appointmentRules: "" },
+      { ...FULL, acceptsAppointments: false },
+    ];
+    const ALLOWED = new Set(["You did not provide any booking rules."]);
+    for (const profile of profiles) {
+      for (const section of buildReceptionistSetup(profile).sections) {
+        if (!section.note) continue;
+        assert.ok(
+          ALLOWED.has(section.note),
+          `unexpected note — notes may only state an absence: ${section.note}`
+        );
+      }
+    }
+  });
+
+  test("urgency and escalation contain the visitor's values and nothing else", () => {
+    const setup = buildReceptionistSetup(FULL);
+    const section = sectionById(setup, "escalation");
+    assert.deepEqual(section.lines, [
+      `Treat as urgent: ${FULL.urgentCriteria}`,
+      FULL.escalation,
+    ]);
+    assert.equal(section.note, undefined, "no advice appended to escalation");
+    // The specific sentence the manual product test caught.
+    assert.doesNotMatch(
+      allText(setup),
+      /when it is not clear whether something is urgent/i
+    );
+  });
+
+  test("missing escalation information produces NO section, not invented policy", () => {
+    const setup = buildReceptionistSetup({
+      ...FULL,
+      urgentCriteria: "",
+      escalation: "",
+    });
+    assert.equal(
+      sectionById(setup, "escalation"),
+      null,
+      "an absent answer must omit the section, never fill it"
+    );
+    assert.doesNotMatch(allText(setup), /urgent/i);
+  });
+
+  test("partial escalation carries only the half that was answered", () => {
+    const onlyUrgent = buildReceptionistSetup({
+      ...FULL,
+      escalation: "",
+    });
+    assert.deepEqual(sectionById(onlyUrgent, "escalation").lines, [
+      `Treat as urgent: ${FULL.urgentCriteria}`,
+    ]);
+
+    const onlyEscalation = buildReceptionistSetup({
+      ...FULL,
+      urgentCriteria: "",
+    });
+    assert.deepEqual(sectionById(onlyEscalation, "escalation").lines, [
+      FULL.escalation,
+    ]);
+  });
+
+  test("declining appointments states the answer without prescribing what to do", () => {
+    const setup = buildReceptionistSetup({
+      ...FULL,
+      acceptsAppointments: false,
+    });
+    const lines = sectionById(setup, "appointments").lines;
+    assert.deepEqual(lines, [
+      "This business does not take appointment or booking enquiries.",
+    ]);
+    assert.doesNotMatch(
+      lines.join(" "),
+      /person will follow up|told|should/i,
+      "no invented handling instruction"
+    );
   });
 });
 
