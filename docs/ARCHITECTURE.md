@@ -279,7 +279,18 @@ write path is wired), so the phone will not see it either.
   calendar write, so once event sync is wired it will silently desynchronise the
   external event. Wire all four paths in one pass, not three.
 
-#### C3. A lead is a customer, an enquiry and an appointment at once — so a returning customer's second booking overwrites their first
+#### C3. A lead is a customer, an enquiry and an appointment at once — so a returning customer's second booking overwrites their first — ✅ **CLOSED by PR #70 (2026-09-07)**
+
+> **CLOSED.** PR #70 (merged `8833896`, deployed and health-verified) made an
+> already-`booked` lead ineligible for **cross-conversation** matching: layers 2 and 3
+> use `CROSS_CONVERSATION_MERGEABLE_STATUSES`, the same list minus `booked`, while
+> **layer 1 keeps the full list so same-conversation rescheduling still works** and still
+> moves the calendar event. A returning customer's second booking now creates a
+> **separate lead** instead of overwriting their first confirmed appointment. **It is no
+> longer an open V1 blocker.** The analysis below is kept as the record of the defect,
+> and the underlying identity question — one `leads` row being customer, enquiry and
+> appointment at once — is **unchanged and still deferred**: see P1. Full record in
+> `PROJECT_CONTEXT.md`.
 
 There is no `appointments` table. An appointment *is* a `leads` row with
 `status='booked'` and `appointment_datetime` set, guarded by a CHECK constraint and
@@ -2888,7 +2899,9 @@ the checklist:
   to destroy history as well as produce a wrong booking (M1). Its cost went up; its
   urgency did not, because production holds test orgs only. It is to be settled **before
   the first paying business**, not before the calendar work. **Deadline owner-approved
-  2026-08-18.**
+  2026-08-18.** ✅ **SETTLED by PR #70 (2026-09-07)** — a booked lead is no longer
+  eligible for cross-conversation matching, so the second booking creates a separate
+  lead; same-conversation rescheduling is unchanged. See C3.
 - **P1 (`subject_type = 'appointment'`)** was already decided and implemented. Part III
   confirms it was the right call for a second reason: every future canonical reference to
   an appointment inherits that identity, and had it been the lead id, the outcome spine
