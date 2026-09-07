@@ -21,8 +21,9 @@ import { resolveServiceAddress } from "@/lib/voice/addressIntegrity";
 import { resolveRequestedService } from "@/lib/voice/serviceIntegrity";
 import {
   resolveCallbackUrgency,
-  sanitisePreferredDatetime,
+  type CallbackTiming,
 } from "@/lib/voice/callbackTiming";
+import { resolveRequestedDatetime } from "@/lib/voice/datetimeIntegrity";
 import type {
   VoiceCallEndedEvent,
   VoiceExtractedDetails,
@@ -250,7 +251,19 @@ function toExtractedLead(
    * else is taken from it here, and it is optional so every existing
    * caller behaves exactly as before.
    */
-  transcript: string | null = null
+  transcript: string | null = null,
+  /**
+   * The requested timing, ALREADY RESOLVED by the caller (see
+   * datetimeIntegrity.ts). Passed in rather than derived here because
+   * processCallEnded needs the same answer for the owner's urgency and
+   * booking-status decisions: deriving it twice from the same inputs
+   * would be two readings of one fact, which is the pattern the
+   * canonical-information architecture exists to remove.
+   *
+   * Required, deliberately: a default would let a future caller omit it
+   * and silently lose the field, which is the very defect this fixes.
+   */
+  timing: CallbackTiming
 ): ExtractedLead | null {
   if (!details) return null;
 
@@ -307,8 +320,14 @@ function toExtractedLead(
     // recordLeadCallDetails. From there it reaches the owner in the
     // call-summary email and the lead drawer as "Callback urgency" —
     // never in a field that means WHEN.
-    preferred_datetime: sanitisePreferredDatetime(details.preferred_datetime)
-      .preferredDatetime,
+    //
+    // Resolved by the caller, from the ONE decision every consumer
+    // reads. A partial provider payload that omits the field used to
+    // leave this null on a call whose transcript plainly carried the
+    // day the caller was asked for and gave; the resolver recovers it
+    // from the caller's own turns, and never overrides a value the
+    // provider did supply. See datetimeIntegrity.ts.
+    preferred_datetime: timing.preferredDatetime,
     // Speech-to-text mangles a house number into letter noise — the
     // 2026-09-01 "A c 1 Oakland Drive" call. Resolved HERE, at the one
     // convergence point, so the calendar event and the lead's stored
@@ -670,18 +689,45 @@ export async function processCallEnded(
     }
   }
 
-  const extracted = toExtractedLead(details, event.callerPhone, event.transcript);
+  // ── The ONE requested-timing decision ─────────────────────────────
+  //
+  // Resolved once, here, and handed to every consumer: the lead's
+  // preferred_datetime (through toExtractedLead below), the owner's
+  // urgency row, the owner's booking-status gate and the requested-time
+  // row. Deriving it twice from the same inputs would be two readings
+  // of one fact — the pattern PRs #45–#47 exist to remove.
+  //
+  // The resolver keeps the sanitiser's whole contract and adds one
+  // thing: when the provider supplied NOTHING for the field, the
+  // caller's own anchored turns are read. A value the provider did
+  // supply is never overridden, and an urgency answer is never
+  // displaced by a day mentioned elsewhere on the call. See
+  // datetimeIntegrity.ts.
+  //
+  // Only when a producer actually spoke. With no extraction at all —
+  // the provider empty AND the fallback extractor having failed — the
+  // call yields nothing and must keep yielding nothing: recovery
+  // completes a partial answer, it never manufactures a whole one.
+  const callbackTiming = details
+    ? resolveRequestedDatetime(details.preferred_datetime, event.transcript)
+    : { preferredDatetime: null, urgency: null };
+
+  const extracted = toExtractedLead(
+    details,
+    event.callerPhone,
+    event.transcript,
+    callbackTiming
+  );
   const alternatePhone = resolveAlternatePhone(details, event.callerPhone);
-  // Kept separately from preferred_datetime, which toExtractedLead has
-  // already cleared of it: the caller told us how urgent they are, not
-  // when to ring them.
+  // Urgency is kept separately from preferred_datetime, which the
+  // resolver above has already cleared of it: the caller told us how
+  // urgent they are, not when to ring them.
   //
   // Read from BOTH signals, because they are produced by opposite model
   // behaviours. A model that disobeys the extraction schema puts the
   // phrase in preferred_datetime and the sanitiser recovers it; a model
   // that OBEYS leaves that null and sets `urgent` instead. Reading only
   // the first is what lost the urgency on the 2026-08-31 call.
-  const callbackTiming = sanitisePreferredDatetime(details?.preferred_datetime);
   const callbackUrgency = resolveCallbackUrgency(
     callbackTiming,
     details?.urgent === true
