@@ -28,7 +28,35 @@ export interface VoiceExtractedDetails {
    * in leads.metadata rather than changing the shared lead schema.
    */
   service_address: string | null;
-  urgent: boolean;
+  /**
+   * THREE STATES, not two.
+   *
+   *   true  — the provider explicitly said the caller was urgent
+   *   false — the provider explicitly said they were not
+   *   null  — the provider said NOTHING usable: the field was omitted
+   *           by a partial payload, was blank, or held something that
+   *           is not a boolean
+   *
+   * It was plain `boolean` until this, which meant a partial payload
+   * omitting the field was indistinguishable from a provider stating
+   * "not urgent" — four different situations collapsed into one
+   * `false`. Nothing downstream could ever tell them apart, so nothing
+   * downstream could ever act on the difference.
+   *
+   * This is REPRESENTATION ONLY and is deliberately behaviour-neutral:
+   * every consumer tests `=== true`, so `null` behaves exactly as the
+   * old `false` did. No urgency is inferred from absence, and no
+   * transcript is read — recovering a caller's urgency from their own
+   * speech is a separate, deferred piece of work.
+   *
+   * Only the PROVIDER boundary produces null today. The transcript
+   * fallback extractor (extraction.ts) still emits true/false, and is
+   * deliberately left alone: it runs on the whole transcript and only
+   * when the provider said nothing at all, so "we were not told" is
+   * not a state it can be in. Widening it would change no behaviour
+   * and is not part of this.
+   */
+  urgent: boolean | null;
 }
 
 /** A completed phone call — the main event the platform acts on. */
