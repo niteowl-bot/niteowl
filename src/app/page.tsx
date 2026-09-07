@@ -89,6 +89,12 @@ export default function Home() {
           </span>
           <div className="flex items-center gap-4">
             <a
+              href="/free-tools"
+              className="text-slate-400 hover:text-white text-sm transition-colors"
+            >
+              Free tools
+            </a>
+            <a
               href="/login"
               className="text-slate-400 hover:text-white text-sm transition-colors"
             >
