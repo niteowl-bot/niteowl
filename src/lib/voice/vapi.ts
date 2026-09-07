@@ -71,6 +71,32 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * A boolean the provider actually stated, or null when it stated
+ * nothing usable. The `urgent` counterpart of `asString`.
+ *
+ * `data.urgent === true` collapsed FOUR different situations into one
+ * `false`: an explicit `false`, a field a partial payload omitted, a
+ * blank value, and a malformed one (`"true"`, `1`, `"yes"` — the
+ * schema asks for a boolean, but nothing enforces what arrives). A
+ * consumer could therefore never tell "the caller is not urgent" from
+ * "we were not told".
+ *
+ * Only a real boolean is taken at its word. Everything else is null,
+ * because a value we cannot read is not an answer — the same rule
+ * `asString` applies to blank text, and deliberately NOT a coercion:
+ * reading the string `"true"` as urgency would be inventing a provider
+ * statement that was never made.
+ *
+ * BEHAVIOUR-NEUTRAL BY CONSTRUCTION. Every consumer tests `=== true`,
+ * so null behaves exactly as the old false did. Nothing here infers
+ * urgency, reads the transcript, or recovers anything — that is a
+ * separate, deferred piece of work.
+ */
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === "boolean" ? value : null;
+}
+
 /** Vapi nests call context in several places depending on event type. */
 function extractCallContext(message: UnknownRecord): {
   callId: string | null;
@@ -153,7 +179,7 @@ function parseStructuredDetails(value: unknown): VoiceExtractedDetails | null {
     service: asString(data.service),
     preferred_datetime: asString(data.preferred_datetime),
     service_address: asString(data.service_address),
-    urgent: data.urgent === true,
+    urgent: asBoolean(data.urgent),
   };
 
   // Every supported field, not just the ones that happen to be strings
@@ -169,9 +195,17 @@ function parseStructuredDetails(value: unknown): VoiceExtractedDetails | null {
     details.service_address !== null ||
     // URGENCY IS INFORMATION. `urgent: true` on its own is a real fact
     // the caller supplied and must never collapse to "empty" — losing
-    // it is the PR #35 failure again. `false` cannot count, because
-    // after normalisation it is indistinguishable from absent.
-    details.urgent;
+    // it is the PR #35 failure again.
+    //
+    // `false` and `null` both do not count, for different reasons now
+    // that the two are distinguishable: null is the provider saying
+    // nothing, and an explicit `false` is a statement about a caller
+    // the provider told us nothing else about — a payload whose only
+    // content is "not urgent" describes no enquiry, so it must keep
+    // reaching the transcript fallback exactly as it did before. The
+    // test stays `=== true`, which is what makes this whole change
+    // behaviour-neutral here.
+    details.urgent === true;
 
   return hasSubstance ? details : null;
 }
