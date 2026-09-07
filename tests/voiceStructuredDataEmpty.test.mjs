@@ -422,6 +422,21 @@ describe("an empty envelope no longer costs the caller's information", () => {
   test("A3. urgency reaches the owner instead of being lost with the envelope", async () => {
     // The caller said "it's urgent" and gave no usable time. Before the
     // fix the empty envelope meant urgent:false and no urgency at all.
+    //
+    // The transcript is stated explicitly rather than reusing
+    // RICH_TRANSCRIPT, which carries "Thursday 20 August at 3 PM" and so
+    // never matched this test's own premise. That went unnoticed while
+    // nothing read the transcript for timing; it does now
+    // (datetimeIntegrity.ts), and a real timing correctly suppresses the
+    // urgency row — "a real timing wins outright", callbackTiming.ts.
+    // The fixture is corrected to the call this test describes; the
+    // assertion is unchanged.
+    const URGENT_NO_TIME = T(
+      "AI: How can I help?",
+      "User: My radiator is leaking and it's urgent.",
+      "AI: When suits you best?",
+      "User: I don't have a specific time. Just as soon as possible, please."
+    );
     stubs = installStubs({
       extractionJson: JSON.stringify({
         intent: "question",
@@ -438,6 +453,7 @@ describe("an empty envelope no longer costs the caller's information", () => {
       await admin(),
       ORG_ID,
       parsedEvent("cccccccc-3333-4333-8333-cccccccccccc", {
+        transcript: URGENT_NO_TIME,
         analysis: { structuredData: {} },
       })
     );
@@ -502,8 +518,13 @@ describe("an empty envelope no longer costs the caller's information", () => {
     // would have produced, which is corroboration rather than a second
     // opinion.
     //
-    // `preferred_datetime` is still NOT completed: that field has no
-    // deterministic guard, and giving it one is a separate task.
+    // `preferred_datetime` is now recovered the same way, and by the
+    // same kind of guard (datetimeIntegrity.ts) — the transcript here
+    // carries "AI: When suits? / User: Thursday 20 August at 3 PM", an
+    // anchored answer in the caller's own turn. That is field-level
+    // evidence recovery, NOT record-level producer selection: the
+    // fallback extractor still never runs for a partial payload, which
+    // is what the first assertion below pins.
     stubs = installStubs();
     await processCallEnded(
       await admin(),
@@ -529,8 +550,8 @@ describe("an empty envelope no longer costs the caller's information", () => {
     );
     assert.equal(
       lead.preferred_datetime,
-      null,
-      "a field with no deterministic guard is still NOT completed"
+      "Thursday 20 August at 3 PM",
+      "the omitted timing is recovered from the caller's own anchored turn"
     );
   });
 
