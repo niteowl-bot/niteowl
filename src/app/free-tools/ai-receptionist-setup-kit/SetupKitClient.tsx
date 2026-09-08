@@ -17,6 +17,19 @@
 // NOTHING HERE REACHES REMY. The only import that is not React is the
 // pure derivation in @/lib/freetools — no lead capture, no booking, no
 // knowledge base, no organisation lookup, no provider.
+//
+// SAVING USES THE BROWSER'S OWN PRINT PIPELINE — window.print() and a
+// print stylesheet, nothing more. No PDF library (every credible one is
+// a substantial dependency for a single button) and emphatically no
+// hosted PDF service, which would mean uploading the visitor's business
+// information to a third party. The answers never leave the tab, so
+// "nothing is sent anywhere" stays a property of the code rather than a
+// promise about it.
+//
+// The document is a separate component so a test can render the thing
+// that actually reaches paper — the same reason LeadsTable exports
+// EditPanel. Asserting over source text would only prove the file
+// MENTIONS a heading, never that the document contains one.
 
 import { useState } from "react";
 import Link from "next/link";
@@ -25,7 +38,10 @@ import {
   buildReceptionistSetup,
   emptyProfile,
 } from "@/lib/freetools/setupKit";
-import type { BusinessSetupProfile } from "@/lib/freetools/types";
+import type {
+  BusinessSetupProfile,
+  ReceptionistSetup,
+} from "@/lib/freetools/types";
 
 const STEPS = [
   { id: "business", title: "Your business" },
@@ -52,6 +68,89 @@ const inputClass =
   "w-full rounded-lg bg-slate-900 border border-slate-700 px-3.5 py-2.5 text-[15px] text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent";
 const labelClass = "block text-sm font-medium text-slate-300 mb-1.5";
 const hintClass = "text-[13px] text-slate-500 mb-2";
+
+/**
+ * The generated setup, exactly as it appears on screen AND on paper.
+ *
+ * ONE RENDERING, TWO MEDIA. There is no separate "print version" of the
+ * content: the saved copy is this component with a different stylesheet
+ * over it. A second rendering would be a second reading of the same
+ * derivation, and the canonical-information rule this codebase applies
+ * to Remy — one fact, many renderings, never several readings hoping
+ * they agree — is worth just as much here, where the reader is the
+ * business owner filing the document.
+ *
+ * IT ADDS NOTHING. The branding, the document title and the footer are
+ * NiteOwl's own furniture. Every line about the BUSINESS comes from
+ * setup, which is the pure Phase 2 derivation — no recommendation, no
+ * default, no "you may also want to" filler. The Phase 2 rule stands
+ * unchanged: this file styles the setup, it never extends it.
+ *
+ * THE UNVERIFIED NOTICE PRINTS. It is deliberately not marked
+ * screen-only. A saved PDF outlives the tab it came from and will be
+ * read months later, out of context, by someone who did not fill the
+ * form in — which is precisely when unverified answers are most likely
+ * to be mistaken for an established record.
+ */
+export function SetupDocument({ setup }: { setup: ReceptionistSetup }) {
+  return (
+    <>
+      {/* Print-only masthead. On screen the layout's own nav already
+          carries the brand, so showing it twice would be clutter. */}
+      <header className="ft-print-only ft-print-header">
+        <div className="ft-print-brand">
+          niteowl<span>.</span>
+        </div>
+        <p className="ft-print-doctitle">AI Receptionist Business Setup</p>
+      </header>
+
+      <p className="ft-no-print text-indigo-400 text-sm font-medium mb-3">
+        Your receptionist setup
+      </p>
+      <h1 className="ft-doc-title text-2xl sm:text-3xl font-bold text-white tracking-tight mb-3">
+        {setup.businessName || "Your business"}
+      </h1>
+      <p className="ft-doc-notice text-slate-400 text-sm leading-relaxed mb-10">
+        Based on the information you provided. Nothing here has been
+        verified — it is a written-up version of your own answers, so
+        check it reads the way you want before you rely on it.
+      </p>
+
+      <div className="ft-doc-sections space-y-8">
+        {setup.sections.map((section) => (
+          <section
+            key={section.id}
+            className="ft-doc-section border-t border-slate-800 pt-6"
+          >
+            <h2 className="text-white font-semibold mb-3">{section.title}</h2>
+            <ul className="space-y-2">
+              {section.lines.map((line, i) => (
+                <li
+                  key={i}
+                  className="text-slate-300 text-[15px] leading-relaxed"
+                >
+                  {line}
+                </li>
+              ))}
+            </ul>
+            {section.note && (
+              <p className="ft-doc-note text-slate-500 text-[13px] leading-relaxed mt-3">
+                {section.note}
+              </p>
+            )}
+          </section>
+        ))}
+      </div>
+
+      {/* Print-only colophon. Provenance for a document that will be
+          read away from this page — and NiteOwl's own wording, never a
+          statement about the business. */}
+      <footer className="ft-print-only ft-print-footer">
+        <p>Prepared with NiteOwl AI Free Tools · niteowlhq.com/free-tools</p>
+      </footer>
+    </>
+  );
+}
 
 export default function SetupKitClient() {
   const [step, setStep] = useState(0);
@@ -117,50 +216,43 @@ export default function SetupKitClient() {
   if (showResult) {
     const setup = buildReceptionistSetup(profile);
     return (
-      <div className="max-w-3xl mx-auto px-6 py-12 sm:py-16">
-        <p className="text-indigo-400 text-sm font-medium mb-3">
-          Your receptionist setup
-        </p>
-        <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight mb-3">
-          {setup.businessName || "Your business"}
-        </h1>
-        <p className="text-slate-400 text-sm leading-relaxed mb-10">
-          Based on the information you provided. Nothing here has been
-          verified — it is a written-up version of your own answers, so
-          check it reads the way you want before you rely on it.
-        </p>
+      <div className="ft-doc max-w-3xl mx-auto px-6 py-12 sm:py-16">
+        <SetupDocument setup={setup} />
 
-        <div className="space-y-8">
-          {setup.sections.map((section) => (
-            <section
-              key={section.id}
-              className="border-t border-slate-800 pt-6"
+        <div className="ft-no-print border-t border-slate-800 mt-10 pt-6">
+          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-5 mb-6">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-5 py-2.5 transition-colors"
             >
-              <h2 className="text-white font-semibold mb-3">{section.title}</h2>
-              <ul className="space-y-2">
-                {section.lines.map((line, i) => (
-                  <li
-                    key={i}
-                    className="text-slate-300 text-[15px] leading-relaxed"
-                  >
-                    {line}
-                  </li>
-                ))}
-              </ul>
-              {section.note && (
-                <p className="text-slate-500 text-[13px] leading-relaxed mt-3">
-                  {section.note}
-                </p>
-              )}
-            </section>
-          ))}
-        </div>
-
-        <div className="border-t border-slate-800 mt-10 pt-6">
+              Save as PDF
+            </button>
+            {/*
+              The destination picker is the step people miss, so it is
+              spelled out. Without it a visitor who has never saved a PDF
+              from a browser assumes this button only prints on paper.
+            */}
+            <p className="text-slate-400 text-[13px] leading-relaxed mt-3">
+              This opens your browser&rsquo;s print window. Choose{" "}
+              <strong className="text-slate-200 font-medium">
+                Save as PDF
+              </strong>{" "}
+              as the destination — on a Mac, the{" "}
+              <strong className="text-slate-200 font-medium">PDF</strong> menu
+              then{" "}
+              <strong className="text-slate-200 font-medium">
+                Save as PDF
+              </strong>{" "}
+              — to download a copy you can keep, email or print later. It is
+              prepared in this browser and sent nowhere.
+            </p>
+          </div>
           <p className="text-slate-500 text-[13px] leading-relaxed mb-5">
             You completed {setup.completedSections} of {setup.totalSections}{" "}
             sections. This setup is not saved anywhere — closing or
-            refreshing this page will clear it.
+            refreshing this page will clear it, so save a copy if you want
+            to keep it.
           </p>
           <div className="flex flex-wrap gap-3">
             <button

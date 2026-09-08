@@ -1,4 +1,5 @@
 import Link from "next/link";
+import "./print.css";
 
 // ── Free Tools chrome ──────────────────────────────────────────────
 //
@@ -20,6 +21,10 @@ import Link from "next/link";
 // billing paths, so this segment needs no middleware change and must not
 // acquire one: a free tool that asks a visitor to sign in before it has
 // given them anything has stopped being a free tool.
+//
+// `ft-surface` and `ft-no-print` are the print hooks (see print.css).
+// The site chrome carries no information a saved document needs, so it
+// is marked screen-only rather than restyled for paper.
 
 export default function FreeToolsLayout({
   children,
@@ -27,8 +32,8 @@ export default function FreeToolsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-300 font-sans flex flex-col">
-      <nav className="border-b border-slate-800">
+    <div className="ft-surface min-h-screen bg-slate-950 text-slate-300 font-sans flex flex-col">
+      <nav className="ft-no-print border-b border-slate-800">
         <div className="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link
             href="/"
@@ -55,7 +60,7 @@ export default function FreeToolsLayout({
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-slate-800 py-8 px-6">
+      <footer className="ft-no-print border-t border-slate-800 py-8 px-6">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-500">
           <p>© {new Date().getFullYear()} NiteOwl AI</p>
           <div className="flex items-center gap-5">

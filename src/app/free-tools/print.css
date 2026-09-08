@@ -1,0 +1,179 @@
+/* ── Free Tools: print / Save-as-PDF styling ────────────────────────
+ *
+ * The saved copy must read as a NiteOwl business document, not as a
+ * screenshot of a dark web page. Everything here is inside
+ * `@media print`, so nothing in this file changes a single pixel on
+ * screen — the one exception is `.ft-print-only`, which must be hidden
+ * on screen for the print-only header and footer to exist at all.
+ *
+ * NO PDF LIBRARY, DELIBERATELY. The browser's own print pipeline
+ * already produces a PDF ("Save as PDF" in the print dialog), and it
+ * does so entirely on the visitor's machine. Every client-side PDF
+ * library is a substantial new dependency, and every hosted PDF service
+ * would mean POSTING the visitor's business information to a third
+ * party — which is the one thing this surface must never do. Native
+ * printing keeps the privacy boundary intact by construction rather
+ * than by policy: there is no code path that could send anything, so
+ * there is nothing to audit.
+ *
+ * SCOPED TO `.ft-surface` ON PURPOSE. Next's own CSS guidance notes
+ * that a stylesheet imported by a nested layout is not removed when the
+ * visitor navigates away. Every rule below therefore hangs off a class
+ * that exists only inside the Free Tools layout, so a stylesheet that
+ * outlives its route still matches nothing. `@page` is the single
+ * document-level rule, and it sets margins only.
+ */
+
+/* Print-only content is invisible on screen. Not inside the media
+ * query — this is what makes the header and footer print-ONLY. */
+.ft-print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 16mm 15mm;
+  }
+
+  /* ── What never reaches paper ──────────────────────────────────
+   * Site chrome, wizard navigation, the progress bar and every
+   * action button. A printed document has no Back button. */
+  .ft-no-print {
+    display: none !important;
+  }
+
+  .ft-print-only {
+    display: block !important;
+  }
+
+  /* ── Dark UI to document ───────────────────────────────────── */
+  .ft-surface {
+    background: #ffffff !important;
+    color: #111827 !important;
+    min-height: 0 !important;
+    display: block !important;
+  }
+
+  .ft-surface main {
+    flex: none !important;
+  }
+
+  /* Kill every inherited panel background and shadow so nothing
+   * prints as a grey slab. */
+  .ft-surface * {
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Tailwind sets colour per element, so the reset has to name the
+   * elements rather than rely on inheritance. */
+  .ft-surface :is(h1, h2, h3, p, li, span, strong, em, dt, dd) {
+    color: #111827 !important;
+  }
+
+  /* ── The document itself ───────────────────────────────────── */
+  .ft-doc {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+
+  .ft-print-header {
+    border-bottom: 1.5pt solid #4f46e5 !important;
+    padding-bottom: 8pt;
+    margin-bottom: 18pt;
+  }
+
+  .ft-print-brand {
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #111827 !important;
+  }
+
+  .ft-print-brand span {
+    color: #4f46e5 !important;
+  }
+
+  .ft-print-doctitle {
+    font-size: 10pt;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #4f46e5 !important;
+    margin-top: 3pt;
+  }
+
+  .ft-doc-title {
+    font-size: 19pt !important;
+    font-weight: 700 !important;
+    margin: 0 0 6pt !important;
+  }
+
+  /* The unverified notice. It PRINTS — a saved copy that drops it
+   * would present unverified form input as an established record,
+   * which is exactly what it exists to prevent. */
+  .ft-doc-notice {
+    color: #4b5563 !important;
+    font-size: 9.5pt !important;
+    margin: 0 0 16pt !important;
+    max-width: none !important;
+  }
+
+  /* A section is never split across two pages when it can be
+   * avoided — a heading stranded at a page foot reads as an error. */
+  .ft-doc-section {
+    border-top: 0.75pt solid #d1d5db !important;
+    padding-top: 10pt !important;
+    margin-top: 0 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .ft-doc-sections {
+    display: block !important;
+  }
+
+  .ft-doc-sections > * + * {
+    margin-top: 14pt !important;
+  }
+
+  .ft-doc-section h2 {
+    font-size: 12pt !important;
+    font-weight: 700 !important;
+    margin: 0 0 6pt !important;
+  }
+
+  .ft-doc-section ul {
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+  }
+
+  .ft-doc-section li {
+    font-size: 11pt !important;
+    margin: 0 0 4pt !important;
+    break-inside: avoid;
+  }
+
+  .ft-doc-section .ft-doc-note {
+    color: #4b5563 !important;
+    font-size: 9.5pt !important;
+    margin-top: 6pt !important;
+  }
+
+  .ft-print-footer {
+    border-top: 0.75pt solid #d1d5db !important;
+    margin-top: 20pt;
+    padding-top: 8pt;
+    font-size: 8.5pt;
+    color: #6b7280 !important;
+  }
+
+  .ft-print-footer p {
+    color: #6b7280 !important;
+    margin: 0;
+  }
+}
