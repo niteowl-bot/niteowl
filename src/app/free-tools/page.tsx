@@ -30,10 +30,11 @@ export const metadata: Metadata = {
 /**
  * The tools shown on the hub.
  *
- * `available: false` renders the card as a preview rather than a link.
- * The Setup Kit is listed now because the hub would be an empty page
- * without it, and because saying what is coming is more honest than a
- * placeholder that pretends to be finished.
+ * A tool with an `href` renders as a link; one without stays a preview
+ * card marked "Coming soon". Listing a tool before it exists is more
+ * honest than a placeholder that pretends to be finished — and the flag
+ * flips by adding the route, so the card can never link somewhere that
+ * has not been built.
  */
 const TOOLS = [
   {
@@ -42,7 +43,7 @@ const TOOLS = [
       "Answer a few questions about how your business handles enquiries, and get a clear, structured setup you can act on — opening hours, services, common questions, and what should happen when someone calls out of hours.",
     detail:
       "Useful on its own, whether or not you ever use an AI receptionist.",
-    available: false,
+    href: "/free-tools/ai-receptionist-setup-kit",
   },
 ] as const;
 
@@ -73,7 +74,7 @@ export default function FreeToolsPage() {
               <h2 className="text-white font-semibold text-lg leading-snug">
                 {tool.name}
               </h2>
-              {!tool.available && (
+              {!tool.href && (
                 <span className="shrink-0 text-[11px] uppercase tracking-wide font-medium text-indigo-300 border border-indigo-500/30 bg-indigo-500/10 rounded-full px-2.5 py-1">
                   Coming soon
                 </span>
@@ -85,6 +86,14 @@ export default function FreeToolsPage() {
             <p className="text-slate-500 text-sm leading-relaxed mt-3">
               {tool.detail}
             </p>
+            {tool.href && (
+              <Link
+                href={tool.href}
+                className="mt-5 inline-block self-start rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 transition-colors"
+              >
+                Start setup →
+              </Link>
+            )}
           </article>
         ))}
       </section>
