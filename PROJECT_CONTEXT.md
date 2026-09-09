@@ -13,15 +13,16 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–XI.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–XII.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
   cross-product outcome learning and decision intelligence, Part VIII sovereignty and
   provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
   advantage and category leadership, Part XI the Business Opportunity Scan MVP contract
-  (**contract only — nothing implemented or approved for implementation**). **§21 is the
-  single canonical architecture diagram**, and Parts VII–XI do not redraw it.
+  (**contract only — nothing implemented or approved for implementation**), Part XII the
+  Scan's three Phase 1 contract decisions. **§21 is the single canonical architecture
+  diagram**, and Parts VII–XII do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -704,6 +705,13 @@ implementation. The one exception is the Setup Kit, which has already shipped.
 Phase 1 finding classes, the Lost Revenue sizing module, the finding and input contracts,
 routing, the outcome loop and the IN / NOT IN / PREPARE / LATER classification. Part XI is a
 **contract, not a plan**: it schedules nothing and creates no NOW item.
+
+**Its three Phase 1 contract decisions are resolved in Part XII (§87–§90)** — the three
+condition codes and nine owner-facing questions, **one** permitted Lost Revenue expression
+(two of the three candidates were rejected as unsizeable without an invented rate, so
+`enquiry.no_followup` and `booking.friction` always report impact UNKNOWN in Phase 1), the
+`estimate_basis` recomputability contract, and the consent and promotion wording. **Still
+NOT approved for implementation, and still NOW: 0.**
 
 The flagship free acquisition and discovery product. Its purpose is to identify
 evidence-backed opportunities and problems: revenue leakage · missed enquiries · weak
