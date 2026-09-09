@@ -1301,6 +1301,17 @@ score or diagnostic anywhere in `src/`, and none is named in `CHECKLIST.md` or
 funnel, correctly carrying no `org_id` (Part III §18). Everything below is therefore free
 to adopt and costs nothing today.
 
+> **STALE FACT, CORRECTED 2026-09-09 — one free product now exists.** The paragraph above was
+> true when written and is kept rather than rewritten. The **AI Receptionist Business Setup
+> Kit** shipped in PRs #77 and #78 (`src/app/free-tools/ai-receptionist-setup-kit`), and the
+> same correction applies to §29.2's *"any free product at all — none exists"* row and to
+> §28's *"NiteOwl has zero free products"* caveat. **Nothing in §25 is weakened by it:** the
+> Setup Kit has **no persistence, no auth, no network, no API route, no database table and no
+> cookie**, so it links no runs, infers no identity and reaches no namespace — §25.1's seam
+> does not arise, and §25.2's cross-visitor learning has no inputs. The line-up it belongs to
+> is recorded in `PROJECT_CONTEXT.md` *Free-Product Strategy*, and the Business Opportunity
+> Scan that would exercise these rules is **not started**.
+
 ### 25.1 Seam one — linking runs without creating an identity
 
 Two of Part III §26's own rules pull against each other the moment repeat usage matters:
