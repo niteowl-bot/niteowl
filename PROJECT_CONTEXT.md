@@ -13,14 +13,15 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–X.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–XI.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
   cross-product outcome learning and decision intelligence, Part VIII sovereignty and
   provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
-  advantage and category leadership. **§21 is the single canonical architecture diagram**,
-  and Parts VII, VIII, IX and X do not redraw it.
+  advantage and category leadership, Part XI the Business Opportunity Scan MVP contract
+  (**contract only — nothing implemented or approved for implementation**). **§21 is the
+  single canonical architecture diagram**, and Parts VII–XI do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -698,6 +699,11 @@ implementation. The one exception is the Setup Kit, which has already shipped.
 ## 1. Flagship — NiteOwl Business Opportunity Scan
 
 **NOT STARTED. NOT IMPLEMENTED. NOT APPROVED FOR IMPLEMENTATION.**
+
+**Its MVP contract is `docs/ARCHITECTURE.md` Part XI (§80–§86)** — the promise, the three
+Phase 1 finding classes, the Lost Revenue sizing module, the finding and input contracts,
+routing, the outcome loop and the IN / NOT IN / PREPARE / LATER classification. Part XI is a
+**contract, not a plan**: it schedules nothing and creates no NOW item.
 
 The flagship free acquisition and discovery product. Its purpose is to identify
 evidence-backed opportunities and problems: revenue leakage · missed enquiries · weak

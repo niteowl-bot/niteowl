@@ -6951,3 +6951,500 @@ And unchanged for the tenth document running: nothing here is urgent, nothing he
 provider is replaced, nothing is self-hosted, no product is started, the corpus still accumulates
 only at the speed of real businesses doing real work — and the next milestone is still Google's
 verification review, which no amount of architecture will advance.
+
+---
+
+# Part XI — The Business Opportunity Scan, MVP contract
+
+Added 2026-09-09 against commit `8c4be86`, immediately after the free-product strategy merged as
+PR #80. Same rules as Parts I–X: **documentation only.** No code, schema, migration, service,
+API, route, UI, provider, flag, prompt, test or configuration was created or changed, and
+**nothing below is implemented or approved for implementation.**
+
+This part is a **contract, not a plan**. It says what a Business Opportunity Scan finding would
+have to be in order to be trustworthy, which of its parts already have canonical homes, and
+which few do not. It does not schedule the work, and Remy V1's locked Definition of Done is
+untouched.
+
+Governing principle, extending Part X's:
+
+> **THE SCAN MAY ONLY SAY WHAT ITS EVIDENCE SUPPORTS, AND MUST SAY IT ANYWAY.** §44's two
+> halves, applied to a product whose evidence is the weakest in the architecture.
+
+**NOW: none.** No production-code item is created. The one honest "now" is a set of three
+decisions that must be made **before** any Phase 1 code exists, listed in §86.4; all three are
+documentation.
+
+---
+
+## 80. What this part adds, and what it refuses to do
+
+The Scan is the first NiteOwl product that would run **before there is a tenant, a Graph, a
+Spine or a single observed event.** That is the whole difficulty. Every contract in Parts
+III–IX assumes canonical business data underneath it; the Scan's MVP has a stranger's answers
+to a form, and must produce something honest from them.
+
+### 80.1 Placement — what the objective asks for, and where it already lives
+
+| The objective asks for | Where it already lives | This part |
+|---|---|---|
+| Free-product staged model, value before an account, namespace with no `org_id` until consent | §26 | **Unchanged, reused whole** |
+| Run linkage by held bearer token, identity never inferred, business name never matched against `organisations` | `AGENT_ACCESS_LAYER.md` §25.1 | **Unchanged, reused whole** |
+| Self-reported input is `business_provided`, never `verified` | §26, §20.6 | **Unchanged** |
+| Evidence classes — observed / derived / inference / estimate / assumption | §20.6's **nine source types** | **Mapped, not replaced** — §83.1 |
+| Finding shape: diagnosis, hypotheses, contradicting evidence, assumptions | §42.2's Finding profile | **Reused** — §83.2 |
+| Recommendation shape: action, authority, success criterion, review date | §43, §20.7 rules 7–8 | **Reused** — §83.2 |
+| Estimated impact without fabricated precision | §43.2's *range, direction or "unknown"*; Part X **P39** | **Reused, and given arithmetic rules** — §82 |
+| Outcome comparison, and only learnable outcomes learned | §20.7 rules 3 and 5, §23's five tiers | **Reused** — §85 |
+| Free-product → paid handoff | **§51.4**, which already writes this exact path | **Unchanged, reused whole** — §84.4 |
+| Privacy, isolation, purpose limitation, consent | §20.8, §26, §27, §51.5 | **Unchanged, reused whole** — §85.3 |
+| Cross-visitor learning and benchmarks | §27's five gates, `AGENT_ACCESS_LAYER.md` §25.2's provenance floor | **Unchanged — and out of MVP entirely** |
+| **A finding that exists before a tenant does** | *nowhere* | **NEW — G1, §83.3** |
+| **The Scan's `condition` enumeration** | *nowhere* — §42.2 requires a product-owned one | **NEW — G2, §83.4** |
+| **Which impact arithmetic is legitimate, and how it is later checked** | *nowhere* | **NEW — G3, §82.2 and §82.5** |
+| **Where a finding's TARGET product is recorded** | `originating_product` exists; a target does not | **NEW — G4, §84.3** |
+
+Four gaps, and all four are small. Everything else is reuse, which is the result to expect
+after ten reviews and the reason this part is a contract rather than an architecture.
+
+### 80.2 What this part refuses to propose
+
+- **No implementation of any kind**, and no schedule for one. No schema, table, migration,
+  route, service, UI, scoring engine, model call, prompt or feature flag.
+- **No integration.** No external provider is proposed, named as a target, or assumed. The
+  MVP reads nothing it was not typed.
+- **No second architecture.** The Scan is a consumer of the canonical model, not a parallel
+  one. Where a field already exists it is reused under its existing name and rules.
+- **No new provenance system, no new decision store, no second finding record.** §20.6 and
+  §20.7 are the only ones, per §20.7's *one record, one store*.
+- **No benchmark, cohort statistic or cross-customer comparison** — §27's gates are unmet and
+  the MVP does not approach them.
+- **No change to Remy, to the Setup Kit, or to the FAQ / Knowledge Builder.**
+
+---
+
+## 81. The MVP promise, and the smallest credible finding set
+
+### 81.1 The promise
+
+One sentence a small business can hold:
+
+> **Answer a few questions about how enquiries reach you and what happens to them, and NiteOwl
+> will show you where work is most likely being lost, what the answers you gave suggest it is
+> worth, what to do about it first, and how you would know in four weeks whether it worked.**
+
+Four properties make that promise keepable rather than generic:
+
+- it is about **enquiry flow**, not "your business" — a bounded domain the answers can support;
+- it names **what to do next**, per §44, so it is a solution and not a report;
+- it names **how you would know**, per §20.7 rule 7, written before the outcome;
+- it is honest about **worth**: an estimate is labelled an estimate, and *"we cannot size this"*
+  is an available and respectable answer (§82.3).
+
+**What it must never become** is an "AI business report" — a long generic document whose breadth
+is its selling point. Breadth is exactly what the evidence cannot support, and a wrong finding
+delivered confidently costs more trust than the silence it replaced (§44).
+
+### 81.2 Phase 1 finding classes — three, and a module that sizes them
+
+The test for inclusion is deliberately strict: **can this class be established, to a stated
+confidence, from what an owner can answer about themselves in a few minutes, with no
+integration and no NiteOwl history?**
+
+| Class | Condition it names | Why it survives the test |
+|---|---|---|
+| **Missed enquiries** | Enquiries that arrive and are never answered — out of hours, during jobs, while on another call | The owner knows their opening hours, roughly how enquiries arrive, and whether calls go unanswered. It is the highest-value class for the businesses NiteOwl serves, and the one where the arithmetic in §82 is most defensible |
+| **Weak follow-up** | Enquiries answered once and never followed up | Answerable directly (*"what happens if someone enquires and does not book?"*), and its recommended action needs no product at all — which is what makes the Scan credible rather than a funnel |
+| **Booking / scheduling friction** | Repeated back-and-forth, double handling, or no-shows in the path from enquiry to confirmed appointment | Observable to the owner in their own working day, and it is where the Setup Kit's handoff (§84.4) delivers standalone value immediately |
+
+**Lost Revenue is not a fourth class.** It is a **module that sizes the three above** (§82), so
+the Scan never has a finding whose only content is a number.
+
+### 81.3 Deliberately excluded from Phase 1, with the reason
+
+Excluding these is the substance of the recommendation, not an omission:
+
+| Candidate | Why not in Phase 1 |
+|---|---|
+| **Unused capacity** | Requires real capacity and utilisation data. Self-reported *"how busy are you?"* cannot distinguish idle capacity from unsold capacity, and a wrong answer here recommends spending money on demand a business cannot serve |
+| **Repeat-business opportunities** and **retention gaps** | Both require customer history over time. An owner's recollection of repeat rates is not evidence, and the false positive — *"you are losing customers"* — is the most damaging thing the Scan could say wrongly |
+| **Operational handoff problems** | Needs process observation, not a questionnaire. A useful version of this is Forge's, and Forge does not exist |
+| **Cash-flow friction, marketing inefficiency** | Ledger's and Pulse's domains, and both require financial or campaign data the MVP has no source for. Naming them without evidence would be the *"advertisement wearing a diagnostic's clothes"* §26 forbids |
+| **Anything cross-business** — benchmarks, *"businesses like yours"* | §27's five gates are unmet, and `AGENT_ACCESS_LAYER.md` §25.2's provenance floor forbids a cohort statistic over unverified form inputs regardless |
+
+---
+
+## 82. The Lost Revenue module
+
+### 82.1 What may support a lost-revenue finding
+
+A lost-revenue finding requires **all three** of the following, and refuses to exist without
+them:
+
+1. a **volume** the owner stated (enquiries per week, calls missed, quotes not followed up);
+2. a **conversion or value** the owner stated (typical job value, or a rough share that becomes
+   work);
+3. a **loss mechanism** already established as a finding in §81.2 — the number attaches to a
+   diagnosed problem, never floats on its own.
+
+All three are `business_provided` (§20.6) and stay that way forever. **None of them is
+`observed`**, and the Scan holds no observation of its own in the MVP.
+
+### 82.2 Legitimate arithmetic — G3, first half
+
+Legitimate: **multiplication and addition of values the owner supplied**, with every operand
+displayed beside the result, and a **range** carried through rather than a point.
+
+Forbidden, and each for a stated reason:
+
+- **no benchmark, industry average or "typical business" figure** — §27's gates, and it would
+  import a claim about other businesses into a single tenant's number;
+- **no model-generated quantity.** A language model may phrase a finding; it may never produce
+  the operand. `ai_predicted` may never become a durable fact (§20.6), and a number that reaches
+  a customer's screen is durable in every sense that matters;
+- **no compounding, no annualisation of a weekly answer, no lifetime-value multiplier** —
+  arithmetic that turns a small stated number into a large impressive one is precisely the
+  fabricated precision §43.2 forbids;
+- **no unstated conversion assumption.** If the calculation needs "roughly one in three
+  enquiries becomes a job", the owner supplied it or it is an `assumed` operand shown as one.
+
+Every estimate therefore carries an **`estimate_basis`**: the operands with their source types,
+the expression used, its **version**, and the range. `AGENT_ACCESS_LAYER.md` §25.2 already
+requires the scoring version to be stored per run and a version change to be visible; this is
+the same rule applied to money, and it is what makes an estimate reproducible rather than
+merely repeated.
+
+### 82.3 When impact must be stated as UNKNOWN
+
+**"We cannot size this" is a first-class result, not a failure**, and the Scan must be able to
+present a finding with no number at all. It is required whenever an operand is missing, an
+answer is internally inconsistent, the range is so wide it carries no information, or the loss
+mechanism is diagnosed with low confidence.
+
+This is §23's `unattributed` reasoning applied to sizing: *we looked, with a stated method, and
+established nothing* is a real answer and is more valuable than a manufactured one. A finding
+with a strong diagnosis and no number is a good finding.
+
+### 82.4 How confidence is expressed
+
+**Two separate confidences, never merged into one score**, because they can point in opposite
+directions and the difference is the honest part:
+
+- **confidence in the finding** — how well the answers support the diagnosis;
+- **confidence in the size** — how well they support the number.
+
+*"We are fairly confident you are missing enquiries after hours; we can only size it very
+roughly"* is the ordinary case and must be expressible. A single blended percentage would hide
+exactly that, and §20.6 already carries confidence per assertion rather than per report.
+
+### 82.5 How a later real outcome validates or invalidates it — G3, second half
+
+The rule that protects the corpus, and the one most easily lost:
+
+> **A later measured outcome is compared against an OBSERVED baseline, never against the
+> estimate.** The estimate is graded *by* reality; it never supplies the yardstick reality is
+> graded by.
+
+This is Part X **P39** made operational. In practice: when a business adopts a product and real
+data begins to exist, the comparison runs against what was then observed, and the original
+estimate is evaluated as a **prediction that was made in advance** — kept, with its
+`estimate_basis` frozen, so it can be found wrong. An estimate that cannot be found wrong is
+worthless to the learning layer and dishonest to the customer.
+
+Outcome provenance rules are unchanged: only `observed` and `derived_deterministic` outcomes are
+learnable (§20.7 rule 5).
+
+---
+
+## 83. Evidence and the finding contract
+
+### 83.1 The five evidence classes are the existing nine source types — G-free
+
+No second provenance system is created. The Scan's five required distinctions **are** §20.6's
+vocabulary, narrowed:
+
+| The Scan says | §20.6 source type | In the MVP |
+|---|---|---|
+| Observed fact | `observed` | **Not available in Phase 1.** The Scan observes nothing; it is listed so its absence is deliberate |
+| Stated fact | `business_provided` | The MVP's entire input, and never promoted to `verified` |
+| Derived fact / calculation | `derived_deterministic` | The §82 arithmetic, recomputable from stored operands |
+| Inference | `ai_inferred` | A diagnosis drawn from the answers. **May drive a recommendation; may never become a durable fact** (§20.6's one rule) |
+| Estimate | `ai_predicted` where a model produced it, `derived_deterministic` where arithmetic did | Never a fact, ever, under either label |
+| Assumption | `assumed` | Must remain visible as one, in the output as well as in the record |
+
+**Minimum provenance per finding:** every assertion carries its source type, its confidence, the
+run's scoring/expression version, and references to the specific answers that support it — plus
+`evidence_scope: external` where a claim rests on anything outside the run itself (§57.1), which
+in the MVP is nothing.
+
+### 83.2 The finding contract, mapped field by field
+
+| The contract needs | Canonical home | Status |
+|---|---|---|
+| Finding type | `condition`, from a product-owned enumeration — §42.2 | **Enumeration missing — G2** |
+| Observed evidence | `evidence_refs` — §20.7; as-of per **M15** | Exists |
+| Provenance | §20.6 source type per assertion | Exists |
+| Reasoning / diagnosis | The Finding profile, with `hypotheses[]` as a ranked list and `contradicting_evidence` — §42.2 | Exists |
+| Confidence | §20.6, per assertion; two of them per §82.4 | Exists |
+| Assumptions | `assumptions`, source type `assumed` — §42.2 | Exists |
+| Estimated impact / range | `expected_effect` — §43.2's range / direction / *unknown* | Exists; **`estimate_basis` is the addition — G3** |
+| Uncertainty | Confidence plus `contradicting_evidence` plus the *unknown* impact value | Exists |
+| Recommended action | `DecisionRecord` with `action_status: proposed`, `addresses_finding_id` — §43.1. **Proposed reserves nothing** (rule 4) | Exists |
+| Relevant product / capability | `originating_product` exists; a **target** does not | **Gap — G4** |
+| Authority required if later executed | `authority_level` — §20.7. In the MVP every recommendation is `observe`/`recommend`; **the Scan executes nothing** | Exists |
+| Success criterion | §20.7 rule 7 — written before the outcome | Exists |
+| Measurement window | `review_at` — §43 | Exists |
+| Eventual measured outcome | Outcome group with `outcome_provenance` — §20.7 rule 5; link tier per §23 | Exists |
+
+Twelve of fifteen already have homes. **No database schema is proposed here**, and none should
+be written until the three §86.4 decisions are made.
+
+### 83.3 G1 — a finding that exists before a tenant does
+
+The largest gap, and it is conceptual rather than structural.
+
+A `DecisionRecord` Finding requires `org_id`, canonical entity references and evidence
+references to real events (§20.7). **A Scan run has none of them**: no tenant, no Graph, no
+Spine, and an anonymous visitor by design (§26, `AGENT_ACCESS_LAYER.md` §25.1). Writing one
+anyway would either invent a tenant or put unverified form answers into the canonical decision
+store — the second being the more dangerous, because it is indistinguishable afterwards from
+evidence NiteOwl actually observed.
+
+The rule:
+
+> **G1 — A SCAN RUN PRODUCES AN ASSESSMENT FINDING, NOT A `DecisionRecord`.** It lives in the
+> free-product namespace with no `org_id`, expires by default, references only the run's own
+> answers, and carries the same logical field set so that promotion is a projection rather than
+> a translation. It becomes a `DecisionRecord` **only** on explicit, scoped, recorded and
+> revocable consent — and then, per **§51.4**, it enters as **one hypothesis among others,
+> never as the diagnosis.**
+
+Nothing new is required to hold it: §26's namespace, §25.1's bearer-token linkage and §51.4's
+handoff already describe the container. What was missing was the sentence saying the free-run
+finding is **not** a canonical decision, and that the boundary between them is consent.
+
+### 83.4 G2 — the Scan's `condition` enumeration
+
+§42.2 requires `condition` to come from a **product-owned enumeration** — codes, not prose,
+because *"only codes are learnable"* (§20.7 rule 1). The Scan owns no such enumeration, and
+Phase 1 must define one before the first finding is written, or the corpus starts as free text
+and can never be aggregated.
+
+Phase 1 needs **three codes and no more**, one per §81.2 class, plus the existing convention
+that a code is added deliberately rather than discovered. Naming them is a Phase 1 decision
+(§86.4), not something this part fixes in advance.
+
+---
+
+## 84. Inputs, output, routing and the handoff
+
+### 84.1 Input contract — three tiers, only the first in MVP
+
+| Tier | What | MVP |
+|---|---|---|
+| **Owner-provided** | Business profile, opening hours, how enquiries arrive, what happens to an unanswered one, typical job value, rough conversion | **The whole MVP.** All `business_provided`, never `verified`, never promoted without consent |
+| **NiteOwl-owned signals** | For a business already using a NiteOwl product: canonical events on the Spine and existing Graph/Memory facts — for Remy, enquiry arrival, response and booking outcomes | **Not in MVP.** Named because it is the direction that makes the Scan uncopyable: the same finding class, supported by observation instead of recollection. Reachable only through the tenant's own permissions, never by inference |
+| **External-provider data** | Anything a third party holds | **Not in MVP, and no integration is proposed.** If one ever exists it is band-C rented capability behind a NiteOwl boundary (§64.1), entering as **referenced, provenance- and scope-marked observations** under Part X **N1/P38** — and **may never be the sole representation of NiteOwl's findings, history or learned intelligence** |
+
+### 84.2 Output contract — what the business actually receives
+
+- **At most three findings, ranked**, and fewer when the evidence supports fewer. One strong
+  finding is a better product than six weak ones, and the cap is a quality mechanism rather
+  than a layout choice.
+- **Each finding carries**: what NiteOwl thinks is happening; the answers that support it,
+  shown as the owner's own words; why it matters; impact as a range **or the explicit
+  *"we cannot size this"***; confidence in the finding and, separately, in the size; the single
+  next step; and the success measure with its window.
+- **Assumptions are shown, not footnoted.** §26: visible assumptions are what separate a finding
+  from a sales figure.
+- **Full value with no account**, per §26. The report is complete, keepable and useful to a
+  business that never buys anything — and **must not be deliberately degraded to force
+  conversion** (Part X, and the free-product strategy in `PROJECT_CONTEXT.md`).
+- **Nothing is claimed to be observed.** The MVP's language must not imply NiteOwl looked at the
+  business's systems, because it did not.
+
+### 84.3 Routing — G4, and the anti-funnel test
+
+Each finding names the product that addresses it, per the routing table in `PROJECT_CONTEXT.md`
+*Free-Product Strategy* — reception/enquiry/booking → **Remy**, finance → **Ledger**, sales →
+**Scout**, marketing → **Pulse**, operations/capacity → **Forge**, retention → **Beacon**,
+productivity → **Nova**. Only Remy exists; the rest are boundaries, and naming one starts
+nothing.
+
+> **G4 — the target product is an ATTRIBUTE OF THE RECOMMENDATION, not a property of the Scan.**
+> `originating_product` says who produced the record; a `recommended_product` reference says
+> where the answer lives. One field on a record that does not exist yet — no new record type,
+> and no routing service.
+
+Two rules keep it from becoming a funnel:
+
+- **The recommended action must be useful without the product.** Every Phase 1 class has an
+  action an owner can take unaided — and if the only available action is *"buy Remy"*, the
+  finding is an advertisement and must not be shown.
+- **The Scan must be able to route away from Remy, and to no product at all.** Where no NiteOwl
+  product fits, the honest output is the finding and its action with **no product attached** —
+  §50.4's *NiteOwl is allowed not to know*, applied commercially. A Scan whose findings all
+  point at the one product that exists has told you about its own catalogue, not about your
+  business.
+
+### 84.4 Setup Kit handoff — §51.4, unchanged
+
+The Setup Kit is complete and is not redesigned. The handoff is the path §51.4 already writes:
+
+```
+Scan  →  enquiry / reception finding  →  AI Receptionist Business Setup Kit
+      →  Remy, ONLY where ongoing automation is justified
+```
+
+One line is added, and it is a restriction rather than a capability: **the Setup Kit remains a
+standalone free tool and gains nothing from the Scan** — no identity, no stored answers, no
+carried state. It stores nothing today (no persistence, no auth, no network, no cookie), and the
+handoff must not become the reason it starts. Pre-filling it from a Scan run would create the
+identity linkage §25.1 exists to prevent.
+
+---
+
+## 85. Outcome learning, and what protects it
+
+### 85.1 The loop
+
+```
+finding → recommendation (success criterion + window, written first)
+  → the business acts → observed outcome → comparison → learning
+```
+
+It is §25's outcome loop and §43's contract, with no new machinery. Two properties it must have
+from the first run, because neither can be added retroactively: the **success criterion exists
+before the outcome**, and the **original finding, its operands and its assumptions are frozen
+and auditable**.
+
+### 85.2 The four protections, each named because each is easy to lose
+
+- **The baseline may never move after the fact.** The comparison is against an observed baseline
+  fixed at the time of the recommendation, and never against the estimate (§82.5, P39). A
+  baseline chosen once the result is known makes every recommendation look correct.
+- **A recommendation is never rewritten to look right.** Re-evaluation produces a **new** record
+  referencing the original — §23's rule that re-attribution never rewrites history, applied to
+  advice.
+- **A case study is never training evidence.** Part X **N3/P40**: a published claim is an output
+  of the loop and never an input to it.
+- **No cross-customer leakage.** One tenant's outcomes never inform another's finding in the
+  MVP. Cohort learning is §27's gated MUCH LATER, and unverified form answers are additionally
+  barred by `AGENT_ACCESS_LAYER.md` §25.2's provenance floor.
+
+And the denominator rule stands (**M16**): evaluation counts rejected, expired and unmeasured
+recommendations, or the Scan will report improving accuracy as it gets worse.
+
+### 85.3 Privacy and isolation — reuse, nothing new
+
+No new mechanism is proposed. The applicable rules already exist and are named so they are
+applied deliberately rather than discovered later: **tenant isolation** by `org_id` on every
+promoted record (§51.5); **structural isolation** of the free-product namespace, which is the
+only NiteOwl surface legitimately without an `org_id` (§25.1); **purpose limitation and
+revocable, per-purpose consent** (§27 gate 3, §26); **classification at write time** (§20.8);
+**expiry by default** on run data; **identity never inferred** — not from IP, not from a
+fingerprint, and never by matching a typed business name against `organisations` (§25.1's
+outright prohibition); and **Nova's boundary absolute** (§20.8) if personal signals are ever in
+scope, which in the MVP they are not.
+
+---
+
+## 86. Classification, gaps and verdict
+
+### 86.1 IN / NOT IN / PREPARE / LATER / NOW
+
+**IN for the MVP** — the smallest credible set
+
+Three finding classes (§81.2) · the Lost Revenue sizing module with `estimate_basis`, ranges and
+an explicit *unknown* (§82) · owner-provided input only (§84.1) · at most three ranked findings
+with evidence, dual confidence, one next step and a success measure (§84.2) · assessment
+findings in the free-product namespace with no `org_id` (§83.3) · product routing including
+route-to-nothing (§84.3) · the §51.4 handoff, unchanged (§84.4).
+
+**NOT IN the MVP** — attractive, and deferred on purpose
+
+Unused capacity, repeat business, retention, operational handoff, cash-flow and marketing
+classes (§81.3) · any integration or external data source · benchmarks, cohort statistics and
+*"businesses like yours"* · NiteOwl-owned signal enrichment for existing customers · any
+executed action, autonomy or approval flow — the Scan **recommends and never acts** · a scoring
+model, ranking model or learned prioritisation · account creation as a condition of value ·
+pre-filling the Setup Kit from a run.
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P41** | **An assessment finding is not a `DecisionRecord`** (§83.3, G1) — free-run findings live in the no-`org_id` namespace, expire, reference only the run's own answers, and become canonical **only** on explicit consent, entering as one hypothesis per §51.4 | *Part XI.* Free before the first run exists. Afterwards the canonical decision store already contains unverified form answers that nothing can distinguish from observation |
+| **P42** | **Every estimate carries an `estimate_basis`** (§82.2, G3) — operands with source types, the expression, its version, and a range; the later comparison runs against an **observed** baseline, never against the estimate | *Part XI.* The operands are unrecoverable after the run. An estimate without them cannot be reproduced, checked or found wrong |
+| **P43** | **The recommended target product is an attribute of the recommendation** (§84.3, G4) — `recommended_product` beside the existing `originating_product`; a finding may legitimately name **no** product | *Part XI.* One field, decided before the first recommendation is written. Without it, routing becomes prose and the anti-funnel rule is unenforceable |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L32** | **The same finding classes supported by NiteOwl-owned observation** rather than recollection — a Remy tenant's own Spine events establishing missed enquiries and follow-up gaps | A real tenant with enough history, reached through that tenant's own permissions. **P41 must precede it**, because it is the boundary between a stranger's answers and a customer's observed history |
+
+**MUCH LATER**
+
+Unchanged. Cohort benchmarks and cross-tenant intelligence remain behind §27's five gates plus
+§25.2's provenance floor. Nothing is added.
+
+**NOW: none.** No code, schema, migration, service, API, UI, provider, flag, prompt, test or
+configuration item. Nothing here is approved for implementation, and Remy V1's Definition of
+Done is unchanged.
+
+| Band | Part XI items |
+|---|---|
+| ALREADY EXISTS | 12 structures reused unchanged |
+| NEW CONTRACTS | 4 gaps (G1–G4), all narrow |
+| PREPARE | 3 (P41–P43) |
+| LATER | 1 (L32) |
+| MUCH LATER | 0 |
+| **NOW** | **0** |
+
+### 86.2 The genuine gaps, restated
+
+**G1** a finding that exists before a tenant does · **G2** the Scan's `condition` enumeration ·
+**G3** `estimate_basis` and the observed-baseline rule · **G4** where a target product is
+recorded. Three become P41–P43; **G2 is a Phase 1 decision rather than a PREPARE rule**, because
+the codes cannot be chosen sensibly until the three classes are written as questions.
+
+### 86.3 The FAQ / Knowledge Builder relationship
+
+There is a natural one, and it is deliberately left unbuilt: a **booking/scheduling-friction or
+missed-enquiry finding** is exactly what a business would want to answer by writing down its
+approved knowledge, and `business_knowledge`'s existing staged → review → approve → publish
+pipeline (§20.6) is where such knowledge already belongs. **No contract is defined here**, the
+Builder stays a supporting future free tool, and the same restriction as the Setup Kit applies:
+a handoff must not become a reason to carry identity or stored answers between free tools.
+
+### 86.4 What must be decided before any Phase 1 code
+
+The honest "now", and all three are documentation rather than software:
+
+1. **The three `condition` codes** and the exact owner-facing questions that establish each
+   (G2) — because the questions decide what the codes can honestly mean.
+2. **The Phase 1 expression set** for §82's arithmetic, with its operands, its version and its
+   range rule (P42) — before any number reaches a screen.
+3. **The consent and promotion wording** for §83.3's boundary (P41) — what exactly a visitor
+   agrees to when an assessment finding becomes canonical.
+
+### 86.5 Verdict
+
+The Business Opportunity Scan needs **almost no new architecture**, and that is the finding of
+this part: twelve of the fifteen fields a trustworthy finding requires already have canonical
+homes, the free-product container already exists in §26 and §25.1, and §51.4 already wrote the
+handoff. What it needs is **restraint** — three finding classes rather than ten, owner-provided
+input only, at most three findings per run, arithmetic that cannot flatter itself, and a
+willingness to say *"we cannot size this"* and *"no NiteOwl product addresses this"*.
+
+The single largest risk is not technical. It is that a free product whose purpose is acquisition
+quietly starts optimising for the largest defensible number, and every protection in §82 exists
+against that one pressure. **An estimate that cannot be found wrong is worthless to the learning
+layer and dishonest to the customer** — and the Scan's real asset was never the number. It is
+the accumulating record of which recommendations, made in advance with a stated success
+criterion, actually worked.
+
+Unchanged for the eleventh document running: nothing here is built, nothing is urgent, no
+provider is added, no product is started, and the next milestone is still Google's verification
+review.
