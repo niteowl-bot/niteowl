@@ -13,13 +13,14 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–IX.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–X.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
   cross-product outcome learning and decision intelligence, Part VIII sovereignty and
-  provider escape routes, Part IX the Intelligence Ownership Layer. **§21 is the single
-  canonical architecture diagram**, and Parts VII, VIII and IX do not redraw it.
+  provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
+  advantage and category leadership. **§21 is the single canonical architecture diagram**,
+  and Parts VII, VIII, IX and X do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -81,6 +82,27 @@ unregistered. **NOW: none** — five PREPARE items (P33–P37), one LATER (L30),
 flag, prompt, provider or configuration change. Part VIII's two HARDEN SOON qualifications
 (untested Supabase restore, phone-number account of record) stand exactly as §68.1 left them and
 are **deliberately deferred**.
+
+Part X (added 2026-09-09) is the compounding-advantage and category-leadership pass, and it is
+the emptiest of the ten by design: the six-layer hierarchy, the learning loop, the recommendation
+contract, the copy test, the free-product distribution loop and the cross-product contract were
+**all already written**, several more precisely than the directive that asked for them. Its four
+findings are all places where the *commercial* side of category leadership could corrupt the
+*analytical* side. **N1 (§75)** is the one it exists for: a customer's own CRM, accounting or
+field-service system is a **fourth class of dependency** — NiteOwl has no contract with it, no
+substitution path, and it can leave NiteOwl rather than the reverse — so an external system of
+record may be read, referenced and written to but **may never become load-bearing for NiteOwl's
+own history**; the test is whether the history stays readable and comparable after the customer
+disconnects it. **N2 (§76)** forbids a free-scan estimate ever entering the Spine as a measured
+outcome or becoming the baseline a later paid outcome is graded against — M11's
+recommendation-grading-itself failure moved earlier in time so nobody recognises it. **N3 (§77)**
+makes a published case study a governed disclosure (per-claim consent, evidence frozen as-of
+publication, the metric named in advance, honest revocation limits) that is an **output of the
+learning loop and never an input to it**. **N4 (§78)** writes down the competitive-evaluation
+procedure that had been executed nine times and recorded zero times, and binds its output to the
+existing bands: **a competitive development is never on its own a NOW.** **NOW: none** — three
+PREPARE items (P38–P40), one LATER (L31), no code, schema, flag, prompt, provider or
+configuration change, **no product started, no integration proposed and no V1 work created.**
 
 ---
 
