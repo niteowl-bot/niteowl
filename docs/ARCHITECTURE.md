@@ -6540,3 +6540,414 @@ and it costs a naming convention today.
 And unchanged for the ninth document running: nothing here is urgent, nothing here is built, no
 provider is replaced, nothing is self-hosted, the corpus still accumulates only at the speed of
 real businesses doing real work — and the next milestone is still a reliable phone call.
+
+---
+
+# Part X — Compounding Advantage and Category Leadership
+
+Added 2026-09-09 against commit `f702d78`, immediately after the free-tools work merged as
+PR #78. Same rules as Parts I–IX: **documentation only.** No provider was migrated, added or
+replaced, no infrastructure was self-hosted, no working integration was touched, and no schema,
+route, flag, prompt, test or production code was changed. Nothing below was implemented, and
+nothing below asks for implementation now.
+
+Governing principle, extending Part IX's:
+
+> **COMPOUND WHAT CANNOT BE BOUGHT. RENT, INTEGRATE OR IGNORE EVERYTHING ELSE.**
+
+**Parts VII, VIII and IX are treated as canonical and are extended, not revisited.** §63's
+sovereignty principle, §63.1's hierarchy, §64's A/B/C bands, §65's escape-route register, §70's
+three invariants and §71's provider-identity rule all stand unchanged. This part does not
+re-audit providers, does not redraw §21, and does not restate the copy test.
+
+It asks the question the previous nine did not:
+
+> Every earlier part asked what NiteOwl must **own** so that a provider cannot take it away.
+> This one asks what NiteOwl must **accumulate** so that a competitor cannot catch up — and,
+> more usefully, what it must refuse to do while accumulating it.
+
+The two are not the same question. Part IX secured the corpus against substitution. A corpus
+can be perfectly sovereign, perfectly portable, perfectly comparable across every provider
+swap — and still be worth nothing, because everything in it was an activity metric, an estimate
+NiteOwl asserted about itself, or a claim it could never have been wrong about.
+
+**NOW: none.** No CRITICAL NOW defect was found. Remy V1's locked Definition of Done is
+untouched, the five deterministic guards and every information-integrity protection from
+PRs #39–#70 are untouched, and **nothing in this part may be read as new V1 work.** The
+directive behind it says so itself, and *Current Work* in `PROJECT_CONTEXT.md` says it more
+sharply: while Google's verification review is pending, the correct state is waiting.
+
+---
+
+## 74. Placement — what the directive asks for, and where it already lives
+
+The pattern of the last four reviews holds for a fifth time, and more strongly than in any of
+them: **almost the entire directive is already written down**, in several cases more precisely
+than the directive states it. The work is placement, plus four findings.
+
+| The directive asks for | Where it already lives | This part |
+|---|---|---|
+| The loop *observe → diagnose → explain → recommend → approve/act → measure → learn* | §20.9, §42, §43, §44, §51 | **Unchanged.** §53.1 already recorded it as complete, including the explanation set |
+| The six-layer strategic hierarchy, intelligence above memory and orchestration | §63.1 | **Unchanged, and it matches item for item.** Part VIII drew it; Part IX §70 made it binding by rule rather than by diagram |
+| Outcome learning and Decision Intelligence above persistent memory | §70.1–§70.3's three invariants | **Unchanged** |
+| Each product useful independently; multiple products compound | §24 *Degradation* and *Direction of the moat*; §59.1's contribution map | **Unchanged.** §24 states the harder version: an architecture whose moat appears only at four products has no moat |
+| Recommendations carrying evidence, provenance, confidence, expected impact, trade-offs, risks, required authority, success criteria | §43, §20.7 rule 7, §20.6 | **Unchanged.** The success criterion is already required to be written *before* the outcome (M11) |
+| Beyond activity metrics toward measured business outcomes | §17, §25's copy test, §55's metric set, Part IV M9 | **Unchanged** — with one commercial gap, §76 |
+| Distribution as a moat; free value before purchase; the acquisition loop | Part III §26; `AGENT_ACCESS_LAYER.md` §25, §25.1, §25.2 | **Unchanged.** The loop, its bearer-token linkage rule and its provenance floor are already specified — with one arrow ungoverned, §77 |
+| A free Lost Revenue / Business Opportunity Scan | Part III §26's staged model; AAL §25 | **Placed**, and constrained — §76 |
+| Do not require businesses to replace incumbent systems | *nowhere* | **NEW — §75 (N1)**, the finding this part exists for |
+| An estimated value asserted commercially, then measured against | *nowhere as a rule* | **NEW — §76 (N2)** |
+| Shareable evidence, referrals, case studies | §27 governs cohort statistics only | **NEW — §77 (N3)** |
+| A procedure for evaluating a competitive development | *nowhere*, though it has been executed nine times | **NEW — §78 (N4)** |
+| Scope protection — do not expand Remy V1 | `PROJECT_CONTEXT.md` *Current Work*; §31 | **Unchanged, and restated in §74.1** |
+
+### 74.1 What must not be touched, and what this part refuses to propose
+
+Restated because a document about category leadership is the single most dangerous kind this
+repository can contain:
+
+- **No V1 work is created, implied or unlocked.** Remy V1 remains governed by *"does this stop
+  a normal paying customer from reliably using Remy V1?"* Nothing in Part X answers yes. Every
+  deferred V1.1 item — transcript urgency recovery, partial-`structuredData` service recovery,
+  the identity-model redesign, the `requiredMatches` false positive, booking-confirmation test
+  infrastructure, structured-data observability, `stemServiceWord`, the timezone-selection UI —
+  stays exactly where it is, and none of them is promoted by anything written here.
+- **No product is started.** Scout, Ledger, Pulse, Atlas, Forge, Nova and Beacon are named
+  below only to place boundaries, exactly as Parts III–IX name them. None is built, scaffolded
+  or depended on anywhere in this repository.
+- **No integration with an external business system is proposed.** §75 is a rule about what such
+  an integration would have to obey *if one is ever built*; it is not a request for one, and it
+  names no vendor as a target.
+- **No free product is built.** §76 constrains an artefact that does not exist. The only free
+  surface in the repository today is the setup-kit wizard shipped in PRs #77–#78, which asserts
+  no business value figure and is not the scan this part discusses.
+- **No new table, service, provider, abstraction or document.** Every item below is a write-time
+  rule, an enumerated value on a record that does not exist yet, or a procedure for reading a
+  competitor's announcement.
+- **§21 remains the single canonical architecture diagram**, and this part does not redraw it.
+  Neither does it add a third canonical document.
+
+---
+
+## 75. N1 — Operating above systems NiteOwl does not rent
+
+The directive states the commercial rule plainly: a business must not have to replace its
+incumbent CRM, accounting, field-service or marketing system to get value from NiteOwl, and
+those systems may remain systems of record for their own domains.
+
+**That is a stance this architecture has never taken a position on**, and the omission is
+structural rather than editorial. §65's escape-route register, §41.3's criticality bands and
+§64.1's A/B/C classification all describe providers **NiteOwl chooses, pays for and can
+replace**. A customer's own Salesforce, ServiceTitan, HubSpot or Xero is a fourth thing
+entirely, and three asymmetries separate it from everything already registered:
+
+- **No contract.** NiteOwl has no commercial relationship with it, no account, no SLA, no notice
+  period and no support path. §65's central question — *what happens when this provider changes
+  its terms?* — cannot even be asked, because the terms are not NiteOwl's to be changed.
+- **No substitution path, and none is NiteOwl's to take.** Every entry in §65 ends in a
+  documented route to another provider. Here the route belongs to the customer: they may
+  disconnect, migrate, downgrade or lose their own system at any time, for reasons NiteOwl will
+  not be told and has no standing to influence.
+- **The dependency runs the wrong way.** NiteOwl reads value from the incumbent; the incumbent
+  needs nothing from NiteOwl. Every provider in §65 is one NiteOwl can leave. This is the first
+  class of dependency that can leave NiteOwl.
+
+The rule that follows is the non-displacement principle stated as an architecture constraint
+rather than a sales position:
+
+> **N1 — AN EXTERNAL SYSTEM OF RECORD MAY BE READ, REFERENCED AND WRITTEN TO. IT MAY NEVER
+> BECOME LOAD-BEARING FOR NITEOWL'S OWN HISTORY.** A fact obtained from a customer-owned
+> external system enters as a **referenced, provenance-marked, scope-marked observation** —
+> never as a canonical NiteOwl fact, never as an identity, and never as the sole evidence for a
+> measured outcome. NiteOwl's canonical records must remain complete, readable and comparable
+> after the customer disconnects that system, with no migration and no back-fill.
+
+Everything N1 needs to be expressible already exists, which is what makes it free today:
+
+- `provenance` (§20.6) already distinguishes how a value was established, and
+  **`evidence_scope: external`** (P31, §57.1) is already the enumerated value for *whose
+  experience supports this claim* when the answer is "another system's". N1 is the rule that
+  makes those two mandatory here rather than optional.
+- §20.4's **observation** category already carries the expiry rule — *every observation
+  expires* — which is exactly right for a value read out of a system NiteOwl does not control
+  and cannot re-read on demand.
+- §71.2's **provider identity is an attribute, never a dimension** generalises outward without
+  amendment: an external record's id belongs **beside** a NiteOwl record in a link table — the
+  shape `integration_links` already uses for Google Calendar — never inside its identity, its
+  keys, its partitions or its metric definitions. A corpus keyed by a customer's CRM record ids
+  fragments the moment that CRM is replaced, and the customer replacing their CRM is precisely
+  the event NiteOwl is meant to survive better than the incumbent does.
+- §41.6's rule that governed capabilities never expose provider operations applies unchanged: a
+  capability is `customer.contact_updated`, never `salesforce.upsert_contact`.
+
+**The test, which is deliberately one sentence and answerable in the moment:**
+
+> *If this business disconnects this system tomorrow, does NiteOwl's history stay readable, its
+> decisions stay interpretable and its learning stay comparable across the disconnection?*
+
+If the answer is no, the integration has turned a customer's third-party subscription into a
+dependency of NiteOwl's moat — a lock-in with no supplier, which is §70.2's failure in a new
+costume.
+
+**One line is added to the adoption checklist (P37/S3), not a new process.** S3 requires a
+dependency to be classified at adoption in four lines. A fifth applies only to this class:
+**whose account is it?** NiteOwl's own, or the customer's. The answer determines whether §65's
+escape-route machinery applies at all, and getting it wrong is how a customer-owned system
+quietly ends up registered as though NiteOwl could replace it.
+
+**What this does not decide.** No ingestion contract, field mapping, sync direction, conflict
+policy or write-back model is specified here, and none should be until a real integration is
+actually wanted — that is **L31**, below. What is decided now is only the boundary such a
+contract must respect, because the boundary is free while zero external business systems are
+connected and is a corpus-wide migration afterwards.
+
+---
+
+## 76. N2 — An estimate presented as recoverable money
+
+The directive names a concrete distribution artefact: a **Lost Revenue / Business Opportunity
+Scan** that identifies evidence-backed recoverable opportunities. It is a good instinct, it fits
+Part III §26's staged free-product model without amendment, and it carries one hazard that
+neither §26 nor AAL §25.2 covers.
+
+Both existing rules govern the **inputs**: figures typed into a public form are
+`business_provided`, never `verified`, and a cohort statistic may never be computed over inputs
+nobody checked. Neither governs the **output** — a number NiteOwl itself asserts, in currency,
+to a business that has bought nothing yet, and that will later become that business's mental
+baseline for whether NiteOwl worked.
+
+Three rules, each an existing principle applied to that artefact:
+
+- **An opportunity value is an estimate, and estimates never enter the Spine as outcomes.** It
+  is `derived`, with its inputs' provenance carried through; it is never `observed`. This is
+  Part IV's M9 — a *predicted* outcome must never be read as a *measured* one — arriving through
+  the commercial door rather than the analytical one, which is exactly why it needs saying
+  again: M9 was written about a model's prediction inside the product, and nobody reads a sales
+  page as a model output.
+- **A pre-purchase estimate may never become the baseline a later measured outcome is graded
+  against.** If the scan says *"you are losing €2,400 a month in missed calls"* and the measured
+  improvement is later expressed as a fraction of that figure, then **NiteOwl chose both the
+  target and the score**, and the corpus fills with results graded against a number invented to
+  sell the product. That is M11's failure — a recommendation grading itself — with the invented
+  target moved earlier in time so that nobody recognises it. **The baseline must come from a
+  NiteOwl-observed period**, and where no such period exists the honest output is a measurement
+  plan, not a percentage.
+- **A claim that cannot be wrong is not evidence.** The scan must carry its assumption set and
+  the window in which it would be checked, so that a later observation can contradict it. This
+  is §43's success criterion moved forward — before purchase rather than after approval — and it
+  is what separates *"here is what we can see, here is what we assumed, and here is what we
+  would measure and when"* from Part III §26's own warning about producing a **sales figure
+  rather than a finding**.
+
+**What the loop can defensibly accumulate is unchanged from AAL §25.2**, and worth restating
+because the commercial artefact makes it easy to forget: what compounds is not the headline
+number and not what businesses reported, but **which recommendations were acted on and what
+measurably changed afterwards**. The scan's job is to start a relationship honestly enough that
+a measured outcome is possible later. A scan optimised to produce the largest defensible number
+maximises the one quantity in this architecture that has never been an asset.
+
+---
+
+## 77. N3 — A shareable result leaves the tenant boundary
+
+The directive's acquisition loop ends with an arrow no existing rule governs:
+
+```
+free value → measurable customer results → shareable evidence → referrals
+  → case studies → industry recognition → paid adoption → more outcome data
+```
+
+*Measurable customer results* is the corpus; §27 governs its use for cohort intelligence behind
+five gates — minimum cohort size, de-identification with a re-identification analysis, lawful
+basis and per-purpose revocable consent, an opt-out that removes contribution, and stated
+benchmark provenance.
+
+**A case study is the opposite shape in every respect**, which is why those gates do not fit it:
+*n* = 1, the tenant is **identified rather than de-identified**, the claim is **specific rather
+than aggregate**, the disclosure is **public and permanent rather than in-product**, and the
+audience is **everyone rather than other tenants**. Minimum cohort size is meaningless at
+*n* = 1; de-identification is the thing being deliberately given up.
+
+> **N3 — A PUBLISHED OUTCOME CLAIM ABOUT A NAMED TENANT IS A GOVERNED DISCLOSURE, NOT A
+> MARKETING DECISION.**
+
+Four requirements, all of which reuse machinery that already exists for other reasons:
+
+- **Consent is per claim, not blanket.** A term-of-service clause permitting "use of customer
+  results in marketing" is not consent to publish *this figure, about this business, alongside
+  their name*. §27's gate 3 already requires per-purpose revocable consent; publication is a
+  purpose.
+- **The evidence is frozen at publication, as of that instant.** M15's as-of evidence references
+  exist so a decision can be re-judged on what was known at the time; the same mechanism does an
+  unforeseen second job here. A published claim must be reconstructable years later from the
+  evidence as it stood, because the underlying rows will have moved and a claim that can only be
+  re-derived from current data is a claim that changes after it was made.
+- **The metric and window must be the ones named in advance** (M11, §20.7 rule 7). A metric
+  chosen after the result is known is a marketing artefact wearing a measurement's clothes, and
+  the corpus is the one place it must never be filed.
+- **Revocation is honest about what it can do.** Consent withdrawal stops future use and removes
+  the claim from NiteOwl's own surfaces. It cannot recall a printed page, a conference slide or
+  a competitor's screenshot. **Say that, rather than promising an unlearning nobody can
+  perform** — the same honesty M19 forced onto derived intelligence, where the promise to un-fit
+  a model for one tenant was a promise nothing could keep.
+
+And the rule that protects the corpus rather than the customer:
+
+> **A case study is an OUTPUT of the learning loop and never an INPUT to it.** A published claim
+> must never be readable as evidence, must never contribute to a cohort statistic, and must
+> never appear in a recommendation's evidence set. Otherwise the moat begins learning from its
+> own marketing — the most flattering and least verified data NiteOwl will ever hold.
+
+---
+
+## 78. N4 — Competitive monitoring has no procedure, and has been performed nine times
+
+§25's copy test is the inward question: *given what a competitor could reproduce, what is left
+that they cannot?* It is answered, repeatedly and well. The directive asks the outward one: *a
+competitor has just shipped something — what, if anything, does that change here?*
+
+**There is no written procedure for that**, which is a strange gap in a document that is itself
+the output of nine such evaluations. Parts III and IV and the two `AGENT_ACCESS_LAYER.md`
+addenda were each triggered by a competitive development; each reached a defensible answer; none
+recorded how. A procedure that lives only in the habit of whoever runs the review produces a
+different answer when somebody else runs it, and the direction it fails in is the expensive
+one — **copying a feature because it was visible.**
+
+The procedure, written down once, is the directive's seven questions bound to this document's
+existing output bands:
+
+| # | Question | Why it is asked in this order |
+|---|---|---|
+| 1 | What capability actually changed? | Stated in NiteOwl's own vocabulary, not the competitor's. An announcement names a product; the question is what a business can now do that it could not |
+| 2 | Does it threaten a NiteOwl **product** or a NiteOwl **moat**? | Different answers. A threatened product is a roadmap question; a threatened moat is an architecture question, and only the second may reach this document |
+| 3 | Is it feature parity, or a structural advantage? | §25's classification, applied to someone else's work. Almost everything is the first |
+| 4 | Can NiteOwl **differentiate** rather than copy? | Asked before any build option is costed, because the answer is usually available and it is the cheapest |
+| 5 | Does it expose a weakness or an opportunity here? | The most valuable question and the least asked. A competitor's launch is free reconnaissance about what customers will now expect as table stakes |
+| 6 | Can it be answered by strengthening Memory, Graph, provider independence, outcome learning, Decision Intelligence, distribution or switching costs? | The six answers that compound. If one of them fits, it is almost always the right answer |
+| 7 | Is an architecture or roadmap change **genuinely** necessary? | The default answer is no, and it must be permitted to be no |
+
+Three rules govern the output, and they matter more than the questions:
+
+- **The output is classified in §30's existing four bands** — ALREADY EXISTS / PREPARE / LATER /
+  MUCH LATER — plus NOW. **A competitive development is never on its own a NOW.** NOW is
+  reserved for something that stops a paying customer using what NiteOwl has already sold. Nine
+  reviews have produced **zero** competitive NOW items, and that is the correct rate rather than
+  an oversight.
+- **A competitive review appends a part to this document.** It does not create a document, and
+  it does not fork the canonical set — the failure mode §31 has already fired on twice.
+- **Feature accumulation is the recorded failure mode, and distribution is the one contest not
+  to enter.** §25 is blunt about it: an installed base reached by bundling AI free *cannot be
+  matched at all*, and competing on price against it is a losing race by construction. A
+  competitive evaluation that concludes "match their distribution" has misread the register; the
+  conclusion available to NiteOwl is always **what to accumulate that they cannot buy.**
+
+**The reusable half is what to do with a review that finds nothing.** Four of the nine found
+that most of what they asked for already existed. That is a result worth recording rather than a
+wasted pass, and recording it is what stops the next review re-deriving the same conclusion and
+reaching for a build to justify itself.
+
+---
+
+## 79. Classification and verdict
+
+### 79.1 Classification
+
+Using §30's four bands unchanged, continuing the existing numbering (Part IX ended at P37, L30,
+X6).
+
+**ALREADY EXISTS — no change needed**
+
+§63.1's six-layer hierarchy, matching the directive item for item · §70.1–§70.3's three
+invariants · §24's degradation rule and *direction of the moat* · §59.1's cross-product
+contribution map · §43 and §20.7 rule 7's recommendation contract, including the success
+criterion written in advance · §20.6's provenance and §57.1's `evidence_scope` · §25's copy test
+and its resource-allocation rule · Part III §26 and AAL §25's free-product distribution loop,
+bearer-token linkage and provenance floor · §21 as the single diagram · the locked Remy V1
+Definition of Done. **All unchanged, unredrawn and not extended.**
+
+**DOCUMENTATION STRENGTHENING — applied in this pass**
+
+The competitive-evaluation procedure and its three output rules (§78) · the free scan placed
+inside Part III §26's staged model with its estimate/measurement boundary stated (§76) · M15's
+as-of evidence and M19's honesty about revocation applied to publication (§77) · §71.2's
+provider-identity rule generalised outward to customer-owned systems (§75) · one line added to
+S3's adoption checklist — *whose account is it?* (§75).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P38** | **External systems of record are referenced, never load-bearing** (§75, N1) — a customer-owned system's facts enter as provenance- and scope-marked observations; its record ids live beside NiteOwl's records, never inside their identity, keys, partitions or metric definitions; NiteOwl's history stays readable and comparable after disconnection | *Part X.* Free while zero external business systems are connected. After the first one it is a corpus-wide migration, and the customer replacing their CRM is exactly the event NiteOwl must survive better than the incumbent does |
+| **P39** | **An asserted value is an estimate, and never its own baseline** (§76, N2) — an opportunity or lost-revenue figure is `derived`, never `observed`, never enters the Spine as an outcome, and never becomes the baseline a later measured outcome is graded against; it carries its assumptions and a checkable window | *Part X.* One rule written before the first free scan exists. Afterwards the corpus already contains results graded against a number invented to sell the product, and no later discipline can separate them |
+| **P40** | **A published outcome claim is a governed disclosure** (§77, N3) — per-claim consent, evidence frozen as-of publication, the metric and window named in advance, honest revocation limits, and never readable back as evidence | *Part X.* The mechanisms all exist for other reasons (M11, M15, M19, §27 gate 3). Binding them together costs a paragraph now and is unrecoverable after the first case study is published without them |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L31** | **External-system ingestion contract** — field mapping, sync direction, conflict policy, write-back model and failure behaviour for a customer-owned system of record | The first genuine commercial requirement for one. **P38 must precede it**: the boundary has to exist before the first mapping is written, and no vendor is named as a target here |
+
+**MUCH LATER**
+
+X1–X6 unchanged. Nothing added.
+
+**NOW: none.** No code, no schema, no migration, no flag, no provider change, no prompt change,
+no test change, no configuration change — and no V1 work.
+
+| Band | Part X items |
+|---|---|
+| ALREADY EXISTS | 11 structures, unchanged |
+| DOCUMENTATION STRENGTHENING | 5, all applied |
+| PREPARE | 3 (P38–P40) |
+| LATER | 1 (L31) |
+| MUCH LATER | 0 |
+| **NOW** | **0** |
+
+**Simplicity check.** Part X proposes zero new tables, zero new services, zero new providers,
+zero new abstractions, zero new documents, zero new products and no change to §21's diagram. Its
+three PREPARE items are write-time rules about records and artefacts that do not exist yet; its
+one LATER item is explicitly not requested. **All four together are smaller than one
+integration**, and the largest of them (P38) is the difference between a moat that survives a
+customer changing their CRM and one that was quietly built on top of it.
+
+### 79.2 The three questions this part answers
+
+**Can NiteOwl reach category leadership without replacing incumbent systems?** Yes, and N1 is
+what makes the claim structural rather than promotional. Operating above an incumbent is a
+commercial advantage only while the incumbent cannot take NiteOwl's history with it when the
+customer leaves — which is a property of how external facts are recorded, decided at the first
+integration and unpickable afterwards.
+
+**Does the advantage actually compound, or merely accumulate?** It compounds only if what is
+accumulated could have come out wrong. That is the thread joining all three PREPARE items: an
+estimate that grades itself (P39), a published claim chosen after the result (P40) and a history
+keyed to a system that vanished (P38) each produce a corpus that grows without ever becoming
+more capable of predicting anything. Part IX secured the corpus against providers; this part
+secures it against NiteOwl's own commercial incentives, which are the likelier attacker.
+
+**What is the answer when a competitor ships something significant?** Almost always: nothing
+here changes, and the accumulation continues. §78 writes that down, along with the two ways it
+goes wrong — copying a visible feature, and entering the one contest (§25's bundled installed
+base) that cannot be won.
+
+### 79.3 Verdict
+
+After ten reviews the honest summary is that **this architecture's strategy has been finished
+for some time, and its product has not.** Part X found no structural gap in the compounding
+model at all: the hierarchy, the loop, the ownership boundaries, the copy test, the distribution
+model and the cross-product contract were all already written, several of them more precisely
+than the directive that asked for them. What it found were three places where the *commercial*
+side of category leadership could quietly corrupt the *analytical* side — an incumbent system
+becoming load-bearing, a sales estimate becoming a baseline, and a case study becoming evidence
+— plus a procedure that had been executed nine times and written down zero.
+
+All three corruptions share a shape worth naming, because it is the one this document has not
+had to guard against before: **they are introduced by success, not by failure.** Nothing goes
+wrong when the first integration is built, the first scan is published or the first case study
+is written. The cost appears years later, in a corpus that cannot tell which of its numbers were
+ever checkable.
+
+And unchanged for the tenth document running: nothing here is urgent, nothing here is built, no
+provider is replaced, nothing is self-hosted, no product is started, the corpus still accumulates
+only at the speed of real businesses doing real work — and the next milestone is still Google's
+verification review, which no amount of architecture will advance.
