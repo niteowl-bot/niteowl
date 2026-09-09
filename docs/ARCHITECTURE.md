@@ -7420,6 +7420,9 @@ a handoff must not become a reason to carry identity or stored answers between f
 
 ### 86.4 What must be decided before any Phase 1 code
 
+**RESOLVED by Part XII (§87–§90), 2026-09-09.** All three decisions below are answered there;
+this section is kept as the statement of what had to be decided.
+
 The honest "now", and all three are documentation rather than software:
 
 1. **The three `condition` codes** and the exact owner-facing questions that establish each
@@ -7448,3 +7451,416 @@ criterion, actually worked.
 Unchanged for the eleventh document running: nothing here is built, nothing is urgent, no
 provider is added, no product is started, and the next milestone is still Google's verification
 review.
+
+---
+
+# Part XII — Business Opportunity Scan, the three Phase 1 decisions
+
+Added 2026-09-09 against commit `6d5b4fc`, immediately after Part XI merged as PR #81. Same
+rules as Parts I–XI: **documentation only.** No code, schema, migration, service, API, route,
+UI, provider, integration, flag, prompt, test or configuration was created or changed.
+**Nothing below is implemented, and nothing below is approved for implementation.**
+
+This part resolves **§86.4's three decisions** and nothing else. Part XI's contract stands
+unchanged: its promise, its three finding classes, its IN / NOT IN boundaries, its four gaps and
+its classification are not revisited, and none of its boundaries moves.
+
+Governing principle, extending Part XI's:
+
+> **A NUMBER OR A FINDING THAT CANNOT BE RECOMPUTED FROM STORED OPERANDS AND A VERSIONED RULE
+> MAY NOT BE SHOWN.** Determinism is not an implementation detail here — it is what makes an
+> estimate auditable, and therefore what makes it honest.
+
+**NOW: none.** No production-code item is created by any of the three decisions.
+
+**The single most consequential decision below is a subtraction:** of the three candidate
+Lost Revenue expressions, **only one survives** §82.1's own three-part requirement. Weak
+follow-up and booking friction are **not sized in Phase 1**, because sizing either one requires
+an operand nobody can supply without inventing it.
+
+---
+
+## 87. DECISION 1 — the condition codes and the owner-facing questions
+
+### 87.1 The enumeration — three codes, and no more
+
+§42.2 requires `condition` to come from a product-owned enumeration, because *"only codes are
+learnable"* (§20.7 rule 1). The Scan's Phase 1 enumeration:
+
+| Code | Finding class | The condition it names | May be raised when |
+|---|---|---|---|
+| `enquiry.unanswered` | Missed enquiries | Enquiries arrive and no person answers or replies | `Q4 ≥ 1`, and `Q4 ≤ Q3` where both given |
+| `enquiry.no_followup` | Weak follow-up | An enquiry that does not book is not contacted again | `Q6 ∈ {only_if_they_return, nothing_planned}` |
+| `booking.friction` | Booking / scheduling friction | Agreeing a time takes repeated back-and-forth | `Q7 ∈ {more_than_three, varies_a_lot}` |
+
+Naming follows §20.5's convention — a NiteOwl domain and a NiteOwl condition, never a vendor's
+or a channel's vocabulary, so the code survives any provider change (Part IX **P33**). **No code
+exists for a NOT-IN-MVP domain**: there is no capacity, retention, repeat-business, handoff,
+cash-flow or marketing code, and adding one is a Part XI boundary change rather than an
+enumeration edit.
+
+### 87.2 The question set — nine questions, each load-bearing
+
+Every question is `business_provided` (§20.6) and stays that way forever; **none is ever
+promoted to `verified`** (§26). Every quantitative question carries an explicit **"not sure"**,
+which is a first-class answer producing UNKNOWN — never a silent default, never a penalty, and
+never substituted with an assumption (§82.2).
+
+| # | Question (owner-facing wording) | Answer type | Allowed values | Required | Supports | Establishes on its own |
+|---|---|---|---|---|---|---|
+| **Q1** | *"How do customers usually get in touch with you?"* | multi-select | phone · text or WhatsApp · email · website form · social message · in person · other | Yes | Context for all three codes; shapes the recommendation and the routing | **Nothing.** A channel mix is not a problem |
+| **Q2** | *"Roughly when can someone reach an actual person?"* | single-select | working hours only · extended hours · any time · it varies | Yes | `enquiry.unanswered` (context) | **Nothing.** Being closed is not a defect |
+| **Q3** | *"In a typical week, roughly how many new customer enquiries do you get?"* | integer ≥ 0, or *not sure* | 0–999, or *not sure* | Yes | Denominator and consistency check | Nothing |
+| **Q4** | *"In a typical week, roughly how many of those go unanswered — nobody picks up, or nobody replies?"* | integer ≥ 0, or *not sure* | 0–999, or *not sure* | No | `enquiry.unanswered`; operand of **E1** | The count only. The finding still needs Q5 |
+| **Q5** | *"When a call or message is missed, do you have a way of knowing it happened?"* | single-select | yes, always · sometimes · no | Yes | Caps confidence on `enquiry.unanswered`; **gates E1** | Nothing — it qualifies other evidence |
+| **Q6** | *"If someone enquires and doesn't book, what usually happens next?"* | single-select | someone follows up within a day · someone follows up eventually · only if they get in touch again · nothing planned · not sure | Yes | `enquiry.no_followup` | The practice, which **is** the condition — see §87.3 |
+| **Q7** | *"How many messages or calls does it usually take to agree a time?"* | single-select | one · two or three · more than three · it varies a lot · not sure | Yes | `booking.friction` | The effort, which **is** the condition |
+| **Q8** | *"Roughly what is a typical job or booking worth to you?"* | currency amount or range, or *not sure* | > 0, owner's own currency | No | Operand of **E1** only | Nothing. A job value is not a finding |
+| **Q9** | *"Of the enquiries you do answer, roughly what share become work?"* | single-select | most (about 2 in 3 or more) · about half · a minority (about 1 in 3 or fewer) · not sure | No | Operand of **E1** only | Nothing |
+
+**Why these nine and no others.** Q1 and Q2 exist so a recommendation is not made to the wrong
+business (recommending phone answering to a form-only trade is the failure §84.3's anti-funnel
+rule is about). Q3 is the denominator and the consistency check. Q4–Q7 are the only questions
+that can raise a finding. Q5 is the honesty gate — without it, a recollection would be
+indistinguishable from a record. Q8 and Q9 exist **solely** as operands and raise nothing.
+
+**Non-manipulation rules, binding on any future wording change:**
+
+- A question asks what happens, never what it costs. *"How much business do you think you're
+  losing?"* is forbidden — it asks the owner to assert the product's conclusion.
+- No question presupposes a defect. Q2 asks when someone is reachable, not *"how often are you
+  unavailable?"*
+- **"Not sure" is offered wherever it is a truthful answer, and choosing it is never worse for
+  the visitor than guessing.** A design that makes UNKNOWN feel like failure will manufacture
+  the numbers it needs.
+- The answer set is closed, ordered neutrally, and carries no recommended option.
+
+### 87.3 What an answer may and may not establish
+
+The rule that keeps a questionnaire from becoming a diagnosis:
+
+> **A Phase 1 finding is `derived_deterministic` — the result of a stated rule over stated
+> answers — and NO MODEL IS IN THE PATH.** A language model may phrase the prose around a
+> finding; it may never decide that a finding exists, and it may never produce an operand
+> (§82.2). This is §26's *"deterministic rules first, model second"* applied at its strictest,
+> and it is what makes Phase 1 testable: the same answers must always produce the same findings.
+
+Three consequences:
+
+- **A finding is a restatement of the owner's own answer, plus a threshold, and it must read
+  that way.** `enquiry.no_followup` on Q6 = *nothing planned* is not an inference about the
+  business; it is the owner's own description of their practice, named as a condition. The
+  Scan's value is the recommendation and the measurement, not the revelation.
+- **A single answer never carries a finding alone where corroboration is available.**
+  `enquiry.unanswered` requires Q4 **and** Q5, and is checked against Q3. Q6 and Q7 are the two
+  places where one answer is sufficient — deliberately, because each question *is* a direct
+  statement of the condition rather than evidence about it, and manufacturing a second question
+  to dress that up would be theatre.
+- **Confidence is capped by the weakest supporting answer, and the cap is displayed.** Q5 = *no*
+  caps `enquiry.unanswered` at low confidence permanently; Q7 = *it varies a lot* caps
+  `booking.friction` below Q7 = *more than three*.
+
+### 87.4 When the result must be UNKNOWN or no finding at all
+
+| Situation | Result |
+|---|---|
+| Q4 = *not sure* | **No `enquiry.unanswered` finding.** A missed-enquiry claim with no count behind it is a slogan |
+| Q4 = 0 | **No finding.** Nothing to report is a legitimate outcome, and the report must be able to say so |
+| Q4 > Q3, both given | **No finding, and the inconsistency is shown to the owner** rather than silently resolved. Never repair an answer |
+| Q6 = *not sure* | **No `enquiry.no_followup` finding** |
+| Q7 = *not sure* | **No `booking.friction` finding** |
+| Every diagnostic question *not sure* | **A report with no findings**, which still delivers Q1/Q2 context and an honest *"we could not establish anything from this"* — §23's `unattributed` reasoning, and §50.4's *NiteOwl is allowed not to know* |
+| Any finding raised, sizing operands missing | **Finding shown, impact UNKNOWN** (§82.3) |
+
+**No finding is ever produced by absence.** A question left blank means nothing was established,
+never that the answer was bad.
+
+---
+
+## 88. DECISION 2 — the Lost Revenue expression set
+
+### 88.1 Two of the three candidates fail, and §82.1 is what fails them
+
+§82.1 already requires **all three** of a volume, a conversion or value, and a diagnosed loss
+mechanism. Applying it to the three candidate expressions decides the question without any new
+rule:
+
+| Candidate | Verdict |
+|---|---|
+| missed enquiries × average enquiry value | **Fails as written, and survives when corrected.** A missed *enquiry* is not a lost *job*; multiplying by job value asserts that every unanswered enquiry would have become work. With the owner's own conversion share as the middle term (§82.1's second requirement), it becomes **E1** |
+| unfollowed enquiries × average enquiry value | **REJECTED.** Sizing it needs the share of unfollowed enquiries that a follow-up would have **recovered**, and no owner can supply that. Asking *"how many would you win back if you called them?"* is both leading and unanswerable, and any default value would be an invented conversion rate — forbidden outright by §82.2 and by Part X **P39** |
+| booking opportunities affected × average booking value | **REJECTED.** Friction and no-shows are not established losses: a slot may be refilled, a job rescheduled, a customer retained. Treating effort as revenue would count as lost the work the business actually did |
+
+> **Phase 1 has exactly ONE permitted expression.** `enquiry.no_followup` and `booking.friction`
+> are **real findings with impact UNKNOWN**, always, in Phase 1. A finding with a strong
+> diagnosis and no number is a good finding (§82.3), and a product that must attach a number to
+> everything will invent two thirds of them.
+
+### 88.2 E1 — the one permitted expression
+
+| Property | Value |
+|---|---|
+| **Identifier** | `lost_revenue.unanswered_enquiries` |
+| **Version** | `v1` — stored per run; a version change breaks comparability and must be visible (`AGENT_ACCESS_LAYER.md` §25.2) |
+| **Formula** | `unanswered_per_week × conversion_share × typical_job_value`, evaluated at both ends of every operand's range |
+| **Required operands** | Q4 (integer, `business_provided`) · Q9 (bucket → range, `business_provided`) · Q8 (amount or range, `business_provided`) |
+| **Unit and period** | The owner's own currency, **per week** — the same period they answered in |
+| **Result form** | **A RANGE, never a point.** `[low_conversion × low_value × count, high_conversion × high_value × count]`, rounded outward, presented with both ends |
+| **Gate** | Raised only when `enquiry.unanswered` was raised, **and** Q5 ≠ *no*, **and** all three operands are present |
+| **Confidence** | Two, never merged (§82.4): finding confidence from §87.3; **size confidence** capped by the widest operand bucket and by Q5 = *sometimes*, with the capping reason shown |
+
+**Bucket ranges are fixed in the contract, not chosen at runtime:** *most* = 0.67–1.0, *about
+half* = 0.4–0.6, *a minority* = 0.0–0.33. They are stated here so two implementations cannot
+disagree, and so a change to them is a version change.
+
+**Assumptions that must be shown with every E1 result**, in the owner's view and not in a
+footnote (§26, §84.2):
+
+- `assumed.same_conversion` — *"we've assumed the enquiries you missed would have become work at
+  about the same rate as the ones you answered."* **This is likely to be generous**, and the
+  wording must say so — a missed caller who rings the next trade is not a customer who was
+  choosing you.
+- `assumed.typical_value` — *"we've used the typical job value you gave us."*
+- `assumed.owner_estimate` — *"these are your estimates of a typical week, not measurements."*
+
+**Prohibitions, restated because this is where they bite:** no benchmark or industry figure; no
+model-generated operand; no annualisation and no monthly conversion of a weekly answer; no
+lifetime-value multiplier; no compounding; no silent substitution of a missing input; and no
+point estimate.
+
+### 88.3 When E1 must return UNKNOWN
+
+Any one of these, and the finding is shown with **impact UNKNOWN** rather than a number:
+
+- any of Q4, Q8, Q9 absent or *not sure*;
+- **Q5 = *no*** — the owner has no way of knowing a miss happened, so the count is a recollection
+  with no record behind it. It may support a low-confidence finding; it may not support money;
+- Q4 > Q3 (internally inconsistent);
+- the computed range spans **more than one order of magnitude** — a range that wide carries no
+  information (§82.3), and printing it would be precision theatre in the other direction;
+- Q4 = 0, in which case there is no finding to size.
+
+### 88.4 The `estimate_basis` contract — P42, made precise
+
+Every displayed estimate carries an `estimate_basis`, and **the displayed number must be
+recomputable from it alone**. That sentence is the whole contract; the fields follow from it.
+
+| Field | Content |
+|---|---|
+| `expression_id`, `expression_version` | `lost_revenue.unanswered_enquiries`, `v1` |
+| `operands[]` | For each: `operand_id` (the question id), `raw_answer` **as the owner gave it**, `normalised_range` `[lo, hi]`, `unit`, `source_type` (`business_provided`), `answered_at` |
+| `assumptions[]` | Enumerated codes (`assumed.same_conversion`, …) plus the exact display text shown |
+| `result` | `[lo, hi]`, `currency`, `period: week`, `rounding_rule` |
+| `size_confidence` | Value plus the **reason code** that capped it |
+| Versions | `question_set_version`, `rule_set_version`, `expression_version` |
+| `computed_at` | The instant, so the result is as-of per **M15** |
+
+Four rules:
+
+- **Recomputability is the acceptance test.** If a stored basis does not reproduce the stored
+  result, the result is wrong and may not be shown. This is what "deterministic" has to mean to
+  be worth claiming.
+- **The basis is frozen and append-only.** A re-run produces a **new** basis referencing the new
+  run; the old one is never edited — §23's rule that re-attribution never rewrites history,
+  applied to money.
+- **The estimate is never the baseline.** A later measured outcome is compared against an
+  **observed** baseline (§82.5, Part X **P39**); the frozen basis is what allows the original
+  estimate to be **found wrong**, which is its only value to the learning layer.
+- **`derived`, never `observed`.** An E1 result is `derived_deterministic` over
+  `business_provided` operands, and no promotion, adoption or later confirmation ever changes
+  that (§20.6, and §89.4 below).
+
+---
+
+## 89. DECISION 3 — consent and canonical promotion
+
+### 89.1 A — what exists before consent
+
+An **assessment run** in the free-product namespace: the answers, the findings, any
+`estimate_basis`, the recommendations and the version stamps. It has **no `org_id`**, is reached
+only by the bearer token the visitor holds, expires by default, and is linked to nothing else
+(§26, `AGENT_ACCESS_LAYER.md` §25.1). Identity is never inferred — not from IP, not from a
+fingerprint, and **never** by matching a typed business name against `organisations`.
+
+It is **not** a `DecisionRecord`, not Business Memory, not a diagnosis, not a tenant-history
+fact, and not a cross-product learning input (§83.3, Part XI **P41**).
+
+### 89.2 B — what stays ephemeral
+
+**All of it, by default.** Expiry is the resting state, and the full report is delivered before
+any of this is asked (§26: value before an account). A visitor who never consents keeps a
+complete, useful report and leaves nothing behind but an expiring run.
+
+### 89.3 C and D — what is approved, and what is promoted
+
+The visitor approves **one specific thing**: *save this scan result to my NiteOwl business
+record.* Scoped to that run, that date, and that business. Not marketing, not ongoing access,
+not other runs, not other purposes.
+
+What is promoted on approval:
+
+| Promoted | As |
+|---|---|
+| The answers | `business_provided`, with `answered_at`, never `verified` |
+| The findings | `derived_deterministic`, entering per **§51.4** as **one hypothesis among others, never as a diagnosis** |
+| The recommendations | `DecisionRecord` with `action_status: proposed` — **proposed reserves nothing** (§20.7 rule 4) |
+| The `estimate_basis` | `derived_deterministic` over `business_provided` operands. **Never `observed`** |
+| The version stamps and `computed_at` | So the run is reconstructable as-of (**M15**) |
+
+### 89.4 E and F — what is not promoted, and what provenance survives
+
+> **PROMOTION CHANGES WHERE A FACT LIVES. IT NEVER CHANGES WHAT THE FACT IS.**
+
+That single rule does most of the work here. Concretely, promotion does **not**: upgrade any
+source type; make a finding a diagnosis; create a verified fact; create a Business Problem Case;
+grant NiteOwl access to any system; authorise cohort or cross-customer use (§27's five gates are
+unmet, and `AGENT_ACCESS_LAYER.md` §25.2's provenance floor bars a statistic over unverified
+answers regardless); authorise publication of a named result (Part X **N3/P40** requires its own
+per-claim consent); or link this run to any other run beyond the token the visitor already held.
+
+Every promoted assertion keeps its `source_type`, its `confidence`, its `evidence_scope`
+(`tenant` — §57.1), its run id and its version stamps. A promoted answer is distinguishable
+from an observation **forever**, which is the §20.6 failure this exists to prevent.
+
+### 89.5 G — revocation and deletion
+
+- **Withdrawal removes the promoted records from the tenant's record**, and anything derived from
+  them is handled by **rebuild-without rather than unlearning** (**M19**, **P32**) — the only
+  promise that can actually be kept.
+- **The free-product run expires on its own TTL regardless.** Deleting the tenant copy does not
+  reach back into an expired run, and an expired run does not delete a promoted copy. Two
+  lifecycles, stated so neither is mistaken for the other.
+- **External data: none.** Phase 1 has no integration, so there is no third-party access to
+  revoke. If one ever exists it is Part X **N1/P38** territory, and its revocability is a
+  precondition of adopting it rather than a feature added later.
+
+### 89.6 H — how a promoted finding may later be used
+
+Exactly as §51.4 already specifies, and no further: it enters a Business Problem Case as **one
+hypothesis among others**, with confidence reflecting that its evidence is the lowest-trust in
+the architecture — *"an unauthenticated form's conclusion has no more standing at intake than the
+owner's own suspicion, and rather less evidence."* It may inform a recommendation; it may never
+be counted as a measured outcome, and only `observed` or `derived_deterministic` outcomes are
+learnable (§20.7 rule 5).
+
+### 89.7 The owner-facing wording
+
+Short, plain, and it must be shown **after** the full report, never as a gate to it:
+
+> **Save this to your NiteOwl record?**
+>
+> Based on the answers you gave, we think you may be missing enquiries each week. That's our
+> reading of what you told us — not something we've measured — and any figures are estimates
+> worked out from your own numbers.
+>
+> If you save it, we'll keep your answers and what we found in your NiteOwl business record, so
+> the NiteOwl products you use can take it into account, and so we can check later whether things
+> actually improved.
+>
+> Saving it doesn't turn an estimate into a fact. We won't share your answers or your results
+> with other businesses. You can delete this from your record at any time.
+>
+> **[ Save to my record ]  [ No thanks — just give me the report ]**
+
+Three rules on that wording, because it is the load-bearing sentence of the whole free product:
+
+- **The report is complete either way**, and the second button must say so plainly. A consent
+  screen that withholds value is the *"advertisement wearing a diagnostic's clothes"* §26
+  forbids.
+- **The first line names the actual finding**, not a generic "we found opportunities" — consent
+  to something unspecified is not consent.
+- **No broadening.** No marketing permission, no publication permission, no cohort permission,
+  no ongoing-access permission. Each of those is a separate ask under its own gate, and bundling
+  them here would be the quiet failure Part X **N3** exists to prevent.
+
+---
+
+## 90. Mapping, contradictions and classification
+
+### 90.1 Every decision mapped back to Parts I–XI
+
+| Decision | Canonical basis |
+|---|---|
+| Condition codes are a product-owned enumeration | §42.2, §20.7 rule 1, P18 |
+| Codes named in NiteOwl's own vocabulary | §20.5; Part IX **P33** |
+| Answers are `business_provided`, never `verified` | §20.6, §26 |
+| Findings are `derived_deterministic`, no model in the path | §26's *deterministic rules first*; §42.2's 2026-08-31 revision |
+| Confidence per assertion, capped and displayed | §20.6, §82.4 |
+| UNKNOWN as a first-class result | §82.3; §23's `unattributed`; §50.4 |
+| E1's three-part requirement | **§82.1** — which is what rejects the other two candidates |
+| Ranges, not points; no invented operands | §43.2; §82.2; Part X **P39** |
+| Version per run; a version change breaks comparability | `AGENT_ACCESS_LAYER.md` §25.2 |
+| Frozen basis; re-runs append | §23's re-attribution rule; **M15** |
+| Estimate never the baseline | §82.5; Part X **P39** |
+| Pre-consent run: no `org_id`, token-linked, expiring, identity never inferred | §26; `AGENT_ACCESS_LAYER.md` §25.1; §83.3 / **P41** |
+| Promotion never upgrades a source type | §20.6's one rule |
+| Recommendation as `proposed`, reserving nothing | §43.1; §20.7 rule 4 |
+| Promoted finding enters as one hypothesis | **§51.4** |
+| Revocation by rebuild-without | **M19**, **P32** |
+| No cohort or cross-customer use | §27's five gates; `AGENT_ACCESS_LAYER.md` §25.2 |
+| No publication without separate consent | Part X **N3 / P40** |
+| Routing, and route-to-nothing | §84.3 / **P43**; §50.4 |
+
+**Nothing new was needed** beyond the three decisions themselves. No new provenance type, record,
+store, category or vocabulary is introduced.
+
+### 90.2 Contradictions found
+
+**None.** One thing worth recording, because it is the reverse of a contradiction: **§82.1 had
+already decided Decision 2 and nobody had noticed.** Its requirement of a volume *and* a
+conversion or value *and* a diagnosed mechanism is exactly what disqualifies two of the three
+candidate expressions — the contract answered the question a full part before it was asked.
+
+Two clarifications, neither a change:
+
+- Part XI §83.1 maps an estimate to `ai_predicted` *where a model produced it*. **Phase 1 has no
+  such case**, because §88.2 permits no model-generated operand; every Phase 1 estimate is
+  `derived_deterministic`. The mapping row stays correct as general vocabulary.
+- Part XI §81.2 admitted `booking.friction` partly on the strength of the Setup Kit handoff.
+  §88.1 now confirms it is **never sized**, which does not weaken it: its recommendation is the
+  Setup Kit, which is free and immediately useful, and that was always the argument.
+
+### 90.3 PREPARE / LATER / NOW impact
+
+**No band changes.** P41, P42 and P43 remain PREPARE and are now **fully specified** rather than
+named — §89 specifies P41, §88.4 specifies P42, and §84.3's P43 is unchanged. **G2 is resolved**
+by §87.1 and §87.2, which is what §86.4 asked for.
+
+**LATER gains one item, and it records a refusal rather than a plan:**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L33** | **Sizing expressions for `enquiry.no_followup` and `booking.friction`** — rejected in Phase 1 because each needs a recovery or loss rate no owner can supply | A tenant's **own observed** history establishing the rate from measured outcomes rather than an assumption. **L32 must precede it**, and an invented default remains forbidden regardless |
+
+**NOW: none.** No code, schema, migration, service, API, UI, provider, integration, flag, prompt,
+test or configuration item. Remy V1's locked Definition of Done is untouched and no V1 or V1.1
+item was reopened, promoted or rescoped.
+
+| Band | Part XII items |
+|---|---|
+| ALREADY EXISTS | 19 structures reused (§90.1) |
+| DECISIONS RESOLVED | 3 — §86.4 closed |
+| PREPARE | 0 new; P41–P43 specified |
+| LATER | 1 (L33) |
+| **NOW** | **0** |
+
+### 90.4 Verdict
+
+The three decisions produced **nine questions, three codes and one arithmetic expression** — and
+the arithmetic is the part worth noticing, because the honest answer to *"which of these three
+revenue calculations may we do?"* turned out to be *"one of them"*. Two thirds of the sizing the
+objective floated cannot be done without inventing a rate, and the existing contract had already
+said so in §82.1.
+
+What Phase 1 can now be is deterministic and testable in the strict sense: the same answers
+produce the same findings, the same operands produce the same range, and every displayed number
+is recomputable from its stored basis or it may not be displayed. **A model is not in the path of
+any finding or any operand** — it may write the sentences and nothing else.
+
+The remaining risk is unchanged and is not technical: a free product whose purpose is acquisition
+will feel pressure to size the two findings it cannot size, and to make *"not sure"* feel like a
+wrong answer. §88.1 and §87.2 exist against exactly that, and both are cheap to keep now and
+impossible to reinstate once the corpus is full of numbers nobody can reproduce.
+
+Nothing here is built, nothing is urgent, no provider is added, no product is started, and the
+next milestone is still Google's verification review.
