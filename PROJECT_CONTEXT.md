@@ -670,6 +670,170 @@ It answers questions, books appointments, captures leads and gracefully hands un
 
 ---
 
+# Free-Product Strategy
+
+**Canonical as of 2026-09-09.** This section records the free-product **line-up, positioning
+and routing**. It deliberately adds **no architecture**: the architecture for free products
+already exists and is not restated here —
+
+- `docs/ARCHITECTURE.md` **§26** — the staged model, full value delivered before any account
+  exists, assessment data in its own namespace with no `org_id` until explicit consent,
+  self-reported inputs promoted as `business_provided` and never `verified`, and findings that
+  carry their confidence and their evidence
+- `docs/AGENT_ACCESS_LAYER.md` **§25** — repeat usage linked by a bearer token the visitor
+  holds and never by an inferred identity, structural namespace isolation, and the provenance
+  floor on cross-visitor learning
+- `docs/ARCHITECTURE.md` **§76 (N2)** and **§77 (N3)** — Part X's two rules about what a free
+  scan may assert and what may later be published about a named customer
+
+**Free products are an extension of the canonical architecture, not a second one.** They sit
+under the same hierarchy: provider-neutral canonical data → Business Graph → Business Memory →
+orchestration and governed action → cross-product measured outcome learning → proprietary
+Decision Intelligence (`docs/ARCHITECTURE.md` §63.1, unchanged).
+
+**Status of everything below: NOT STARTED unless explicitly marked shipped.** Nothing here is
+Remy V1 or V1.1 work, nothing here is a NOW item, and nothing here is approved for
+implementation. The one exception is the Setup Kit, which has already shipped.
+
+## 1. Flagship — NiteOwl Business Opportunity Scan
+
+**NOT STARTED. NOT IMPLEMENTED. NOT APPROVED FOR IMPLEMENTATION.**
+
+The flagship free acquisition and discovery product. Its purpose is to identify
+evidence-backed opportunities and problems: revenue leakage · missed enquiries · weak
+follow-up · unused capacity · booking and scheduling friction · cash-flow friction · marketing
+inefficiency · operational bottlenecks · retention problems · repeat-business opportunities.
+
+**It must distinguish four things, and the distinction is the product:**
+
+| It says | Which means | Already expressible as |
+|---|---|---|
+| **Observed fact** | Something that happened, or a value read | `observed` (§20.6), with `evidence_scope` (§57.1) |
+| **Inferred finding** | A judgement NiteOwl made on evidence | A Finding — §42.2, with its `hypotheses[]` and `contradicting_evidence` |
+| **Estimate** | A number NiteOwl produced, not one it measured | `derived`, never `observed` — Part X **P39** |
+| **Assumption** | What had to be taken as true to get there | `assumed` (§20.6), carried in the Finding's `assumptions` |
+
+**Where impact is estimated, the evidence, assumptions and confidence are exposed rather than
+invented precision.** This is not a new rule — §26 already states that visible assumptions are
+what separate a finding from a sales figure, and §43.2 already requires a range, a direction or
+*"unknown"* rather than a fabricated number. Part X **P39** adds the one the commercial framing
+makes easy to forget: **an estimate never enters the Outcome Spine as a measured outcome, and
+never becomes the baseline a later paid outcome is graded against.**
+
+## 2. Lost Revenue Scan
+
+**NOT STARTED.** A **major module and acquisition hook within** the Business Opportunity Scan —
+not a separate product line. It may also be surfaced as a **narrower standalone entry
+experience** where that is commercially useful; the underlying finding is the same finding.
+
+The canonical relationship:
+
+```
+Business Opportunity Scan  →  Lost Revenue finding  →  recommended action
+```
+
+**A finding needs no new artefact.** Everything the scan's findings must carry already has a
+canonical home, and duplicating it would create the rival record §48.3 exists to prevent:
+
+| A finding carries | Where it already lives |
+|---|---|
+| Evidence and provenance | §20.6, §20.7's `evidence_refs`, as-of per **M15** |
+| Diagnosis | The Finding profile — §42.2 |
+| Confidence | §20.6, on the assertion that carries it |
+| Estimated impact where appropriate | `expected_effect` — §43.2's range / direction / *unknown* rule |
+| Assumptions | §42.2 `assumptions`, source type `assumed` |
+| Recommended action | A `DecisionRecord` with `action_status: proposed`, `addresses_finding_id` — §43.1 |
+| Relevant NiteOwl product or capability | A **routing attribute** on the recommendation, expressible with the existing `source_product` / capability references — not a new record type |
+| Measurable success criteria | §20.7 rule 7 — **written before the outcome is known** |
+
+## 3. AI Receptionist Business Setup Kit — COMPLETE
+
+**SHIPPED. DO NOT REBUILD.** V2.0 is complete per the owner; the repository carries no version
+marker, so that version number is recorded as stated rather than verified. The surface is
+`src/app/free-tools/ai-receptionist-setup-kit`, shipped by **PR #77** (`d5081f2`) and **PR #78**
+(`f702d78`, PDF save/export).
+
+**What it is, verified in the code rather than assumed:** a client-side wizard with **no
+persistence, no auth, no network, no API route, no database table and no cookie** — the answers
+live in client memory for one page view — and **no Remy or provider imports**: nothing reaches
+`leadCapture`, `lib/voice`, availability, `calendarSync` or integrations. It therefore satisfies
+§26's staged model trivially, because it stores nothing at all.
+
+Its canonical position in the line-up:
+
+```
+Business Opportunity Scan  →  Lost Revenue / enquiry finding
+    →  AI Receptionist Business Setup Kit
+    →  Remy, where continuous automation is justified
+```
+
+**It remains useful without buying Remy**, which is the point — it helps a business define and
+improve call and enquiry handling, booking rules, FAQs and approved business knowledge,
+escalation, human handoff, follow-up and reception workflows, whether or not anything is ever
+automated.
+
+## 4. FAQ / Knowledge Builder — retained, repositioned
+
+**NOT IMPLEMENTED, NOT STARTED, and deliberately not implemented as part of recording this
+strategy.** The previously planned *NiteOwl Free Tools — FAQ / Knowledge Builder — Phase 1 only*
+is **retained but repositioned as a supporting free tool, not the flagship acquisition
+product** — that position now belongs to the Business Opportunity Scan.
+
+Its eventual role is to help a business create **structured, approved knowledge** that is useful
+on its own and can later support Remy and other authorised NiteOwl capabilities. Structured
+knowledge with an approval step already exists in this codebase as `business_knowledge`'s
+staged → review → approve → publish pipeline (§20.6), which is what such a tool would eventually
+feed **through explicit consent**, never directly.
+
+## 5. Canonical free-product funnel
+
+```
+free tool  →  identify measurable value or problem  →  evidence and diagnosis
+   →  recommended action  →  practical implementation help where appropriate
+   →  relevant paid NiteOwl product  →  measured outcome  →  learning
+```
+
+**DO NOT ROUTE EVERY PROBLEM TO REMY.** A scan that finds a cash-flow problem and recommends an
+AI receptionist is the failure this line exists to prevent. Each finding routes to the product
+that actually addresses it:
+
+| Problem class | Product |
+|---|---|
+| Missed enquiries, reception, booking and scheduling friction | **Remy** |
+| Cash-flow friction, overdue cash, margin | **Ledger** |
+| Opportunity discovery and new demand | **Scout** |
+| Marketing inefficiency and attribution | **Pulse** |
+| Operational bottlenecks and process exceptions | **Forge** |
+| Retention problems and repeat-business opportunities | **Beacon** |
+| Personal execution and follow-through | **Nova** |
+| Anything else | A future NiteOwl product, or **no product** — see below |
+
+**Only Remy exists.** Ledger, Scout, Pulse, Forge, Beacon and Nova are named here to fix
+routing boundaries, exactly as Parts III–X name them; none is built, scaffolded or depended on
+anywhere in this repository, and naming one here starts nothing. Where no NiteOwl product
+addresses a genuine finding, **the honest output is the finding and its recommended action with
+no product attached** — §50.4's *NiteOwl is allowed not to know* applied to the commercial side.
+
+## 6. Distribution flywheel
+
+```
+useful free product  →  measurable value  →  trust  →  sharing and referrals
+   →  adoption  →  paid product where appropriate  →  measured outcome
+   →  stronger Decision Intelligence  →  better future outcomes  →  more adoption
+```
+
+**A free product must deliver genuine standalone value and must never be deliberately crippled
+to force conversion.** §26 already states the architectural half — *if the report is worthless
+without signing up, it is an advertisement wearing a diagnostic's clothes* — and this is the
+commercial half of the same rule.
+
+Two existing constraints govern the arrows the flywheel adds, and neither is relaxed here: what
+compounds is **which recommendations were acted on and what measurably changed**, never what
+visitors reported (`AGENT_ACCESS_LAYER.md` §25.2); and **sharing a named customer's result is a
+governed disclosure**, with per-claim consent and evidence frozen as of publication, that is an
+**output of the learning loop and never an input to it** (Part X **N3 / P40**).
+
+---
 # Architecture Rule
 
 Every new feature must:
@@ -868,6 +1032,16 @@ Shipped (previously listed as remaining or future):
 - cancellation/reschedule emails
 - Voice AI
 - Google Calendar
+
+Free products (see *Free-Product Strategy* above — none of this is V1 work):
+
+- **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). Do not rebuild
+- **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. NOT started,
+  not approved for implementation
+- **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
+  a narrower standalone entry. NOT started
+- **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
+  NOT started
 
 Future:
 
