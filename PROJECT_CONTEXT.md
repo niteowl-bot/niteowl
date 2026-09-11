@@ -20,7 +20,8 @@ review extends them rather than adding a third:
   cross-product outcome learning and decision intelligence, Part VIII sovereignty and
   provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
   advantage and category leadership, Part XI the Business Opportunity Scan MVP contract
-  (**contract only — nothing implemented or approved for implementation**), Part XII the
+  (**a contract, not a plan** — its Phase 1 pure logic has since shipped as PR #84; the
+  product surface, persistence and consent flow it describes have not), Part XII the
   Scan's three Phase 1 contract decisions, Part XIII the Decision, Outcome and Impact
   Provenance contracts and the canonical provenance chain. **§21 is the single canonical
   architecture diagram**, and Parts VII–XIII do not redraw it.
@@ -675,12 +676,45 @@ orchestration and governed action → cross-product measured outcome learning �
 Decision Intelligence (`docs/ARCHITECTURE.md` §63.1, unchanged).
 
 **Status of everything below: NOT STARTED unless explicitly marked shipped.** Nothing here is
-Remy V1 or V1.1 work, nothing here is a NOW item, and nothing here is approved for
-implementation. The one exception is the Setup Kit, which has already shipped.
+Remy V1 or V1.1 work and nothing here is a NOW item. Two things have shipped: the Setup Kit
+(complete), and the **Business Opportunity Scan's Phase 1 pure logic** (PR #84 — logic only,
+no product surface; see §1 below). Nothing else is started or approved for implementation.
 
 ## 1. Flagship — NiteOwl Business Opportunity Scan
 
-**NOT STARTED. NOT IMPLEMENTED. NOT APPROVED FOR IMPLEMENTATION.**
+**PHASE 1 PURE LOGIC: IMPLEMENTED AND SHIPPED (PR #84, merge `7d242d8`, deployed and
+production-health verified 2026-09-11). THE PRODUCT ITSELF: NOT BUILT.**
+
+What PR #84 delivered is exactly the deterministic Phase 1 contract logic, as five pure modules
+under `src/lib/freetools/` (`scanTypes`, `scanQuestions`, `scanValidation`, `scanFindings`,
+`scanLostRevenue`) with their four test suites (`tests/freeToolsScan*.test.mjs`):
+
+- the canonical nine-question set, allowed values and required/optional split (§87.2);
+- the validator — refuses and never repairs or coerces, `not_sure` first-class, Q4 > Q3
+  surfaced as an inconsistency and never resolved (§87.4);
+- the deterministic finding engine over the three condition codes, ranked by the enumeration
+  and by nothing else (§87.1, §87.3);
+- the Phase 1 Lost Revenue sizing — E1 only, a range never a point, UNKNOWN as a first-class
+  result for the other two codes and for every §88.3 gate (§88.1–§88.3);
+- the frozen `estimate_basis` and the executable recomputation that makes the result
+  reproducible from its basis alone (§88.4).
+
+It is pure, deterministic, provider-independent and tenant-free: no model, network, storage,
+clock, randomness or `org_id` is reachable from it, and a structural boundary suite pins that.
+D1–D4 hardening (pre-rounding eligibility, an accurate `no_permitted_expression` reason, one
+shared rule-set version, requiredness read from the question definitions) landed before merge.
+
+**What Phase 1 does NOT include, and what is therefore still not built or approved:** a public
+route or page, any UI or product surface, persistence of a run, the bearer-token run linkage,
+the consent and promotion flow (Part XII §89), routing to a recommendation, cross-product
+outcome learning, any Part XIII provenance runtime, and every later Scan phase. Nothing
+outside the five modules imports them today. **Shipping the logic did not approve the
+product**: each of those is its own decision.
+
+**Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
+(confidence levels and cap policy that the implementation chose and canon does not yet
+specify) and N.1–N.4 (a displayed low of 0 after outward rounding, recomputation not
+re-running eligibility, two stale prose comments). Recorded in `CHANGELOG.md` under PR #84.
 
 **Its MVP contract is `docs/ARCHITECTURE.md` Part XI (§80–§86)** — the promise, the three
 Phase 1 finding classes, the Lost Revenue sizing module, the finding and input contracts,
@@ -691,8 +725,9 @@ routing, the outcome loop and the IN / NOT IN / PREPARE / LATER classification. 
 condition codes and nine owner-facing questions, **one** permitted Lost Revenue expression
 (two of the three candidates were rejected as unsizeable without an invented rate, so
 `enquiry.no_followup` and `booking.friction` always report impact UNKNOWN in Phase 1), the
-`estimate_basis` recomputability contract, and the consent and promotion wording. **Still
-NOT approved for implementation, and still NOW: 0.**
+`estimate_basis` recomputability contract, and the consent and promotion wording. **Parts XI
+and XII remain contracts: PR #84 implemented the Phase 1 logic they specify, and nothing
+beyond it — the consent and promotion flow in particular is unimplemented.**
 
 The flagship free acquisition and discovery product. Its purpose is to identify
 evidence-backed opportunities and problems: revenue leakage · missed enquiries · weak
@@ -717,7 +752,8 @@ never becomes the baseline a later paid outcome is graded against.**
 
 ## 2. Lost Revenue Scan
 
-**NOT STARTED.** A **major module and acquisition hook within** the Business Opportunity Scan —
+**PHASE 1 SIZING LOGIC SHIPPED with PR #84 (`scanLostRevenue.ts` — E1 only); the standalone
+entry experience is NOT started.** A **major module and acquisition hook within** the Business Opportunity Scan —
 not a separate product line. It may also be surfaced as a **narrower standalone entry
 experience** where that is commercially useful; the underlying finding is the same finding.
 
@@ -1031,10 +1067,12 @@ Shipped (previously listed as remaining or future):
 Free products (see *Free-Product Strategy* above — none of this is V1 work):
 
 - **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). Do not rebuild
-- **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. NOT started,
-  not approved for implementation
+- **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. **Phase 1
+  pure logic SHIPPED** (PR #84); route, UI, persistence, consent flow and later phases NOT
+  started and not approved
 - **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
-  a narrower standalone entry. NOT started
+  a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
+  entry NOT started
 - **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
   NOT started
 
