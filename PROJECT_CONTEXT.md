@@ -13,7 +13,7 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–XII.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–XIII.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
@@ -21,8 +21,9 @@ review extends them rather than adding a third:
   provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
   advantage and category leadership, Part XI the Business Opportunity Scan MVP contract
   (**contract only — nothing implemented or approved for implementation**), Part XII the
-  Scan's three Phase 1 contract decisions. **§21 is the single canonical architecture
-  diagram**, and Parts VII–XII do not redraw it.
+  Scan's three Phase 1 contract decisions, Part XIII the Decision, Outcome and Impact
+  Provenance contracts and the canonical provenance chain. **§21 is the single canonical
+  architecture diagram**, and Parts VII–XIII do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -105,6 +106,30 @@ procedure that had been executed nine times and recorded zero times, and binds i
 existing bands: **a competitive development is never on its own a NOW.** **NOW: none** — three
 PREPARE items (P38–P40), one LATER (L31), no code, schema, flag, prompt, provider or
 configuration change, **no product started, no integration proposed and no V1 work created.**
+
+Part XIII (added 2026-09-11) makes **Decision Provenance, Outcome Provenance and Impact
+Provenance** explicit, provider-neutral, cross-product contracts, and states the **canonical
+ten-stage provenance chain** once — observation → business state → diagnosis →
+recommendation/decision → evidence → authority → action → outcome → impact → learning — with
+each stage mapped to the carrier it already has. Twelve of the fifteen things it was asked to
+define already existed and are consolidated rather than rewritten; three were real: **T1 (§95)**,
+the architecture had an outcome and no **impact** — *"£640 of revenue"* and `appointment.booked`
+are different assertions with different evidential standards, and the first had nowhere to live
+except an estimate P39 forbids from ever becoming measured — so the **Impact assertion** is
+defined as §23's attribution row given its full shape (category, quantity, unit, window,
+`measurement_basis`, assumptions, confidence, tier, `evidence_scope`), never an event, never an
+outcome, never a baseline, opposing impacts kept and never netted, no cross-product currency;
+**T2 (§94)**, the Outcome group could not say *partial*, *contested*, *reversed* or *not yet due*,
+so `outcome_resolution` and `outcome_contradicting_evidence` are added, with learnability still
+derived and never a flag; **T3 (§93.2)**, `evidence_refs[].role` (what was relied on vs merely
+available), `approval_status` (including `expired` and `overridden`, an override being a new
+human decision with its own outcome slot) and `supersedes`. Its governing principle: **every
+stage carries its own provenance, confidence and timestamp, and none inherits any of the three
+from the stage before it**; hidden model chain-of-thought is never stored on any stage. §20.7
+gains rule 9 (an outcome is not an impact) and the new fields in place; §23's attribution row
+points at §95.2. **NOW: none** — three PREPARE items (P44–P46), one LATER (L34), no code, schema,
+flag, prompt, provider or configuration change, no store, no service, no table, no layer, no
+chain table, no product started, no boundary moved, **and no V1 work created.**
 
 ---
 

@@ -2023,10 +2023,10 @@ Conceptual fields, pruned to what §25's learning loops genuinely need:
 | Identity | `org_id`, `decision_id`, `decision_type`, `originating_product`, `decided_at` |
 | Subject | canonical entity references (`subject_type`/`subject_id`), `correlation_id` |
 | Content | `action_taken`, `alternatives_considered` (only where a real choice existed), `reason_codes` (**enumerated, not prose**), `explanation` |
-| Basis | `evidence_refs` (events, records, provider responses), `confidence`, `provenance` |
-| Authority | `authority_level` (observe / recommend / approval-required / automatic), `approval_required`, `approved_by`, `approved_at` |
-| Execution | `action_status`, `resulting_event_ids` |
-| Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version`, **`outcome_provenance`** (§20.6 source type — *added by Part IV, M9*), **`outcome_link_tier`** (§23 — *added by Part IV, M8*) |
+| Basis | `evidence_refs` (events, records, provider responses — each carrying `observed_at` per M15 and, *added by Part XIII, T3*, a **`role`**: `relied_on` / `considered` / `contradicting`), `confidence`, `provenance` |
+| Authority | `authority_level` (observe / recommend / approval-required / automatic), `approval_required`, `approved_by`, `approved_at`, **`approval_status`** (`not_required` / `pending` / `granted` / `denied` / `expired` / `overridden` — *added by Part XIII, T3*) |
+| Execution | `action_status` (enumerated in §56.1), `resulting_event_ids`, **`supersedes`** (*added by Part XIII, T3* — the decision this one replaces) |
+| Outcome | `outcome_refs`, `outcome_measured_at`, `outcome_quality`, `attribution_model_version`, **`outcome_provenance`** (§20.6 source type — *added by Part IV, M9*), **`outcome_link_tier`** (§23 — *added by Part IV, M8*), **`outcome_resolution`** (`pending` / `measured` / `partial` / `unresolved` / `contested` / `reversed`) and **`outcome_contradicting_evidence`** (§94 — *added by Part XIII, T2*) |
 | Traceability | `model`, `model_version`, `policy_version`, `schema_version` |
 
 **This is the single canonical `DecisionRecord`, and it belongs here.** Every decision
@@ -2133,6 +2133,14 @@ document that consumes it:
    A second judgement store keyed to diagnoses would fragment the exact history §25 says is
    the only thing that cannot be copied — the same argument that produced the single
    `DecisionRecord` in the first place.
+
+9. **An outcome is not an impact, and the record holds only the first.** *Added by Part XIII,
+   closing T1.* The Outcome group says what happened and how that was established. What it was
+   **worth** — a quantity, in a unit, over a window, on a stated basis — is an **Impact
+   assertion** (§95.2): the §23 attribution row given its full shape, referencing this record
+   and its outcomes, and never written into them. A `measured` impact is learnable only under
+   the same provenance test as rule 5; an `estimated` one is displayed as an estimate forever
+   and is never the baseline a later outcome is graded against (Part X P39).
 
 ### 20.8 Permissions and classification
 
@@ -2415,6 +2423,8 @@ Rules:
 - **Attribution models are versioned, and re-attribution never rewrites history.** It
   produces a new attribution row referencing the same events. Otherwise last quarter's
   numbers silently change and no one can reconcile them.
+  **That row's full shape is the Impact assertion, §95.2** (*Part XIII, T1*): category,
+  quantity, unit, window, `measurement_basis`, assumptions, confidence and tier.
 - **Absence of outcome is a valid state, permanently.** Most decisions will never have a
   measured outcome. Filling that gap with an inference is exactly the M4 failure.
 - **Multi-touch reality is acknowledged, not resolved.** A retained customer may have been
@@ -7864,3 +7874,783 @@ impossible to reinstate once the corpus is full of numbers nobody can reproduce.
 
 Nothing here is built, nothing is urgent, no provider is added, no product is started, and the
 next milestone is still Google's verification review.
+
+---
+
+# Part XIII — Decision, Outcome and Impact Provenance
+
+Added 2026-09-11 against commit `f472642`. Same rules as Parts I–XII: **documentation only.**
+No code, schema, migration, service, API, route, UI, provider, integration, flag, prompt, test or
+configuration was created or changed. **Nothing below is implemented, and nothing below is
+approved for implementation.** Remy V1's locked Definition of Done is untouched.
+
+This part makes three things **explicit contracts** that Parts III–XII have so far carried as
+fields, rules and worked examples spread across a dozen sections: **Decision Provenance**,
+**Outcome Provenance** and **Impact Provenance**, and the single **canonical provenance chain**
+that joins them across products. It is an extension and a strengthening. It redesigns nothing,
+creates no layer, no store and no document, and does not redraw §21.
+
+The honest placement first: of the fifteen things the brief asks this part to define, **twelve
+already exist** in this document and are named rather than rewritten (§91.1). The remaining
+three are real, and each is a gap between something the architecture already *says* and
+something it can currently *represent*:
+
+- **T1 (§95)** — the architecture has an outcome and has no **impact**. `appointment.booked`
+  and *"£640 of revenue"* are two different assertions with two different evidential standards,
+  and today the second has no home except a `derived` estimate that P39 forbids from ever
+  becoming a measured result. Impact needs a shape of its own, and it turns out to be one that
+  §23 already half-specified.
+- **T2 (§94.1)** — the Outcome group can say *how* an outcome was established
+  (`outcome_provenance`) and *how it links* (`outcome_link_tier`), and cannot say whether it is
+  **partial, contested, reversed or simply not yet due**. Those four are the states a corpus
+  meets most often and they are currently indistinguishable from *measured*.
+- **T3 (§93.2)** — authority records who approved and when, and cannot say that an approval
+  **expired** or that a human **overrode** the proposal with something else; and `evidence_refs`
+  cannot say which of the evidence available was the evidence the decision **turned on**.
+
+Governing principle, which is §20.6's one rule applied to the whole chain:
+
+> **EVERY STAGE OF THE CHAIN CARRIES ITS OWN PROVENANCE, ITS OWN CONFIDENCE AND ITS OWN
+> TIMESTAMP, AND NO STAGE INHERITS ANY OF THE THREE FROM THE STAGE BEFORE IT.** An observed
+> outcome does not make the decision that preceded it reasonable; a confident decision does not
+> make the outcome that followed it measured; a measured outcome does not make the impact
+> attributed to it real.
+
+**NOW: none.**
+
+---
+
+## 91. What this part adds, and what it does not
+
+### 91.1 Placement — the brief's fifteen required outputs against what exists
+
+| Required output | Where it already lives | Status |
+|---|---|---|
+| Decision Provenance | `DecisionRecord` §20.7 — identity, subject, content, basis, authority, execution, traceability; M15 (§54) as-of evidence; `action_status` (§56.1); the four profiles (rule 8) | **Exists; three fields added (§93)** |
+| Outcome Provenance | Outcome group §20.7; `outcome_provenance` (rule 5), `outcome_link_tier` (rule 6), `success_criterion` + `review_at` (rule 7); §23's five tiers; §51.1 | **Exists; one axis and one field added (§94)** |
+| Impact Provenance | `expected_effect` (§43.2) for the *forecast*; Ledger as outcome validator (§59.1); P39 for what an estimate may never become | **Gap — T1. Defined in §95** |
+| The canonical chain | §23's six-stage chain; §43.4's composed chain; §51.1's resolution chain; §59.2 *a chain is a reconstruction* | **Exists in four partial forms; stated once in §92** |
+| Key relationships and invariants | §20.7 rules 1–8; §23's rules; §24's five prohibitions | Exists; **consolidated in §92.3** |
+| Temporal integrity | `occurred_at` / `recorded_at` (§20.5); M15 and §54.2's two cut-offs; §23 re-attribution never rewrites | Exists; **one rule added (§96)** |
+| Business Graph integration | §20.2; `subject_type` / `subject_id`; P1 appointment identity; Part X N1 | Exists; **mapped in §97.1** |
+| Business Memory integration | §20.9; §63.1's hierarchy; §70's three invariants | Exists; **restated as one stack in §97.2** |
+| Governed-agent / authority integration | AAL §3, §4, §6.2, §18; §43.4 | Exists; **the ten distinctions mapped in §97.3** |
+| Provider-independence requirements | §28; §63; §70.3; **S1** (§71) | Exists; **extended to outcome and impact in §97.4** |
+| Cross-product learning relationships | §24; §59.1; §57.2's six levels | Exists; **future-product joining rule in §97.6** |
+| Proprietary decision-intelligence implications | §25; §55; §70.4 | Exists; **the learnable tuple named in §98** |
+| Tenant / privacy boundaries | §1.4; §20.8; §27; `evidence_scope` (§57.1); M19 | Exists; **applied to impact in §95.4** |
+| Contradiction / failure handling | `unattributed` (§23); `contradicting_evidence` (§42.2); §51.2; `failed` (§56.1); §11 | **Partly** — the brief's nine cases mapped in §97.5, two needing T2 |
+| Future-product extension rules | §24's four exchanges; §59.1's contribution map | Exists; **the ten-step joining test in §97.6** |
+
+### 91.2 What must not be touched, and what this part refuses to propose
+
+Unchanged and not reopened: §20.7's single `DecisionRecord` and its rule that there is one
+record and one store; §20.6's nine source types and the promotion path; §23's five tiers and
+the rule that promotion is never automatic; §24's four exchanges and five prohibitions; §27's
+five gates; §54.2's two cut-offs; §59.2's refusal of a chain table; §70's three invariants; the
+eight product boundaries; and every runtime behaviour `PROJECT_CONTEXT.md` records.
+
+This part refuses to propose: a provenance service; a causal graph store; a chain, lineage or
+episode table; a universal impact score or a cross-product currency; a "verified" flag that can
+be set; any storage of model chain-of-thought; any change to how Remy books, refuses, escalates,
+captures a lead or reports to an owner today.
+
+---
+
+## 92. The canonical provenance chain
+
+### 92.1 Ten stages, and the carrier each already has
+
+The chain the brief names, extended from §23's six stages to ten, with each stage's canonical
+carrier. **No stage introduces a new record type.** A stage is either an event, a
+`DecisionRecord` (base or profile), a field group on one, or — for impact — the attribution row
+§23 already requires and §95 now shapes.
+
+| # | Stage | Carrier | Provenance it carries | Section |
+|---|---|---|---|---|
+| 1 | **Observation** | An event on the Outcome Spine, or a provider response | `observed` / `provider_reported` / `business_provided` | §20.5, §20.6 |
+| 2 | **Business State** | The as-of whitelist on the deciding record — the values the decision turned on, as they stood at `decided_at`. **Never a stored state object** | Inherits each value's own source type | §20.4, §54.1 rule 1 |
+| 3 | **Diagnosis** | `DecisionRecord`, Finding profile — `condition`, `time_window`, ranked `hypotheses[]`, `contradicting_evidence`, `assumptions` | The weakest step in its derivation (§42.2) | §42 |
+| 4 | **Recommendation / Decision** | `DecisionRecord`, base or Recommendation profile — `reason_codes`, `explanation`, `confidence`, `success_criterion`, `review_at` | The Basis group | §20.7, §43 |
+| 5 | **Evidence** | `evidence_refs[]` — as-of references, each with `observed_at` and (**new, T3**) a `role` | Each reference resolves to a carrier with its own source type | §54.1 rule 2, §93.2 |
+| 6 | **Authority** | Authority group — `authority_level` (what was granted), `approval_required`, `approved_by`, `approved_at`, (**new, T3**) `approval_status`; agent profile's `adjudication_outcome` (what this invocation produced) | `verified` where a human acted; `derived_deterministic` where a policy did | §20.7, AAL §6.2, §18 |
+| 7 | **Action** | Execution group — `action_status` (§56.1), `resulting_event_ids`; the canonical event the action produced | `observed`, because NiteOwl did it, or `provider_reported` where a provider confirmed it | §20.7, §56.1 |
+| 8 | **Outcome** | Outcome group — `outcome_refs`, `outcome_measured_at`, `outcome_provenance`, `outcome_link_tier`, (**new, T2**) `outcome_resolution` and `outcome_contradicting_evidence` | `outcome_provenance`, written by a separate process at a later time | §20.7 rules 3, 5, 6; §94 |
+| 9 | **Impact** | **An Impact assertion — the §23 attribution row, given its full shape (T1)**. Category, quantity, unit, window, basis, assumptions, confidence, tier | Its own `provenance` and `measurement_basis`; never inherited from the outcome | §95 |
+| 10 | **Learning** | An evaluation run over the corpus (§55.2), producing a **derived artefact** with a recorded recipe (P32, §70.1) | `derived_*`, `evidence_scope` stated; **never written back to any stage below** | §20.9, §55, §58 |
+
+Two facts about the table matter more than any row:
+
+- **Stages 1–9 are all tenant-scoped rows that already have a home.** Stage 10 is the only
+  derived layer, and it is the one §70.1 says must be rebuildable from stages 1–9 alone.
+- **The chain is read from these carriers; it is never stored as a chain.** §59.2's rule is
+  unchanged and is now the rule for the whole contract: *a chain is a reconstruction, not an
+  entity.* Reconstruction uses `correlation_id`, the canonical entity references, `decision_id`,
+  `addresses_finding_id`, `evidence_refs`, `resulting_event_ids`, `outcome_refs` and the impact
+  row's references — all of which exist.
+
+### 92.2 Products contribute stages, not chains
+
+The brief's example — *one product observes, another diagnoses, another recommends, another
+measures* — is exactly §42.3's synthesis pattern and §59.1's contribution map, and needs no new
+mechanism. What makes the four contributions one chain rather than four unrelated records:
+
+| Binding | What it joins | Already exists as |
+|---|---|---|
+| `correlation_id` | Every record of one business episode, across products | §20.5, §48.2 |
+| Canonical entity references | The appointment, customer, opportunity, invoice — without any product copying another's row | §20.5 `subject_*`, §24 exchange 2 |
+| `addresses_finding_id` | A recommendation to the diagnosis that motivated it | §43.1 |
+| `evidence_refs` whose target is another product's Finding | A synthesis to the findings it rests on | §42.3 |
+| `outcome_refs` whose target is another product's event | A decision to a measurement it did not itself make | §20.7 Outcome group |
+| An Impact assertion's `outcome_refs` and `decision_refs` | Money in Ledger to a booking in Remy | §95.2 |
+
+**The rule for a product joining a chain it did not start:** it references, it never copies,
+and it contributes only through §24's four exchanges. A product that cannot see a stage it needs
+— because permission or classification withholds it — produces a weaker record with fewer
+references and lower confidence, and **never a confident record with an inferred reference**
+(§24's degradation rule; §42.3's *synthesis does not raise a tier*).
+
+### 92.3 The invariants, consolidated
+
+Every one of these is already stated somewhere in Parts III–XII. They are gathered here because
+the contract is the set, and a future product will read one section, not twelve.
+
+1. **One canonical fact, many renderings; never several independent readings.** The
+   `DecisionRecord` is one record with profiles (§20.7 rule 8); the Spine is one history (§20.5);
+   there is no second decision store, no case-level judgement shape (§48.3), no chain table
+   (§59.2), and — from this part — **no impact store** (§95.1).
+2. **References, never copies.** `evidence_refs`, `affected_entities`, `outcome_refs` and the
+   impact row's references are references (M7, §54.1). The as-of whitelist is the one place a
+   *value* is stored, and it stores what the decision turned on, not what identifies anyone.
+3. **Each stage carries its own provenance, confidence and time.** The governing principle
+   above. Concretely: the Basis group is not the Outcome group (rule 5); the outcome is not the
+   impact (T1); and a learning artefact carries `evidence_scope` and a recipe, not the
+   provenance of the rows it was built from.
+4. **Tiers are earned by evidence and never composed, promoted automatically or raised by
+   synthesis** (§23, §42.3, §59.2). A chain's claim is its weakest link.
+5. **Absence is recorded, not inferred.** `unattributed`, `withheld`, an empty outcome after
+   `review_at`, and — from this part — `outcome_resolution: unresolved` and an impact of
+   `direction: unknown` are all recorded results, never empty fields (§23, §56.1, §94).
+6. **Proposing reserves nothing, recommending authorises nothing, approving guarantees
+   nothing.** §20.7 rule 4; §43.4; and the domain choke point re-runs its own rules.
+7. **Only `observed` and `derived_deterministic` outcomes are learnable**, and only against a
+   criterion written in advance (rules 5 and 7). §95.3 extends the same rule to impact.
+8. **A learner reads every stage and writes to none of them** (§20.9, §57.2, §70.1).
+9. **No stage is ever named after a provider, dimensioned by a provider, or resident in a
+   provider's account** (§20.5, §63.1, §70.3, **S1**). §97.4 applies this to the two stages this
+   part adds.
+10. **Nothing in the chain is load-bearing for a customer-facing decision.** Remy books,
+    refuses and escalates with the whole chain absent (§24's degradation rule, §70.2).
+
+---
+
+## 93. Decision Provenance
+
+### 93.1 The contract, as the questions it must answer
+
+Decision Provenance is the capability to answer, for any material recommendation, decision,
+proposed action or autonomous action, the questions below — **from stored fields, without
+consulting a model and without reading anything recorded after `decided_at`**. The right-hand
+column is the field that answers each, and every row but three resolves to a field that exists.
+
+| Question | Answered by |
+|---|---|
+| What was observed? | `evidence_refs` whose targets are Spine events with `provenance: observed` |
+| What business state existed at that point? | The as-of whitelist (§54.1 rule 1) — capacity remaining, conflicts, reason code, hours configured, calendar freshness, as they stood at `decided_at` |
+| What evidence was available? | `evidence_refs[]`, each with `observed_at <= decided_at` |
+| **What evidence materially influenced it?** | **`evidence_refs[].role: relied_on` — new, T3 (§93.2)** |
+| What diagnosis or reasoning preceded it? | `addresses_finding_id` → the Finding, with its ranked `hypotheses[]` |
+| Which recommendation or decision was produced? | `decision_id`, `decision_type`, `action_taken`, `alternatives_considered` |
+| Its confidence? | `confidence` in the Basis group |
+| Which policy, rule, model, heuristic, workflow or learned mechanism contributed? | `reason_codes` (enumerated); `policy_version`; `model` + `model_version`; the agent profile's `deciding_check`; a product's scoring version (§43.3). **`policy_version` names the versioned decision logic whatever its kind** — a rule, a heuristic, a workflow, or a learned policy from stage 10 — and a learned policy is identified by its recipe (P32), never by a provider's model id alone |
+| Which product or agent originated or contributed? | `originating_product`; `actor_type` / `actor_id`; the agent profile's `principal` |
+| What authority was available? | `authority_level` — the band the business granted (AAL §18) |
+| Was human approval required? | `approval_required` |
+| **Granted, denied, expired, overridden, or unnecessary?** | **`approval_status` — new, T3 (§93.2)**, alongside the existing `approved_by` / `approved_at` |
+| What action was proposed? | `action_taken` with `action_status: proposed` |
+| What action was actually taken? | `action_status` (§56.1) and `resulting_event_ids` |
+| When did each stage occur? | `decided_at`, `approved_at`, the resulting events' `occurred_at` / `recorded_at`, `outcome_measured_at` — **one timestamp per stage, never one for the record** (§96) |
+| Which canonical entities were involved? | `subject_type` / `subject_id`, `correlation_id`, a Finding's `affected_entities` |
+| What version of decision logic applied? | `policy_version`, `schema_version`, `attribution_model_version` |
+
+**Explainability without chain-of-thought.** This is a constraint the record already meets and
+that this part makes binding: `explanation` is a **business-level summary written for the owner**
+(§51.3); `reason_codes` are the learnable form (§20.7 rule 1); `hypotheses[]`, `assumptions` and
+`contradicting_evidence` are the causal reasoning, stored as structured claims with tiers. **A
+model's private reasoning trace — a hidden chain-of-thought, a scratchpad, an intermediate
+completion — is never stored on any stage of the chain.** It is not evidence, it is not
+provenance, it carries no source type §20.6 recognises, and a corpus containing it would be the
+largest unclassifiable free-text surface in the product — the very hazard M7 keeps off the
+Spine. What is durable is what the decision *turned on* and what NiteOwl is prepared to *say*
+about it, and those are already the fields.
+
+### 93.2 T3 — the three fields the contract cannot currently answer
+
+*Finding. Added by Part XIII, 2026-09-11.*
+
+Three of the brief's questions have no field, and each is a cheap enumeration now and a per-row
+archaeology later (the §57.3 argument).
+
+**`evidence_refs[].role`** — `relied_on` / `considered` / `contradicting`.
+
+§54.1 rule 2 made every evidence reference an as-of reference, which answers *what was
+available*. It does not answer *what mattered*, and the two diverge in exactly the cases worth
+studying: a decision that had the contradicting evidence in front of it and proceeded, and one
+that never saw it, are the same row today. `relied_on` is the subset the as-of whitelist carries
+values for; `considered` is everything else in scope at `decided_at`; `contradicting` gives the
+base record the slot §42.2 gave only the Finding profile. **A reference with no role is
+`considered`** — the default is the weaker claim, so a forgotten field never manufactures
+reliance.
+
+**`approval_status`** — `not_required` / `pending` / `granted` / `denied` / `expired` /
+`overridden`.
+
+Today an approval is `approved_by` + `approved_at`, and a refusal is `action_status: rejected`.
+Missing: an approval nobody answered before the action's window closed (`expired` — which is
+**not** `denied` and must never be scored as a human saying no), and a human who did something
+*other* than what was proposed (`overridden`). The rule for `overridden`: **the proposed record
+is marked `overridden` and `superseded`; the action the human actually took is a new
+`DecisionRecord` with `actor_type: owner` or `staff`, its own `reason_codes`, and a
+`supersedes` reference to the proposal.** The override is therefore a decision in its own right,
+with its own outcome slot — which is what makes *"the owner ignored the recommendation and did X
+instead, and X worked"* a learnable row rather than an unexplained rejection (§43.5's *human
+overrides are signal*).
+
+**`supersedes`** — a reference from a decision to the decision it replaces. `action_status:
+superseded` (§56.1) says a record was replaced; nothing says by what. One reference closes it,
+and it is the same reference an Impact re-assessment uses (§95.2).
+
+None of the three widens the record's PII surface: two are enumerations and one is an id.
+
+---
+
+## 94. Outcome Provenance
+
+### 94.1 The eight states, and where each already lives — with the gap, T2
+
+Outcome Provenance is the mechanism by which an action or decision is associated with a
+subsequent measured result. The brief names eight states an outcome may be in. Five map to
+existing vocabulary exactly; three do not, and the three are the finding.
+
+| State | Carried by | Exists? |
+|---|---|---|
+| **Observed** | `outcome_provenance: observed` or `derived_deterministic` — the event happened, or was computed deterministically over events | Yes |
+| **Claimed** | `outcome_provenance: business_provided` (the owner says it worked) or `provider_reported` / `third_party` (a provider or external system says so). **Displayable, labelled, never learnable** | Yes |
+| **Inferred** | `outcome_provenance: ai_inferred` / `ai_predicted`. Displayable with its label; never a measured result (rule 5) | Yes |
+| **Verified** | `outcome_provenance: verified` — confirmed by a human who could know, on the §20.6 promotion path | Yes |
+| **Unresolved** | `outcome_link_tier: unattributed` — we looked and established nothing (M8); or `review_at` passed with no measurement (rule 7) | Yes, in two forms |
+| **Not yet measurable** | Before `review_at`, an empty outcome is expected (rule 7) — but nothing *says* the row is in that state rather than forgotten | **Gap** |
+| **Partial** | No representation. An action that half-completed, or an outcome measured on some of its criteria | **Gap** |
+| **Contradictory evidence** | `contradicting_evidence` exists on the Finding profile only. The Outcome group has no slot | **Gap** |
+
+**T2 — the correction: one axis and one field on the Outcome group.**
+
+*Finding. Added by Part XIII, 2026-09-11.*
+
+`outcome_resolution` — `pending` / `measured` / `partial` / `unresolved` / `contested` /
+`reversed`.
+
+| Value | Meaning | Rule |
+|---|---|---|
+| `pending` | `review_at` has not passed; measurement not yet due | The **default at write time**. It is what makes *"not yet"* distinguishable from *"nobody looked"* |
+| `measured` | Measured against the `success_criterion`, with `outcome_provenance` and `outcome_link_tier` set | The only value the Learning Layer reads as a result — and only when rule 5's provenance test also passes |
+| `partial` | Some criteria met, or an action that completed in part (`action_status: failed` after a partial write; a multi-step recommendation half-acted-on) | Carries **which** parts, by reference. Never rounded to `measured`; never scored as a failure |
+| `unresolved` | `review_at` passed; measurement attempted; nothing established | Pairs with `unattributed`. A recorded result (§23) |
+| `contested` | Measurements disagree, or `outcome_contradicting_evidence` is non-empty and unresolved | **Both readings are kept.** Confidence is lowered; nothing is discarded (§43.5) |
+| `reversed` | A later event undid the outcome — a booking cancelled, a payment refunded, a retained customer churned | The original outcome row **stands as it was measured**; the reversal is a **new** outcome row referencing it, at its own `outcome_measured_at`, with its own provenance (§96) |
+
+`outcome_contradicting_evidence[]` — references to evidence pointing away from the measured
+outcome, giving the base record what §42.2 gave the Finding.
+
+Three rules, without which the axis makes the corpus worse:
+
+- **`outcome_resolution` is a state of the measurement, not a quality of the outcome.** *Did it
+  work* is `outcome_quality` against the criterion; *can we say* is this field. Collapsing them
+  produces the M9 failure — a `pending` row read as a failure, or a `contested` one read as a
+  success by whoever wrote the query.
+- **The learnability test does not change.** Rule 5 stands: `outcome_provenance` in
+  {`observed`, `derived_deterministic`} **and** `outcome_resolution: measured`. Neither alone
+  suffices. **Learning eligibility remains derived and is never a flag** (rule 5).
+- **`reversed` never deletes, edits or re-grades the original.** It is §23's *re-attribution
+  never rewrites history* applied to outcomes. A learner may read both rows and conclude what it
+  likes about the intervention; it may not be handed a corpus in which the booking silently
+  never happened.
+
+### 94.2 What an outcome links back to
+
+The brief lists fourteen things an outcome must be able to reach. Every one is reached **by
+reference from the decision the outcome is attached to**, because the outcome is a group on
+that record and the record already holds the rest of the chain. Stated once so it is not
+re-argued per product:
+
+| Reaches | Through |
+|---|---|
+| Observation, evidence, business state | `evidence_refs` and the as-of whitelist on the same record |
+| Diagnosis | `addresses_finding_id` |
+| Recommendation, decision | The record itself; `supersedes` where replaced |
+| Authority, approval | The Authority group on the same record |
+| Action or non-action | `action_status`, including `withheld` (M17) — **a withheld candidate has an outcome slot too**, which is what makes the comparison group comparable |
+| Responsible product / agent | `originating_product`, `actor_*`, the agent profile |
+| Business entities | `subject_*`, `affected_entities`, `correlation_id` |
+| Time window | `time_window` on the Finding; `review_at` and `outcome_measured_at` on the outcome |
+| Measurement source | `outcome_refs` — the events or records the measurement was read from, each with its own `source_product` and `source_provider` |
+| Verification strength | **The pair** `outcome_provenance` × `outcome_link_tier` — never a new scalar. Two fields already carry it, and a third would invite a score that averages them |
+| Resulting impact | The Impact assertion(s) that reference this record — §95 |
+
+### 94.3 Many-to-many, by reference
+
+**A single outcome may relate to several decisions** — a retained customer touched by Pulse,
+Remy and Beacon — and it does: each decision's `outcome_refs` points at the same event, each
+with its own `outcome_link_tier`, exactly as §23's multi-touch rule already requires (*several
+`attributed_to` links with a stated model, not one winner*). **A single decision may produce
+several actions and several outcomes**: `resulting_event_ids` and `outcome_refs` are lists.
+**Several products may contribute measurements to one lineage**: the measurement is an event on
+the Spine with the contributing product's `source_product`, and the decision references it.
+There is no join entity, no outcome table keyed to decisions, and no outcome that exists outside
+the Spine and the record — which is what keeps §59.2's rule and M7's erasure model intact.
+
+---
+
+## 95. Impact Provenance — T1
+
+*Finding. Added by Part XIII, 2026-09-11.*
+
+### 95.1 An outcome is not an impact, and the architecture currently has only one of them
+
+`appointment.booked` is an outcome: it happened, its provenance is `observed`, and NiteOwl did
+it. *"That booking was worth £180, and it was revenue the business would otherwise have lost"*
+is an impact: a **quantity, in a unit, over a window, on a basis, with assumptions** — and none
+of those five is established by the event. Today the architecture holds the first as an event
+and the second nowhere: `expected_effect` (§43.2) is the *forecast* made before the outcome;
+`outcome_quality` is a grade against a criterion; and P39 says an estimate may never enter the
+Spine as a measured outcome — which is correct, and leaves a *measured* impact with no home
+either.
+
+The gap is expensive in a specific way. Without a distinct impact shape, the pressure Part X
+§76 (N2) named — a number presented as recoverable money — has only one place to land, and it
+is the outcome. A `£640` written into a payload next to `appointment.booked` becomes
+indistinguishable from the fact that the appointment was booked, and the corpus cannot later
+separate *what happened* from *what someone once thought it was worth*.
+
+**The shape already half-exists.** §23 requires that re-attribution *"produces a new attribution
+row referencing the same events"*, with `attribution_model_version`, a window, a tier and a
+method — and never specified what else the row holds. An Impact assertion **is that row, given
+the fields it was always going to need.** No new store: the attribution row was already
+tenant-scoped, append-only, versioned and reference-only.
+
+### 95.2 The Impact assertion
+
+| Field | Rule |
+|---|---|
+| `org_id`, `impact_id`, `recorded_at` | Tenant-scoped; append-only |
+| `outcome_refs[]`, `decision_refs[]` | What this impact is attributed to. Lists — one impact may rest on several outcomes and be attributed to several decisions (§94.3) |
+| `impact_category` | From an **open, versioned enumeration** — §95.5. Product-owned extensions permitted, on the §42.2 `condition` model |
+| `direction` | `positive` / `negative` / `unknown`. **`unknown` is a recorded result** |
+| `quantity` + `unit` | A **range** or a point with stated precision; currency, hours, slots, percentage points, count. **Never a fabricated point** (§43.2). May be absent when `direction` is known and magnitude is not |
+| `time_window` | The period the impact is claimed over. **Never annualised, extrapolated or lifetime-multiplied** beyond the window measured (§88.2's discipline, generalised) |
+| `measurement_basis` | `measured` / `estimated` / `projected` / `inferred` — **what kind of number this is** |
+| `provenance` | §20.6 source type — **how** it was established. `measured` requires `observed` or `derived_deterministic`; `estimated` and `projected` are `derived_*` with an `estimate_basis` (§88.4); `inferred` is `ai_inferred` / `ai_predicted` |
+| `link_tier` | §23's five tiers — how strongly the impact is attributed to the decision. A `measured` impact can still be `correlated_with` its decision |
+| `attribution_model_version` | §23, unchanged |
+| `assumptions[]` | `assumed` source type, visible (§20.6, §43.2) |
+| `confidence` | On the assertion, as everywhere else |
+| `evidence_refs[]` | With `observed_at`, per M15 |
+| `contradicting_evidence[]` | Evidence pointing the other way |
+| `evidence_scope` | `tenant` / `cohort` / `platform` / `external` (§57.1). A benchmark-derived impact must say so |
+| `measured_by_product` | Which product produced the assertion. **Ledger for anything financial** (§59.1) |
+| `supersedes` | Re-assessment appends; the earlier assertion stands (§23) |
+
+### 95.3 Five rules
+
+1. **An impact is never an event and never an outcome.** It does not go on the Spine. It is
+   not written into `outcome_refs`. It is not the baseline a later outcome is graded against
+   (P39). It references the outcome; the outcome never references it.
+2. **Only `measurement_basis: measured` with `provenance` in {`observed`,
+   `derived_deterministic`} is learnable**, and only when the outcomes it rests on are
+   themselves learnable (§94.1). An `estimated` impact is displayed as an estimate, with its
+   basis and assumptions, forever — it never promotes to `measured` by age, repetition or use.
+3. **Opposing impacts are both kept.** An action that created capacity and lost a customer
+   produces two assertions, one per direction, each with its own evidence. **They are never
+   netted into one row.** A surface may present a net; the corpus never stores one, because the
+   net discards the evidence that would let the trade be re-judged.
+4. **The unit is the product's own, and no cross-product currency exists.** §43.3's refusal of a
+   universal priority score applies: a saved hour and a margin point are not summed centrally.
+   A financial impact is denominated in the owner's currency and produced or validated by
+   Ledger; a capacity impact in slots or hours by the product that owns capacity. Conversion
+   between them is an *estimate* with an `estimate_basis`, and is labelled as one.
+5. **Every surface that shows an impact shows its `measurement_basis`, its `link_tier` and its
+   window.** §23's display rule, with the one addition the money makes necessary: *"£640"*
+   and *"an estimated £400–£900 over the four weeks measured, attributed by a 30-day window"* are
+   different statements, and only the second is honest.
+
+### 95.4 Tenant and privacy boundary
+
+An Impact assertion is tenant-scoped like every stage before it. It holds no personal data —
+quantities, units, windows and references only, under M7's rule. It carries `evidence_scope`, so
+a cohort-derived impact is visibly one and is barred from being rendered as a fact about this
+business (§57.1). It enters no cohort statistic without §27's five gates. And it is a **derived
+artefact under M19**: erasure of the referenced entity redacts the entity; the assertion's
+references dangle honestly and its quantity stands, exactly as a Spine row's counts do after
+redaction. Nothing new is needed; the boundary is the existing one applied to a new row shape.
+
+### 95.5 The category vocabulary — open, versioned, not the last word
+
+The brief's categories, as a starting **core** enumeration. Products extend it on the §42.2
+`condition` model — product-owned codes, versioned, never prose — and **this list is not the
+only future set**:
+
+`revenue.gained` · `revenue.protected` · `revenue.lost` · `cost.avoided` · `cost.reduced` ·
+`capacity.created` · `time.saved` · `conversion.improved` · `retention.improved` ·
+`customer_experience.improved` · `service_level.improved` · `utilisation.improved` ·
+`operational_risk.reduced` · `compliance_risk.changed` · `impact.unresolved` ·
+`impact.negative`
+
+Two naming rules carried over from §20.5: a category names a **business consequence in
+NiteOwl's own vocabulary**, never a provider's metric; and a category that only makes sense
+inside one product is a product extension, not a core code.
+
+---
+
+## 96. Temporal integrity — the rule that makes every stage its own instant
+
+Everything this part adds is temporally governed by rules that already exist: `occurred_at` is
+not `recorded_at` (§20.5); a decision is judged only on `observed_at <= decided_at` (§54.2);
+outcomes are measured against a criterion written before they were known (rule 7);
+re-attribution appends and never rewrites (§23). One rule is added, because the chain now has
+ten stages and the temptation to give a record one timestamp grows with each:
+
+> **EACH STAGE OF THE CHAIN CARRIES THE INSTANT IT OCCURRED, AND A LATER STAGE NEVER
+> BACK-DATES, OVERWRITES OR RE-DERIVES THE TIMESTAMP OF AN EARLIER ONE.** `decided_at`,
+> `approved_at`, an action's `occurred_at`, `outcome_measured_at`, an impact's `recorded_at` and
+> an evaluation run's cut-off are six different facts, and a question about *what was known when*
+> is answered by comparing them, never by reading one.
+
+The five things the brief asks the architecture to distinguish, each resolved by these rules:
+
+| Distinguish | Rule |
+|---|---|
+| What was known at decision time | Evidence with `observed_at <= decided_at`, `role: relied_on` first (§54.2, §93.2) |
+| What became known later | Evidence with `observed_at > decided_at` — admissible for *did it work*, inadmissible for *was it reasonable* |
+| The business state at decision time | The as-of whitelist, frozen at write (§54.1). **Never** a recomputation of Operating State, which is a read model and returns today's answer (§20.4) |
+| Later corrections to data | A correction is a **new event** with `causation_id` to the fact it corrects (§20.5). The decision's whitelist keeps the value it relied on; a retrospective judgement may note the correction; **the decision is not re-graded as unreasonable for relying on data that was later corrected** |
+| Retrospective analysis and subsequent outcomes | A new record — an evaluation run (§55) or an Impact re-assessment (§95.2) — with its own cut-off stated and `supersedes` set. The original is untouched |
+
+The two questions the brief poses are §54.2's two cut-offs, and the contract answers them from
+different rows:
+
+- *Given what NiteOwl knew at that moment, why was this recommendation made?* — the Basis and
+  Authority groups, the as-of whitelist, `relied_on` evidence, the Finding. Nothing after
+  `decided_at`.
+- *Knowing what happened afterwards, was it effective?* — the Outcome group at
+  `outcome_resolution: measured`, the criterion, the Impact assertion(s). Nothing about the
+  reasonableness of the decision.
+
+**A decision can be reasonable and unsuccessful, and unreasonable and successful** (§54.2). The
+corpus must be able to hold both, and a chain whose stages share a timestamp cannot.
+
+---
+
+## 97. Integration — Graph, Memory, authority, providers, failure, products
+
+### 97.1 Business Graph — context, not audit log
+
+Provenance connects to the Graph through canonical entity references, and only through them.
+The brief's fourteen entity kinds map onto the entity vocabulary Parts I–X already fixed or
+reserved; **none becomes a provider's object**, and none is copied into a provenance row:
+
+| Brief's concept | Canonical reference | Note |
+|---|---|---|
+| customer, lead, appointment | `customer`, `lead`, **`appointment`** | P1's identity rule: anything appointment-shaped is `appointment`, never `lead` |
+| job, opportunity, transaction, campaign | Reserved by §25 and §59.1 for Forge, Scout, Ledger, Pulse | Named to mark a boundary; none exists |
+| capacity, business location, employee/resource, service, product | Operating Profile and Graph entities (§3.2, §20.2) | `service` today is the Knowledge Base `services` category; a canonical service identity is the deferred `requested_service` seam (`PROJECT_CONTEXT.md`) and **is not created here** |
+| business problem, business objective | A Business Problem Case (§48) and its `desired_outcome` | Already reference-linked by `correlation_id` |
+
+**The Graph provides the context around a chain; the chain never becomes the Graph's source of
+truth.** A decision references the appointment; it does not define it. This is the direction
+§20.9 fixes for the learner, applied to every stage: **provenance reads the Graph and writes
+nothing to it.** And Part X **N1** stands with more force here than anywhere: a customer's own
+CRM, accounting or field-service system may be *referenced* as a `measurement_source` and may
+never be the only place a stage of the chain exists — the test is whether the chain stays
+readable and comparable after the customer disconnects that system.
+
+### 97.2 Business Memory — the stack, stated once
+
+```
+Business Memory              what the business is, how it operates, what it knows   §20.9, §3.6
+        ↓ read by
+Decision / Outcome / Impact Provenance
+                             what NiteOwl observed, diagnosed, recommended,
+                             decided, was permitted to do, did, measured,
+                             and what it was worth                                   §20.7, §92–§95
+        ↓ read by
+Measured Outcome Learning    which decisions produced which measured outcomes
+                             and impacts, under which conditions                     §24, §55, §59
+        ↓ read by
+Proprietary Decision Intelligence
+                             improved diagnosis, prioritisation, recommendation,
+                             timing and intervention, as derived artefacts           §25, §70
+```
+
+This is §63.1's hierarchy with the provenance layer named in the position it has always
+occupied — between Memory and learning — and it does not redraw §21. The arrows point one way,
+and two sentences from the brief are adopted as binding statements of what they mean:
+
+> **Memory is not itself intelligence. Orchestration is not itself intelligence.**
+
+Memory holds what is known; orchestration does what is permitted; **the compounding advantage
+is learning which decisions and actions produce which measurable outcomes under which business
+conditions**, and that requires the provenance layer between them to be complete, temporally
+honest and provider-less. §70's three invariants govern the top two layers unchanged: derived
+never primary; dependency downward only; rent the computation, own the corpus, the recipe and
+the evaluation. **The provenance chain is the corpus.**
+
+### 97.3 Governed agents and authority
+
+The brief's chain — *intent → recommendation/decision → authority → approval where required →
+execution → verification → outcome* — is §43.4's composed chain, and the ten distinctions it
+asks the architecture to keep separate each already have a carrier, with T2 and T3 supplying
+the two that were missing:
+
+| Distinction | Carrier |
+|---|---|
+| Ability to recommend | AAL §18 band `recommend`; produces `action_status: proposed` |
+| Ability to propose an action | The same — a proposal is a record, and it reserves nothing (rule 4) |
+| Authority to execute | `authority_level` — the band **granted** per `(org, credential, capability)`, never asserted by the agent (AAL §18) |
+| Human-approved execution | `approval_required: true`, `approval_status: granted`, `approved_by`, `approved_at` |
+| Autonomous execution within delegated limits | Band `bounded_automatic` or `policy_automatic`, with `policy_version` recorded so the action is replayable against the policy that permitted it |
+| Execution failure | `action_status: failed`, with `reason_codes` |
+| **Partial execution** | `action_status: failed` **plus `outcome_resolution: partial`** carrying which steps completed, by reference (T2) |
+| Successful execution | `action_status: executed`, `resulting_event_ids` |
+| Outcome verification | `outcome_provenance` × `outcome_link_tier` × `outcome_resolution` |
+| Refused, or could not tell | `adjudication_outcome: deny` vs `unable_to_authorise` — never collapsed (AAL §4) |
+
+And the rule the brief states, which AAL §18 already holds and this part makes chain-wide:
+
+> **Authority is never inferred from the fact that a technical integration permits an action.**
+> A provider token that *can* cancel an appointment is not authority to cancel one. Authority
+> is the band the business granted, recorded on the decision; the kernel's five checks
+> adjudicate the instance; and the domain choke point re-runs its own rules regardless. **An
+> action with no `authority_level` on its record is unattributable, and unattributable is not
+> a kind of permitted.**
+
+### 97.4 Provider independence — the two new stages are provider-less too
+
+§28's ownership table and §63.1's hierarchy already place decisions, recommendations, evidence
+relationships, action history and outcome history with NiteOwl. This part adds two rows to the
+same list and one rule.
+
+| Concern | Owner | Note |
+|---|---|---|
+| **Impact assertions and their attribution history** | **NiteOwl** | §95. A provider's analytics may be *evidence*; they are never the assertion. Ledger may *read* an accounting provider; the impact row is NiteOwl's |
+| **Outcome resolution state** | **NiteOwl** | §94. Whether an outcome is measured, partial, contested or reversed is a NiteOwl judgement over NiteOwl-held references, never a provider's status field |
+
+The rule is **S1** (§71), applied to the two stages Part IX did not have in front of it:
+
+> **A provider is an attribute of an outcome or an impact, never a dimension of one.** An
+> outcome measured while Ledger read one accounting provider and re-measured after a switch must
+> remain one comparable series. `source_provider` is recorded on the measurement event, as
+> §20.5 already requires, and nowhere else.
+
+External systems remain systems of record for their domains — the calendar for the event, the
+accounting system for the ledger entry, the CRM for the customer's own contact history. NiteOwl
+duplicates none of it. What it keeps is what §70.3 says it must: the references, the canonical
+identities, the as-of values a decision turned on, the derived assertions and their provenance.
+**No external provider owns, or is the sole representation of, any stage of the chain** — which
+is the confirmation §98 and the completion report both require.
+
+### 97.5 Failure and contradiction — the brief's nine cases
+
+Each mapped to how the chain records it. **Nothing here forces certainty**, and two rows
+depend on T2.
+
+| Case | Recorded as |
+|---|---|
+| An action fails | `action_status: failed`, `reason_codes`, no effect event (AAL §6.2's rule that a refused invocation produces a record and no event applies to a failed one too — nothing happened, so nothing is recorded as having happened). The outcome slot is filled at `review_at` like any other — a failed action can still have a measurable consequence |
+| An external provider reports inconsistent state | Two `provider_reported` events with `contradicting` references to each other; the decision's outcome goes `contested` (T2). Never "the later one wins" by default — §11's truthful-degradation rule |
+| Outcome data arrives late | `occurred_at` ≠ `recorded_at` (§20.5). A `review_at` that passed as `unresolved` may be followed by a **new** `measured` row; the `unresolved` row stands as the record that, at that date, nothing was known |
+| An outcome cannot be verified | `outcome_link_tier: unattributed` with method and window; `outcome_resolution: unresolved`. A recorded result, permanently valid (§23) |
+| Different sources disagree | `outcome_resolution: contested`, both measurements referenced, confidence lowered, nothing discarded (§43.5) |
+| The original diagnosis later appears incorrect | A **new** Finding with `supersedes` (§51.2, *reopening adds*). The original Finding stands with its provenance; the recommendation it motivated is judged on §54.2's first cut-off, not on what was later learned |
+| A customer reverses an earlier outcome | `outcome_resolution: reversed` on a **new** outcome row referencing the original; the Impact assertion, if any, gets a re-assessment with `supersedes` and, where warranted, an opposing-direction row (§95.3 rule 3) |
+| Positive and negative outcomes simultaneously | Two Impact assertions, one per direction, never netted (§95.3 rule 3); `outcome_quality` graded on the declared criterion alone, with the unintended consequence recorded as its own impact |
+| Multiple interventions make attribution uncertain | §23's multi-touch rule: several `attributed_to` or `correlated_with` links with a stated model, **never one winner**, and `unattributed` where the method established nothing. A future experiment (X6) is the only path to `caused_by`, and §56.2 already keeps it possible without building it |
+
+The standing rule across all nine is §23's, quoted because it is the one every case above
+reduces to: **not knowing is a finding. It is recorded as one, and it is never rendered as its
+nearest confident neighbour.**
+
+### 97.6 Product independence, and how a future product joins
+
+The eight standalone products — Remy, Ledger, Atlas, Scout, Pulse, Forge, Nova, Beacon — keep
+every boundary §24 and §59.1 draw. The provenance contract is a **NiteOwl Core contract that
+each product writes to and reads from through §24's four exchanges**, and it is the reason the
+eight can compound without becoming one application: each contributes stages, none owns the
+chain, and a product removed from the line-up leaves every other product's records complete and
+its own records readable.
+
+The brief's ten-step test for a future product, each step mapped to what it already reduces to:
+
+| A future product must be able to | Which means |
+|---|---|
+| 1. produce an observation | Emit a canonical event to the Spine, named in NiteOwl's vocabulary (§20.5) |
+| 2. reference canonical business context | `org_id` + `subject_type` / `subject_id`, by reference (§24 exchange 2) |
+| 3. contribute evidence | Its events and Findings become valid `evidence_refs` targets for other products' records (§42.3) |
+| 4. create or contribute to a diagnosis | Write a Finding-profile `DecisionRecord` with a **product-owned** `condition` enumeration (§42.2) |
+| 5. recommend a decision | Write a Recommendation-profile record with `success_criterion` and `review_at` first (rule 7), ranked in its own terms (§43.3) |
+| 6. request or verify authority | Register capabilities in the registry; hold bands per `(org, credential, capability)`; default `observe` (AAL §16, §18) |
+| 7. perform or observe an action | Execute only through its **own** domain choke point, or observe another product's event by reference — **never write another product's facts** (§24) |
+| 8. measure an outcome | Emit the measurement as an event with its `source_product`; other products reference it in `outcome_refs` (§94.3) |
+| 9. measure resulting impact | Write an Impact assertion in **its own unit**, with `measurement_basis` and `evidence_scope` (§95); route financial impact through Ledger's validation |
+| 10. contribute to governed cross-product learning | Its records enter the tenant's corpus under §57.2's Level 6 — **inside one tenant** — and cross a tenant boundary only through §27's gates, never by default |
+
+**A product that can do all ten has joined the chain with no redesign, because none of the ten
+requires it to know how any other product is built.** That is the whole test, and it is the
+test §24 has applied since Part III.
+
+---
+
+## 98. Closed-loop learning, and the proprietary tuple
+
+### 98.1 The loop, stage by stage
+
+```
+Observe   → Spine event                              stage 1   observed
+Diagnose  → Finding                                  stage 3   weakest-step provenance
+Explain   → explanation + reason_codes + hypotheses  stage 4   business-level, no chain-of-thought
+Recommend → proposed record, criterion first         stage 4   reserves nothing
+Approve / Act → authority, approval_status, action   stages 6–7
+Measure   → outcome, resolution, then impact         stages 8–9 own provenance each
+Learn     → evaluation run, derived artefact         stage 10  reads all, writes none
+```
+
+Learning is **from measured outcomes and impacts** wherever they exist, and the contract makes
+*"wherever they exist"* checkable: rule 5's provenance test, T2's `measured` resolution, T1's
+`measurement_basis: measured`, and **M16's denominator** — rejected, withheld, expired,
+overridden, partial and unresolved rows all stay in the count. Interaction frequency, model
+confidence and owner satisfaction are **not** outcomes and may not stand in for them; the
+first is telemetry, the second is a Basis-group field, and the third is `business_provided`,
+displayable and never learnable.
+
+### 98.2 The learning questions, answered from fields
+
+| Question | Read from |
+|---|---|
+| Which recommendation worked? | `outcome_quality` where `outcome_resolution: measured` and provenance learnable, against `success_criterion` |
+| For which businesses? | `org_id` and the Operating Profile — **tenant scope**; a cohort answer needs §27 |
+| Under what conditions? | The as-of whitelist and the Finding's `condition` + `time_window` |
+| At what time? | `decided_at`, `occurred_at`, `review_at` — separately (§96) |
+| With what confidence? | Basis `confidence`, and the outcome's `link_tier` — distinct |
+| Which intervention failed? | `outcome_quality` below criterion; `action_status: failed`; `partial` |
+| Why might it have failed? | The four answers the brief names, separable only because each stage has its own provenance: **diagnosis wrong** — a later Finding `supersedes` it; **recommendation wrong** — diagnosis stands, criterion missed; **execution poor** — `failed` or `partial` with reason codes; **environment different** — `outcome_contradicting_evidence` and `unattributed` |
+| Which interventions consistently produce measurable value? | Impact assertions with `measurement_basis: measured`, aggregated under §55.2's metrics, with §55.1's denominator |
+| What evidence predicted success? | `evidence_refs[].role: relied_on` across measured rows — T3 is what makes this computable |
+| How should decision policy change? | A new `policy_version`, proposed by the learner (§20.9) and **adopted by a recorded decision**, never by the learner writing it |
+
+### 98.3 The proprietary tuple
+
+The strategic asset is not the row count. It is the accumulation, per tenant, of the structured
+tuple:
+
+> **business condition + evidence + decision + intervention + measured outcome + measured
+> impact**
+
+— with every element carrying its own provenance, its own time and its own scope, so that
+*what works, for whom, when, why, under which constraints and with what measurable result* is a
+query over stored facts rather than a model's recollection. Parts III, VII and IX each argued
+one arc of why this compounds; the provenance contract is what makes the tuple **complete**:
+without T1 the last element is missing, without T2 the fifth is unreliable, without T3 the
+second cannot be separated into what was seen and what was used.
+
+§25's copy test still governs: a competitor can copy every layer beneath this one. It cannot
+copy a tenant's accumulated tuples, and — §70.4 — those tuples are what let NiteOwl measure
+whether any rented component's replacement is worse. **Privacy-safe and tenant-isolated by
+construction**: every element is tenant-scoped, `evidence_scope` marks the one that is not, §27's
+gates stand between a tenant tuple and any cohort, and M19's rebuild-without keeps the derived
+layer erasable. No cross-tenant learning is created, enabled or scheduled by this part.
+
+---
+
+## 99. Classification, contradictions and verdict
+
+### 99.1 Classification
+
+Using §30's bands unchanged, continuing the numbering.
+
+**ALREADY EXISTS — no change needed**
+
+The twelve rows of §91.1 marked *Exists*; §20.7's record and profiles; §23's tiers; §24's
+contract; §54–§58's M15–M19 corrections; §59.2's reconstruction rule; §70's invariants; S1.
+
+**STRENGTHEN DOCUMENTATION — done in this pass**
+
+The canonical chain stated once (§92); the Decision Provenance question table (§93.1); the
+chain-of-thought prohibition made binding (§93.1); the outcome-state mapping (§94.1); the
+Memory stack (§97.2); the authority distinctions (§97.3); the nine failure cases (§97.5); the
+ten-step joining test (§97.6).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now, and what triggers it |
+|---|---|---|
+| **P44** | **`outcome_resolution` and `outcome_contradicting_evidence` on the Outcome group** (T2, §94.1) | Same argument as §57.3: the first outcome row written without the axis is a row that later needs guessing at. Triggers with L18 (Decision & Outcome Memory) — the field is in the shape before the first row |
+| **P45** | **`evidence_refs[].role`, `approval_status` and `supersedes` on the base record** (T3, §93.2) | Enumerations and an id, costing nothing before the first row and unrecoverable after. Same trigger as P44 |
+| **P46** | **The Impact assertion shape and its core category vocabulary** (T1, §95.2, §95.5) | Defined so the first product to measure money — Ledger, or a Remy outcome validated by an owner — has a row to write that is not an event. **Triggers with the first measured impact**, which requires L18 and a second product or an owner-facing outcome feature; not before |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L34** | **Owner-facing chain view** — *why was this recommended, and what came of it*, rendered from the two cut-offs separately (§96) | The first recommendation with a measured outcome; and §51.3's structural requirement already covers the explanation half |
+
+**MUCH LATER** — unchanged. X1–X6 stand; nothing here moves them or adds to them.
+
+**NOW: none.** No code, schema, migration, service, API, UI, provider, integration, flag, prompt,
+test or configuration item. Remy V1's locked Definition of Done is untouched, and no V1 or V1.1
+item was reopened, promoted or rescoped.
+
+| Band | Part XIII items |
+|---|---|
+| ALREADY EXISTS | 12 of 15 required outputs |
+| STRENGTHEN DOCUMENTATION | 8 consolidations |
+| PREPARE | 3 (P44–P46) |
+| LATER | 1 (L34) |
+| **NOW** | **0** |
+
+### 99.2 Contradictions found
+
+**None that required a design change.** Three things worth recording, because each is the kind
+of ambiguity that becomes a contradiction later if left implicit:
+
+- **§23's attribution row was underspecified, not wrong.** It required a new row per
+  re-attribution with a version, window and method, and never said what else the row held.
+  §95.2 fills it in. Nothing §23 says is altered; the row it always required now has a shape.
+- **`outcome_quality` was doing two jobs.** Read carelessly it answers both *did it work* and
+  *can we say* — and rule 7's *"an empty outcome after `review_at` is a result"* was the only
+  thing separating *pending* from *forgotten*. T2 gives the second job its own field. Rule 7 is
+  unchanged and now has a value to point at.
+- **Part XI §83.1 and Part XII §88.4 already built impact discipline for one product** — the
+  `estimate_basis`, the range-never-point rule, the no-annualisation rule, the estimate-never-
+  baseline rule. §95 generalises those to every product **without changing any of them**: a
+  Phase 1 Scan estimate is exactly an Impact assertion with `measurement_basis: estimated`,
+  `provenance: derived_deterministic` and an `estimate_basis`, which is what it was already
+  specified to be. The Scan needs no change to comply.
+
+**One future hardening opportunity, not started:** `PROJECT_CONTEXT.md` records that
+`extracted.service` is not a trusted service identity and that the `requested_service` seam is
+deferred. §97.1 maps the brief's `service` entity onto the Knowledge Base category for now. When
+that seam is eventually designed, the provenance rows that reference a service will need the
+canonical identity rather than the label — which is an argument for designing the seam before
+the first outcome row references a service, not for doing either now.
+
+### 99.3 Verdict
+
+The brief asked for three contracts and a chain. The document already held most of the chain
+and two of the contracts in pieces; the third — impact — was genuinely absent, and its absence
+was the one that would have hurt, because it is where a number becomes indistinguishable from a
+fact. Three findings, three PREPARE items, one LATER item, no store, no service, no table, no
+layer, no redesign. Decision Provenance answers seventeen questions from stored fields; Outcome
+Provenance can now say *not yet*, *in part*, *disputed* and *undone* without lying; Impact
+Provenance holds a quantity that knows what kind of number it is.
+
+Nothing here is built, nothing is urgent, no provider is added, no product is started, no
+boundary moves, and the next milestone is still Google's verification review.
