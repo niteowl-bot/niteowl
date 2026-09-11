@@ -48,16 +48,16 @@ import {
   type ScanReport,
   type ScanReportFinding,
   type ScanRunContext,
+  SCAN_RULE_SET_VERSION,
 } from "@/lib/freetools/scanTypes";
 
 /**
- * The rule-set version, stored per run.
- *
- * A change to any threshold, cap or ordering rule below is a version
- * change: two runs graded by different rules are not comparable, and
- * docs/AGENT_ACCESS_LAYER.md §25.2 requires that to be visible.
+ * The rule-set version is defined ONCE, in `scanTypes`, and shared with
+ * the sizing module so the report and the estimate basis of one run
+ * always carry the same identity. Re-exported here for callers that
+ * read it alongside the finding engine.
  */
-export const SCAN_RULE_SET_VERSION = "v1";
+export { SCAN_RULE_SET_VERSION };
 
 /** Quote an answer as the owner gave it (§84.2). */
 function evidenceOf(

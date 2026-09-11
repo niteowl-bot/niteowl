@@ -42,6 +42,7 @@ import {
   SCAN_COUNT_MAX,
   SCAN_COUNT_MIN,
   SCAN_QUESTION_IDS,
+  SCAN_QUESTIONS,
 } from "@/lib/freetools/scanQuestions";
 import type {
   ContactChannel,
@@ -107,6 +108,36 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 /** Absent means "not answered". A blank string is malformed, not absent. */
 const isAbsent = (v: unknown): boolean => v === undefined || v === null;
+
+/**
+ * Which questions are required, READ FROM THE QUESTION DEFINITIONS.
+ *
+ * `SCAN_QUESTIONS` is the single source of truth for the contract
+ * (§87.2), including each question's `required` flag. The validator
+ * consumes that flag rather than keeping its own list of mandatory
+ * ids, so requiredness cannot be changed in one place and not the
+ * other.
+ */
+const REQUIRED_QUESTION_IDS: ReadonlySet<ScanQuestionId> = new Set(
+  SCAN_QUESTIONS.filter((q) => q.required).map((q) => q.id)
+);
+
+/**
+ * True when the answer is absent. Records a `required` error when the
+ * question's definition says it is required; an absent OPTIONAL answer
+ * is simply absent, and nothing is supplied in its place.
+ */
+function absent(
+  id: ScanQuestionId,
+  raw: unknown,
+  errors: ScanValidationError[]
+): boolean {
+  if (!isAbsent(raw)) return false;
+  if (REQUIRED_QUESTION_IDS.has(id)) {
+    errors.push(err(id, "required", `${id}: an answer is required`));
+  }
+  return true;
+}
 
 /**
  * A count answer: `{kind:"count", value}` with an integer in range, or
@@ -269,8 +300,8 @@ export function validateScanAnswers(input: unknown): ScanValidationResult {
   // ── Q1 — multi-select, at least one ────────────────────────────
   let q1: ContactChannel[] | null = null;
   const rawQ1 = input.q1_channels;
-  if (isAbsent(rawQ1)) {
-    errors.push(err("q1_channels", "required", "q1_channels: an answer is required"));
+  if (absent("q1_channels", rawQ1, errors)) {
+    // Reported above if required; nothing to read either way.
   } else if (!Array.isArray(rawQ1)) {
     errors.push(err("q1_channels", "malformed", "q1_channels: expected a list"));
   } else if (rawQ1.length === 0) {
@@ -304,67 +335,51 @@ export function validateScanAnswers(input: unknown): ScanValidationResult {
     }
   }
 
-  // ── Q2 — required single-select ────────────────────────────────
+  // ── Q2 — single-select ─────────────────────────────────────────
   let q2: ReachableWindow | null = null;
-  if (isAbsent(input.q2_reachable)) {
-    errors.push(err("q2_reachable", "required", "q2_reachable: an answer is required"));
-  } else {
+  if (!absent("q2_reachable", input.q2_reachable, errors)) {
     q2 = readChoice("q2_reachable", input.q2_reachable, REACHABLE_WINDOWS, errors);
   }
 
-  // ── Q3 — required count or "not sure" ──────────────────────────
+  // ── Q3 — count or "not sure" ───────────────────────────────────
   let q3: CountAnswer | null = null;
-  if (isAbsent(input.q3_enquiries_per_week)) {
-    errors.push(
-      err("q3_enquiries_per_week", "required", "q3_enquiries_per_week: an answer is required")
-    );
-  } else {
+  if (!absent("q3_enquiries_per_week", input.q3_enquiries_per_week, errors)) {
     q3 = readCount("q3_enquiries_per_week", input.q3_enquiries_per_week, errors);
   }
 
-  // ── Q4 — optional count or "not sure" ──────────────────────────
+  // ── Q4 — count or "not sure" ───────────────────────────────────
   let q4: CountAnswer | null = null;
-  if (!isAbsent(input.q4_unanswered_per_week)) {
+  if (!absent("q4_unanswered_per_week", input.q4_unanswered_per_week, errors)) {
     q4 = readCount("q4_unanswered_per_week", input.q4_unanswered_per_week, errors);
   }
 
-  // ── Q5 — required single-select, no "not sure" ─────────────────
+  // ── Q5 — single-select, no "not sure" ──────────────────────────
   let q5: MissVisibility | null = null;
-  if (isAbsent(input.q5_miss_visibility)) {
-    errors.push(
-      err("q5_miss_visibility", "required", "q5_miss_visibility: an answer is required")
-    );
-  } else {
+  if (!absent("q5_miss_visibility", input.q5_miss_visibility, errors)) {
     q5 = readChoice("q5_miss_visibility", input.q5_miss_visibility, MISS_VISIBILITIES, errors);
   }
 
-  // ── Q6 — required single-select ────────────────────────────────
+  // ── Q6 — single-select ─────────────────────────────────────────
   let q6: FollowupPractice | null = null;
-  if (isAbsent(input.q6_followup)) {
-    errors.push(err("q6_followup", "required", "q6_followup: an answer is required"));
-  } else {
+  if (!absent("q6_followup", input.q6_followup, errors)) {
     q6 = readChoice("q6_followup", input.q6_followup, FOLLOWUP_PRACTICES, errors);
   }
 
-  // ── Q7 — required single-select ────────────────────────────────
+  // ── Q7 — single-select ─────────────────────────────────────────
   let q7: MessagesToBook | null = null;
-  if (isAbsent(input.q7_messages_to_book)) {
-    errors.push(
-      err("q7_messages_to_book", "required", "q7_messages_to_book: an answer is required")
-    );
-  } else {
+  if (!absent("q7_messages_to_book", input.q7_messages_to_book, errors)) {
     q7 = readChoice("q7_messages_to_book", input.q7_messages_to_book, MESSAGES_TO_BOOK, errors);
   }
 
-  // ── Q8 — optional money or "not sure" ──────────────────────────
+  // ── Q8 — money or "not sure" ───────────────────────────────────
   let q8: MoneyAnswer | null = null;
-  if (!isAbsent(input.q8_typical_job_value)) {
+  if (!absent("q8_typical_job_value", input.q8_typical_job_value, errors)) {
     q8 = readMoney("q8_typical_job_value", input.q8_typical_job_value, errors);
   }
 
-  // ── Q9 — optional single-select ────────────────────────────────
+  // ── Q9 — single-select ─────────────────────────────────────────
   let q9: ConversionShare | null = null;
-  if (!isAbsent(input.q9_conversion_share)) {
+  if (!absent("q9_conversion_share", input.q9_conversion_share, errors)) {
     q9 = readChoice("q9_conversion_share", input.q9_conversion_share, CONVERSION_SHARES, errors);
   }
 

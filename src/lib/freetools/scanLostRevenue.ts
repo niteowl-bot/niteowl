@@ -50,6 +50,7 @@
 // the learning layer and dishonest to the customer.
 
 import { SCAN_QUESTION_SET_VERSION } from "@/lib/freetools/scanQuestions";
+import { SCAN_RULE_SET_VERSION } from "@/lib/freetools/scanTypes";
 import type {
   ConversionShare,
   EstimateBasis,
@@ -72,15 +73,6 @@ export const E1_EXPRESSION_VERSION = "v1" as const;
 
 /** The versioned key, for logs and display. Never parsed back apart. */
 export const E1_EXPRESSION_KEY = `${E1_EXPRESSION_ID}.${E1_EXPRESSION_VERSION}`;
-
-/**
- * The rule-set version this sizing obeys.
- *
- * Kept here rather than imported from the finding engine so the two
- * modules stay acyclic: findings may reach sizing, sizing never reaches
- * findings.
- */
-export const SCAN_SIZING_RULE_SET_VERSION = "v1";
 
 /**
  * Q9's buckets, FIXED IN THE CONTRACT AND NOT CHOSEN AT RUNTIME
@@ -273,9 +265,12 @@ export function computeLostRevenue(
 ): ScanImpact {
   // E1 sizes ONE condition. The other two codes are unknown by
   // contract, always, in Phase 1 — not because an operand is missing,
-  // but because no legitimate expression exists for them (§88.1).
+  // and not because the unanswered finding was absent, but because NO
+  // PERMITTED EXPRESSION EXISTS for them (§88.1). The reason code says
+  // exactly that, so a reader of the stored impact is not sent looking
+  // for a finding that was never the problem.
   if (finding.condition !== "enquiry.unanswered") {
-    return unknown("no_unanswered_finding");
+    return unknown("no_permitted_expression");
   }
 
   const q4 = answers.q4_unanswered_per_week;
@@ -335,10 +330,18 @@ export function computeLostRevenue(
   ];
 
   const raw = evaluate(operands);
-  const rounded = roundOutward(raw.low, raw.high);
-  if (!rangeCarriesInformation(rounded.low, rounded.high)) {
+
+  // §88.3's order-of-magnitude test is applied to the COMPUTED range —
+  // the endpoints as the arithmetic produced them — and never to the
+  // rounded ones. Outward rounding belongs to presentation (§88.2): it
+  // widens a range on purpose, so testing after it would refuse ranges
+  // the arithmetic itself supports, and the refusal would depend on
+  // the currency unit rather than on the answers.
+  if (!rangeCarriesInformation(snap(raw.low), snap(raw.high))) {
     return unknown("range_spans_more_than_one_order_of_magnitude");
   }
+
+  const rounded = roundOutward(raw.low, raw.high);
 
   const { confidence, reason } = sizeConfidence(q9, q8, answers.q5_miss_visibility);
 
@@ -359,7 +362,7 @@ export function computeLostRevenue(
     size_confidence: confidence,
     size_confidence_cap_reason: reason,
     question_set_version: SCAN_QUESTION_SET_VERSION,
-    rule_set_version: SCAN_SIZING_RULE_SET_VERSION,
+    rule_set_version: SCAN_RULE_SET_VERSION,
     computed_at: context.computed_at,
     source_type: "derived_deterministic",
   };

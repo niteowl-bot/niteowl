@@ -37,7 +37,12 @@ import {
   computeLostRevenue,
   recomputeFromBasis,
 } from "@/lib/freetools/scanLostRevenue";
-import { buildScanReport, deriveFindings } from "@/lib/freetools/scanFindings";
+import {
+  SCAN_RULE_SET_VERSION as FINDINGS_RULE_SET_VERSION,
+  buildScanReport,
+  deriveFindings,
+} from "@/lib/freetools/scanFindings";
+import { SCAN_RULE_SET_VERSION } from "@/lib/freetools/scanTypes";
 import { validateScanAnswers } from "@/lib/freetools/scanValidation";
 
 const CONTEXT = {
@@ -116,7 +121,59 @@ describe("E1 is the one permitted expression", () => {
     for (const entry of report.findings) {
       if (entry.finding.condition === "enquiry.unanswered") continue;
       assert.equal(entry.impact.kind, "unknown", entry.finding.condition);
-      assert.equal(entry.impact.reason, "no_unanswered_finding");
+      assert.equal(entry.impact.reason, "no_permitted_expression");
+    }
+  });
+
+  // ── The reason code must SAY what is actually the case. For the two
+  // unsizeable conditions the finding engine did raise a finding and
+  // every operand may be present; what is missing is a permitted
+  // expression (§88.1). A code that blamed an absent finding or a
+  // missing operand would send a reader looking in the wrong place.
+
+  test("the reason names the actual condition: no permitted expression, not an absent finding", () => {
+    const validated = answers({
+      q6_followup: "nothing_planned",
+      q7_messages_to_book: "more_than_three",
+    });
+    const findings = deriveFindings(validated);
+    // The unanswered finding IS present on this run, so "no unanswered
+    // finding" would be false — and every E1 operand is present too.
+    assert.ok(findings.some((f) => f.condition === "enquiry.unanswered"));
+    for (const condition of ["enquiry.no_followup", "booking.friction"]) {
+      const finding = findings.find((f) => f.condition === condition);
+      assert.ok(finding, condition);
+      const impact = computeLostRevenue(finding, validated, CONTEXT);
+      assert.deepEqual(impact, { kind: "unknown", reason: "no_permitted_expression" });
+    }
+  });
+
+  test("no_permitted_expression is never the reason for the one sizeable condition", () => {
+    for (const patch of [
+      {},
+      { q4_unanswered_per_week: undefined },
+      { q5_miss_visibility: "no" },
+      { q8_typical_job_value: undefined },
+      { q9_conversion_share: "a_minority" },
+    ]) {
+      const impact = size(patch);
+      if (impact.kind === "unknown") {
+        assert.notEqual(impact.reason, "no_permitted_expression", JSON.stringify(patch));
+      }
+    }
+  });
+
+  test("the report and every estimate basis carry ONE shared rule-set version", () => {
+    // D3: one constant, defined in scanTypes, read by both the finding
+    // engine (report) and the sizing module (basis). They cannot drift.
+    assert.equal(FINDINGS_RULE_SET_VERSION, SCAN_RULE_SET_VERSION);
+    const report = buildScanReport(answers(), CONTEXT);
+    assert.equal(report.rule_set_version, SCAN_RULE_SET_VERSION);
+    const sized = report.findings.filter((e) => e.impact.kind === "estimate");
+    assert.ok(sized.length > 0, "the sizeable run must produce an estimate");
+    for (const entry of sized) {
+      assert.equal(entry.impact.basis.rule_set_version, report.rule_set_version);
+      assert.equal(entry.impact.basis.rule_set_version, SCAN_RULE_SET_VERSION);
     }
   });
 
@@ -272,6 +329,62 @@ describe("UNKNOWN is a first-class result, with its own reason each time", () =>
     // 0.4 × 10 = 4 ; 0.6 × 500 = 300 — a 75× span, which says nothing.
     assert.equal(impact.kind, "unknown");
     assert.equal(impact.reason, "range_spans_more_than_one_order_of_magnitude");
+  });
+
+  // ── D1: the order-of-magnitude test reads the COMPUTED range (§88.3),
+  // before outward rounding; rounding belongs to presentation (§88.2).
+  // 1 × [0.4, 0.6] × [4, 23] = [1.6, 13.8]: a 8.6× span the arithmetic
+  // supports. Rounded outward it is [1, 14], a 14× span, which is what
+  // the test must NOT be judged on.
+
+  test("eligibility uses the pre-rounding endpoints, so rounding cannot refuse a range the arithmetic supports", () => {
+    const impact = size({
+      q4_unanswered_per_week: { kind: "count", value: 1 },
+      q8_typical_job_value: { kind: "range", low: 4, high: 23, currency: "EUR" },
+    });
+    assert.equal(impact.kind, "estimate");
+  });
+
+  test("presentation still uses the outward-rounded endpoints", () => {
+    const impact = size({
+      q4_unanswered_per_week: { kind: "count", value: 1 },
+      q8_typical_job_value: { kind: "range", low: 4, high: 23, currency: "EUR" },
+    });
+    assert.equal(impact.basis.result.low, 1); // floor(1.6)
+    assert.equal(impact.basis.result.high, 14); // ceil(13.8)
+    assert.equal(impact.basis.result.rounding_rule, "outward_to_whole_currency_unit");
+  });
+
+  test("recomputation of the pre-rounding-eligible range is deterministic and reproduces the stored result", () => {
+    const patch = {
+      q4_unanswered_per_week: { kind: "count", value: 1 },
+      q8_typical_job_value: { kind: "range", low: 4, high: 23, currency: "EUR" },
+    };
+    const first = size(patch);
+    const second = size(patch);
+    assert.deepEqual(first, second);
+    assert.equal(basisReproducesResult(first.basis), true);
+    assert.deepEqual(recomputeFromBasis(first.basis), first.basis.result);
+  });
+
+  test("UNKNOWN stays fail-safe: a computed range that spans more than 10× is still refused", () => {
+    // 1 × [0.4, 0.6] × [4, 24] = [1.6, 14.4]: 9×, kept.
+    // 1 × [0.4, 0.6] × [4, 30] = [1.6, 18.0]: 11.25×, refused.
+    const kept = size({
+      q4_unanswered_per_week: { kind: "count", value: 1 },
+      q8_typical_job_value: { kind: "range", low: 4, high: 24, currency: "EUR" },
+    });
+    assert.equal(kept.kind, "estimate");
+    const refused = size({
+      q4_unanswered_per_week: { kind: "count", value: 1 },
+      q8_typical_job_value: { kind: "range", low: 4, high: 30, currency: "EUR" },
+    });
+    assert.equal(refused.kind, "unknown");
+    assert.equal(refused.reason, "range_spans_more_than_one_order_of_magnitude");
+    // And a zero low end is refused before rounding could hide it.
+    const zero = size({ q9_conversion_share: "a_minority" });
+    assert.equal(zero.kind, "unknown");
+    assert.equal(zero.reason, "range_spans_more_than_one_order_of_magnitude");
   });
 
   test("exactly one order of magnitude is still information", () => {

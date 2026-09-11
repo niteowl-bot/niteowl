@@ -43,7 +43,7 @@ const FULL = {
   q9_conversion_share: "about_half",
 };
 
-/** The five required questions and nothing else. */
+/** The six required questions and nothing else. */
 const MINIMAL = {
   q1_channels: ["phone"],
   q2_reachable: "varies",
@@ -75,7 +75,7 @@ describe("the question set is the nine-question contract", () => {
     ]);
   });
 
-  test("the five required and four optional questions match §87.2", () => {
+  test("the six required and three optional questions match §87.2", () => {
     const required = SCAN_QUESTIONS.filter((q) => q.required).map((q) => q.id);
     assert.deepEqual(required, [
       "q1_channels",
@@ -232,6 +232,43 @@ describe("required answers are required, and absence is never filled", () => {
     assert.equal(result.errors.length, 6);
     assert.ok(result.errors.every((e) => e.code === "required"));
     assert.equal(result.answers, null);
+  });
+
+  // ── Requiredness has ONE source of truth: the question definitions.
+  // The validator reads `required` off SCAN_QUESTIONS rather than
+  // keeping its own list, so these tests derive the expectation from
+  // the definitions too — a drift in either direction fails here.
+
+  test("the validator's required set is exactly the definitions' required set", () => {
+    const fromDefinitions = SCAN_QUESTIONS.filter((q) => q.required).map((q) => q.id);
+    const fromValidator = validateScanAnswers({}).errors.map((e) => e.question_id);
+    assert.deepEqual(fromValidator, fromDefinitions);
+  });
+
+  for (const q of SCAN_QUESTIONS) {
+    test(`${q.id} absent is ${q.required ? "refused" : "accepted"} because its definition says required=${q.required}`, () => {
+      const input = { ...FULL };
+      delete input[q.id];
+      const result = validateScanAnswers(input);
+      if (q.required) {
+        assert.equal(result.valid, false);
+        assert.deepEqual(codesFor(result, q.id), ["required"]);
+      } else {
+        assert.equal(result.valid, true);
+        assert.deepEqual(codesFor(result, q.id), []);
+        assert.equal(result.answers[q.id], null);
+      }
+    });
+  }
+
+  test("the split is six required and three optional, and the optional three are Q4, Q8, Q9", () => {
+    const optional = SCAN_QUESTIONS.filter((q) => !q.required).map((q) => q.id);
+    assert.deepEqual(optional, [
+      "q4_unanswered_per_week",
+      "q8_typical_job_value",
+      "q9_conversion_share",
+    ]);
+    assert.equal(SCAN_QUESTIONS.length - optional.length, 6);
   });
 });
 

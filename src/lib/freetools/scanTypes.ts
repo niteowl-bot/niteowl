@@ -76,6 +76,23 @@ export const SCAN_CONDITION_ORDER: readonly ScanConditionCode[] = [
   "booking.friction",
 ] as const;
 
+/**
+ * THE Phase 1 rule-set version, stored on every run artefact.
+ *
+ * ONE SOURCE, TWO READERS. The finding engine stamps it on the report
+ * and the sizing module stamps it on the estimate basis, and they read
+ * the same constant so the two artefacts of one run cannot carry two
+ * different rule-set identities. A change to any threshold, cap,
+ * bucket, gate or ordering rule in either module is a version change:
+ * two runs graded by different rules are not comparable, and
+ * docs/AGENT_ACCESS_LAYER.md §25.2 requires that to be visible.
+ *
+ * It lives here, with the contract vocabulary, because the sizing
+ * module must not import the finding engine (findings reach sizing;
+ * sizing never reaches findings) and both already import from here.
+ */
+export const SCAN_RULE_SET_VERSION = "v1";
+
 /** The nine question ids — §87.2. The set is closed. */
 export type ScanQuestionId =
   | "q1_channels"
@@ -329,9 +346,16 @@ export interface EstimateBasis {
   readonly source_type: "derived_deterministic";
 }
 
-/** Why a finding could not be sized (§82.3, §88.3). */
+/**
+ * Why a finding could not be sized (§82.3, §88.3).
+ *
+ * `no_permitted_expression` is the Phase 1 answer for every condition
+ * other than `enquiry.unanswered`: not a missing operand and not an
+ * absent finding, but the contract's own subtraction (§88.1) — no
+ * legitimate sizing expression exists for that condition.
+ */
 export type LostRevenueUnknownReason =
-  | "no_unanswered_finding"
+  | "no_permitted_expression"
   | "q4_missing"
   | "q4_not_sure"
   | "q4_zero"
