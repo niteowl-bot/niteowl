@@ -36,13 +36,14 @@ import { deriveFindings } from "@/lib/freetools/scanFindings";
 import { SCAN_CONDITION_ORDER } from "@/lib/freetools/scanTypes";
 import { validateScanAnswers } from "@/lib/freetools/scanValidation";
 
-/** The five Phase 1 pure-logic modules. Nothing else is in scope here. */
+/** The six Phase 1 pure-logic modules. Nothing else is in scope here. */
 const SCAN_MODULES = [
   "src/lib/freetools/scanTypes.ts",
   "src/lib/freetools/scanQuestions.ts",
   "src/lib/freetools/scanValidation.ts",
   "src/lib/freetools/scanFindings.ts",
   "src/lib/freetools/scanLostRevenue.ts",
+  "src/lib/freetools/scanRecommendations.ts",
 ];
 
 /** Import statements only — comments discussing Remy are fine. */
@@ -98,7 +99,7 @@ describe("the scan modules cannot reach Remy, a provider or a tenant", () => {
       for (const specifier of specifiers) {
         assert.match(
           specifier,
-          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue)["']/,
+          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)["']/,
           `${file} imports ${specifier}`
         );
       }
