@@ -711,6 +711,30 @@ outcome learning, any Part XIII provenance runtime, and every later Scan phase. 
 outside the five modules imports them today. **Shipping the logic did not approve the
 product**: each of those is its own decision.
 
+**PHASE 1 RECOMMENDATION LAYER IMPLEMENTED (PR B, branch `feat/scan-phase1-recommendations`,
+2026-09-11 — pending review; not merged). THE SCAN PRODUCT ITSELF IS STILL
+NOT BUILT.** A sixth pure module, `src/lib/freetools/scanRecommendations.ts`, gives every
+rendered finding exactly one deterministic, owner-actionable recommendation, keyed by
+`finding.condition` alone — never by impact, estimate size, confidence, cap reason, provider,
+tenant, clock or model. `buildScanReport` attaches it after sizing. Fixed owner-facing text
+pinned verbatim by test; Phase 1 routing follows §84.3's class table: `enquiry.unanswered` →
+Remy, `enquiry.no_followup` → no product (the structural anti-funnel case, §81.2), and
+`booking.friction` → Remy as where the answer lives **plus** a **link-only** Setup Kit
+handoff as the first step of §84.4's path (no answers, pre-fill, token, state or consent —
+the handoff and the product are separate fields, and the next step is useful without
+either). Q1/Q2-aware routing (§87.2) is **deferred and not implemented**. **D-B1** is represented as
+`threshold_rule: "improvement_from_stated_baseline"` read with a `direction` (`decrease` for
+Q4 unanswered enquiries and Q7 messages to book, `increase` for Q9's share of *answered*
+enquiries becoming work); the criterion is declared here and evaluated nowhere in this layer; the
+baseline is the owner's raw stated answer quoted with its question id, never
+`EstimateBasis.result`, and is `null` — with wording that says one must be established
+first — whenever the answer has no position on the scale (`not_sure`, absent,
+`varies_a_lot`). `action_status: proposed`, `authority_level: recommend`,
+`source_type: derived_deterministic`, shared `SCAN_RULE_SET_VERSION`, `review_window_days: 28`,
+no `expected_effect` (W.2 deferred). **PR B remains pure logic: no UI, no route, no
+persistence, no consent/promotion, no Part XIII runtime**, and it does not approve or start
+any of the items in the previous paragraph. Full record in `CHANGELOG.md`.
+
 **Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
 (confidence levels and cap policy that the implementation chose and canon does not yet
 specify) and N.1–N.4 (a displayed low of 0 after outward rounding, recomputation not

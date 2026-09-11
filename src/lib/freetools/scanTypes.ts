@@ -379,10 +379,12 @@ export type ScanImpact =
   | { readonly kind: "unknown"; readonly reason: LostRevenueUnknownReason }
   | { readonly kind: "estimate"; readonly basis: EstimateBasis };
 
-/** A finding together with its impact, ready to be presented. */
+/** A finding with its impact and its one recommendation, ready to be presented. */
 export interface ScanReportFinding {
   readonly finding: ScanFinding;
   readonly impact: ScanImpact;
+  /** Exactly one, derived from the condition alone. */
+  readonly recommendation: ScanRecommendation;
 }
 
 /**
@@ -427,4 +429,113 @@ export interface ScanRunContext {
   readonly answered_at: string;
   /** When this computation ran. ISO-8601 instant. */
   readonly computed_at: string;
+}
+
+// ── Recommendations ───────────────────────────────────────────────
+//
+// THE RECOMMENDATION IS THE PRODUCT (§84.2): a finding's value is the
+// next step it licenses and the measurement that follows, not the
+// revelation. Phase 1 attaches EXACTLY ONE fixed, owner-actionable next
+// step to every rendered finding, derived from the condition code and
+// from nothing else — never from the impact, the estimate's size or
+// either confidence.
+//
+// IT IS NOT A `DecisionRecord` (§20.7). No org_id, no canonical entity,
+// no evidence reference to a real event, no Spine write: a recommendation
+// is transient, pre-consent and unpersisted in Phase 1, and carries the
+// same authority-and-provenance literals a DecisionRecord would so a
+// later surface can lift it into one WITHOUT reinterpreting it.
+//
+// SUCCESS NEVER INVENTS A TARGET (D-B1). The threshold is improvement in
+// the stated direction from the OWNER'S OWN STATED ANSWER — never from
+// the E1 estimate, a benchmark, an industry figure or a derived
+// midpoint. An owner who said "not sure" has no baseline, and the type
+// says so with `null` rather than a substituted number.
+
+/** The one paid product a Phase 1 recommendation may route to. */
+export type ScanRecommendedProduct = "remy";
+
+/**
+ * A free-tool handoff: A LINK AND NOTHING ELSE.
+ *
+ * No answers, no pre-fill, no bearer token, no state and no consent
+ * implication travel with it (docs/AGENT_ACCESS_LAYER.md §25.1). The
+ * type has three fields so a fourth cannot quietly become a payload.
+ */
+export interface ScanFreeToolHandoff {
+  readonly tool: "ai_receptionist_setup_kit";
+  /** A bare path. No query string, no fragment. */
+  readonly href: string;
+  readonly label: string;
+}
+
+/**
+ * What a success criterion measures, each re-askable as the question it
+ * was read from — Q4, Q9 and Q7 respectively — so a later measurement
+ * is the same `business_provided` answer given again, not a new kind
+ * of fact.
+ */
+export type ScanSuccessMetric =
+  | "unanswered_enquiries_per_week"
+  | "answered_enquiries_becoming_work_share"
+  | "messages_to_book";
+
+/** Which way the metric must move for the recommendation to have worked. */
+export type ScanSuccessDirection = "increase" | "decrease";
+
+/**
+ * The owner's raw stated answer, quoted as the baseline (D-B1).
+ *
+ * The SAME shape as a `ScanEvidenceRef`, deliberately: a baseline is the
+ * owner's own words with a question id attached, and nothing here is a
+ * number NiteOwl produced. It is never `EstimateBasis.result`.
+ */
+export type ScanStatedBaseline = ScanEvidenceRef;
+
+/**
+ * Success, stated before the outcome is known (§20.7 rule 7).
+ *
+ * `threshold_rule` has exactly one value in Phase 1 and it is
+ * DIRECTION-AWARE: read with `direction`, "improvement" means lower
+ * than the baseline for a `decrease` metric and higher for an
+ * `increase` one. There is no target field, because no target is ever
+ * invented. `baseline` is null when the stated answer has no position
+ * on the metric's scale — `not_sure`, absent, or "it varies a lot" —
+ * and `wording` then says a baseline must be established first.
+ */
+export interface ScanSuccessCriterion {
+  readonly metric: ScanSuccessMetric;
+  readonly direction: ScanSuccessDirection;
+  readonly threshold_rule: "improvement_from_stated_baseline";
+  readonly baseline: ScanStatedBaseline | null;
+  /** Fixed owner-facing wording for this metric, with or without a baseline. */
+  readonly wording: string;
+}
+
+/**
+ * One recommendation per finding, and one only.
+ *
+ * Every owner-facing string is FIXED DATA pinned by test; no model
+ * writes any of it. `action_status: proposed` and `authority_level:
+ * recommend` are the literals §20.7 and docs/AGENT_ACCESS_LAYER.md's
+ * autonomy ladder give a suggestion nobody has acted on. There is no
+ * `expected_effect` here in Phase 1 (W.2 is deferred); the finding's
+ * own `impact` sits beside it on the report and is not copied.
+ */
+export interface ScanRecommendation {
+  readonly condition: ScanConditionCode;
+  readonly recommendation_code: string;
+  readonly headline: string;
+  readonly why_it_matters: string;
+  readonly next_step: string;
+  /** Null is a real answer: some problems route to no paid product. */
+  readonly recommended_product: ScanRecommendedProduct | null;
+  readonly free_tool_handoff: ScanFreeToolHandoff | null;
+  readonly success_criterion: ScanSuccessCriterion;
+  /** A surface derives its own review date from its own timestamp plus this. */
+  readonly review_window_days: number;
+  readonly action_status: "proposed";
+  readonly authority_level: "recommend";
+  readonly source_type: "derived_deterministic";
+  readonly rule_set_version: string;
 }

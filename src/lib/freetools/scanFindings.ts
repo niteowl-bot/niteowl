@@ -35,6 +35,7 @@
 
 import { SCAN_QUESTION_SET_VERSION } from "@/lib/freetools/scanQuestions";
 import { computeLostRevenue } from "@/lib/freetools/scanLostRevenue";
+import { recommendFor } from "@/lib/freetools/scanRecommendations";
 import {
   SCAN_CONDITION_ORDER,
   type ScanAnswers,
@@ -222,12 +223,14 @@ export function deriveFindings(answers: ScanAnswers): ScanFinding[] {
 }
 
 /**
- * Assemble one run's report: the ranked findings, each with its impact.
+ * Assemble one run's report: the ranked findings, each with its impact
+ * and its one recommendation.
  *
  * Sizing runs per finding and returns UNKNOWN for everything it cannot
  * legitimately size — which in Phase 1 is both of the other two codes,
  * always (§88.1). Timestamps arrive in `context`; nothing here reads a
- * clock.
+ * clock. The recommendation is keyed by the condition alone, so it is
+ * attached after sizing and reads nothing sizing produced.
  */
 export function buildScanReport(
   answers: ScanAnswers,
@@ -237,6 +240,7 @@ export function buildScanReport(
   const findings: ScanReportFinding[] = deriveFindings(answers).map((finding) => ({
     finding,
     impact: computeLostRevenue(finding, answers, context),
+    recommendation: recommendFor(finding, answers),
   }));
 
   return {
