@@ -676,9 +676,10 @@ orchestration and governed action → cross-product measured outcome learning �
 Decision Intelligence (`docs/ARCHITECTURE.md` §63.1, unchanged).
 
 **Status of everything below: NOT STARTED unless explicitly marked shipped.** Nothing here is
-Remy V1 or V1.1 work and nothing here is a NOW item. Two things have shipped: the Setup Kit
-(complete), and the **Business Opportunity Scan's Phase 1 pure logic** (PR #84 — logic only,
-no product surface; see §1 below). Nothing else is started or approved for implementation.
+Remy V1 or V1.1 work and nothing here is a NOW item. Three things have shipped: the Setup Kit
+(complete), the **Business Opportunity Scan's Phase 1 pure logic** (PR #84 — logic only, no
+product surface) and the **Scan's Phase 1 recommendation layer** (PR #87 — likewise logic
+only; see §1 below). Nothing else is started or approved for implementation.
 
 ## 1. Flagship — NiteOwl Business Opportunity Scan
 
@@ -711,9 +712,18 @@ outcome learning, any Part XIII provenance runtime, and every later Scan phase. 
 outside the five modules imports them today. **Shipping the logic did not approve the
 product**: each of those is its own decision.
 
-**PHASE 1 RECOMMENDATION LAYER IMPLEMENTED (PR B, branch `feat/scan-phase1-recommendations`,
-2026-09-11 — pending review; not merged). THE SCAN PRODUCT ITSELF IS STILL
-NOT BUILT.** A sixth pure module, `src/lib/freetools/scanRecommendations.ts`, gives every
+**PHASE 1 RECOMMENDATION LAYER SHIPPED (PR #87, approved head `21e0ea3`, normal merge commit
+`6055f64` 2026-09-11, deployed as `dpl_GWa2YAHEagFrBzYM2Zwv4DJbAmwE` with the deployed SHA
+equal to the merge commit, and production-health verified — `/api/health` HTTP 200
+`database: ok`, homepage HTTP 200). THE SCAN PRODUCT ITSELF IS STILL NOT BUILT.** What is
+shipped is exactly two pure-logic increments — **PR #84**, the Phase 1 deterministic
+foundations (questions, validation, findings, E1 sizing, `estimate_basis`), and **PR #87**,
+the recommendation layer described here. What is **NOT built**: a route, page or UI;
+persistence; run identity or bearer-token linkage; the consent and promotion flow; outcome
+measurement; any Part XIII provenance runtime; any learning runtime; and every later phase.
+A recommendation here is a **proposed** suggestion at authority level **recommend** with
+source type **derived_deterministic** — it is not a decision that was taken, not an action,
+not an outcome and not learning, and it authorises nothing. A sixth pure module, `src/lib/freetools/scanRecommendations.ts`, gives every
 rendered finding exactly one deterministic, owner-actionable recommendation, keyed by
 `finding.condition` alone — never by impact, estimate size, confidence, cap reason, provider,
 tenant, clock or model. `buildScanReport` attaches it after sizing. Fixed owner-facing text
@@ -731,9 +741,12 @@ baseline is the owner's raw stated answer quoted with its question id, never
 first — whenever the answer has no position on the scale (`not_sure`, absent,
 `varies_a_lot`). `action_status: proposed`, `authority_level: recommend`,
 `source_type: derived_deterministic`, shared `SCAN_RULE_SET_VERSION`, `review_window_days: 28`,
-no `expected_effect` (W.2 deferred). **PR B remains pure logic: no UI, no route, no
-persistence, no consent/promotion, no Part XIII runtime**, and it does not approve or start
-any of the items in the previous paragraph. Full record in `CHANGELOG.md`.
+no `expected_effect` (W.2 deferred). **PR #87 is pure logic: no UI, no route, no
+persistence, no consent/promotion, no outcome comparator, no Part XIII runtime**, and its
+merge does not approve or start any of the items in the previous paragraph. Two non-blocking
+cosmetic follow-ups (a stale comparison-oriented comment; the `enquiry.no_followup` next-step
+prose not repeating the criterion's exact denominator) are recorded in `CHANGELOG.md` and
+left for a separate tidy. Full record in `CHANGELOG.md`.
 
 **Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
 (confidence levels and cap policy that the implementation chose and canon does not yet
@@ -1092,8 +1105,9 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
 
 - **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). Do not rebuild
 - **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. **Phase 1
-  pure logic SHIPPED** (PR #84); route, UI, persistence, consent flow and later phases NOT
-  started and not approved
+  pure logic SHIPPED** (PR #84) and **Phase 1 recommendation layer SHIPPED** (PR #87, merge
+  `6055f64`); route, UI, persistence, consent flow, outcome measurement, Part XIII runtime
+  and later phases NOT started and not approved
 - **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
   a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
   entry NOT started
