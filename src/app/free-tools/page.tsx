@@ -38,12 +38,22 @@ export const metadata: Metadata = {
  */
 const TOOLS = [
   {
+    name: "Business Opportunity Scan",
+    summary:
+      "Answer nine short questions about how enquiries reach your business and what happens to them, and get a plain report on where you may be missing work, what you could do about it, and how you would know it worked.",
+    detail:
+      "Nothing is stored and nothing is sent — the report is complete without an account.",
+    href: "/free-tools/business-opportunity-scan",
+    cta: "Start the scan →",
+  },
+  {
     name: "AI Receptionist Business Setup Kit",
     summary:
       "Answer a few questions about how your business handles enquiries, and get a clear, structured setup you can act on — opening hours, services, common questions, and what should happen when someone calls out of hours.",
     detail:
       "Useful on its own, whether or not you ever use an AI receptionist.",
     href: "/free-tools/ai-receptionist-setup-kit",
+    cta: "Start setup →",
   },
 ] as const;
 
@@ -91,7 +101,7 @@ export default function FreeToolsPage() {
                 href={tool.href}
                 className="mt-5 inline-block self-start rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 transition-colors"
               >
-                Start setup →
+                {tool.cta}
               </Link>
             )}
           </article>
