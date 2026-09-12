@@ -3729,6 +3729,23 @@ scoring version is the same requirement Part III §26 places on free-tool scorin
 reason: **a change of scoring version breaks comparability and must be visible**, or a
 re-weighting looks like an improvement.
 
+**What this rule has never forbidden, made explicit 2026-09-12.** Refusing to combine the
+factors *centrally* is not a refusal to order findings *within one product*. A product may
+present a first, second and third priority when the ordering is **deterministic, explainable
+from visible rules and evidence, product-scoped and versioned** — the ordering is then a
+restatement of rules the architecture already holds, not a new judgement smuggled in as a
+number. What stays forbidden is unchanged and is the reason the rule exists: an opaque score,
+a learned or probabilistic ranking model, hidden weights, and any cross-product priority unit.
+
+> **A product-scoped deterministic ordering is versioned like a score, because it is a ranking
+> rule whatever its shape.** The version is stored with every result it orders, and a change to
+> the ordering breaks comparability between runs exactly as a re-weighting would. Where a
+> product's ordering is separable from its other rules, it carries its **own** version rather
+> than sharing the product's rule-set version, so an ordering change is visible as one.
+
+Part XIV §100.2 applies this to the Business Opportunity Scan and states the five conditions
+a deterministic ordering must meet there.
+
 ### 43.4 Recommending is not authorising
 
 > **Generating a recommendation never grants authority to execute it.** They are two
@@ -7376,9 +7393,17 @@ route-to-nothing (§84.3) · the §51.4 handoff, unchanged (§84.4).
 Unused capacity, repeat business, retention, operational handoff, cash-flow and marketing
 classes (§81.3) · any integration or external data source · benchmarks, cohort statistics and
 *"businesses like yours"* · NiteOwl-owned signal enrichment for existing customers · any
-executed action, autonomy or approval flow — the Scan **recommends and never acts** · a scoring
-model, ranking model or learned prioritisation · account creation as a condition of value ·
-pre-filling the Setup Kit from a run.
+executed action, autonomy or approval flow — the Scan **recommends and never acts** · an opaque
+scoring model, a learned or probabilistic ranking model, or any hidden weighting system ·
+account creation as a condition of value · pre-filling the Setup Kit from a run.
+
+*Narrowed 2026-09-12 by Part XIV §100.2.* The original wording excluded *"a scoring model,
+ranking model or learned prioritisation"* as one undifferentiated item, which would also have
+excluded a **deterministic, explainable, versioned, product-scoped** ordering over rules that
+are themselves canonical — something §43.3 already permits every product. The prohibition is
+unchanged in substance and is restated as what it always meant: **no opaque score, no learned
+ranking, no probabilistic ranking model, no hidden weights.** §100.2 states the narrow
+permission and its five conditions. Nothing else in this list moves.
 
 **PREPARE — define now, build nothing**
 
@@ -8654,3 +8679,352 @@ Provenance holds a quantity that knows what kind of number it is.
 
 Nothing here is built, nothing is urgent, no provider is added, no product is started, no
 boundary moves, and the next milestone is still Google's verification review.
+---
+
+# Part XIV — The Business Opportunity Scan's intelligence contracts
+
+*Added 2026-09-12. **Documentation only. NOW: none.** No code, schema, migration, service,
+route, UI, flag, prompt, test, provider or configuration is created or changed by this part,
+and nothing in it is approved for implementation. It defines contracts a later PR may build
+against; defining a contract has never started a product here, and does not now.*
+
+**This part is an extension of Parts XI–XIII, not a replacement.** Where a contract it needs
+already exists, it references it and adds nothing. The Scan's shipped Phase 1 logic (PR #84,
+PR #87) and its shipped public surface (PR #89) are unchanged, and this part changes no live
+behaviour, no question and no rule that any running code reads.
+
+## 100. What this part adds, and what it refuses to do
+
+### 100.1 The two gaps, and why they had to be closed before code
+
+The Scan's intelligence review concluded that the largest available improvement to the report
+needs **no new question, no persistence, no model and no provider** — it needs the Scan to say
+which finding matters most, why the findings relate to one another, and what it is *not*
+claiming. Two boundaries stood in the way, and both were genuine rather than procedural:
+
+- **§86.1 listed *"a scoring model, ranking model or learned prioritisation"* under NOT IN the
+  MVP**, as one undifferentiated item. Deterministic ordering over canonical rules is none of
+  those things, but the sentence did not say so, and §81.3 makes a Part XI boundary change a
+  deliberate decision rather than an enumeration edit. Implementing first and reinterpreting
+  the sentence afterwards is precisely the silent redesign this document exists to prevent.
+- **Reasoning about causes and relations between findings approaches Atlas's charter** — *"a
+  business's causal model over its own history"* (§25's moat mapping), *"synthesise cross-product
+  findings, rank contributors, prioritise, evaluate"* (§44). §23 already names *"Atlas presenting
+  a `correlated_with` claim as 'X caused Y'"* as a product bug of the most damaging kind. The
+  Scan needs a narrow, written boundary so it can reason about a process it questioned directly
+  without drifting into a domain another product owns.
+
+Both are closed below. **Neither widens what the Scan may claim about a business; both narrow
+what it may claim about itself.**
+
+### 100.2 DECISION — deterministic prioritisation, and the five conditions
+
+> **The Business Opportunity Scan MAY order its findings and present a first, second and third
+> priority. It MAY NOT produce a score.**
+
+The permission is narrow and each condition is load-bearing:
+
+| # | Condition | Why |
+|---|---|---|
+| 1 | **Deterministic** | The same answers always produce the same order. No model, no randomness, no clock, no tenant and no provider is reachable from the ordering — the structural property Part XII's governing principle already requires of every Scan module |
+| 2 | **Explainable from a visible rule** | Every position carries the **enumerated reason code of the rule that placed it**, and that reason is shown to the owner as a sentence. *"Priority #1 because…"* is a restatement of a rule, never a justification written after the fact |
+| 3 | **Product-scoped** | The ordering is in the Scan's own domain terms. It is never a NiteOwl priority unit, never comparable with another product's ordering, and never an input to one (§43.3) |
+| 4 | **Versioned independently** | A `prioritisation_rule_set_version` is stored on every report the ordering touches, **separately** from the rule-set version that produced the findings, so an ordering change is visible as one rather than hidden inside a findings change (§43.3, `AGENT_ACCESS_LAYER.md` §25.2) |
+| 5 | **No hidden score** | No weights, no points, no normalised units, no composite number — neither displayed nor computed internally. A number that exists only in memory is still a score, and the next change to it is unfalsifiable |
+
+**The ordering rules must themselves be canonical.** A rule ladder is only as explainable as the
+rules in it, so an ordering may sequence findings by **stage position, blocking dependency,
+measurement integrity, finding confidence and owner-controllability** — each defined in this
+part or already canonical — and by nothing else.
+
+**Estimated impact is deliberately not an ordering input**, and the reason is §88.1's: in
+Phase 1 exactly one condition of three is ever sizeable, so ordering by value would order by
+*what NiteOwl happens to be able to measure* rather than by what matters to the business. The
+estimate is displayed beside a priority and never decides it.
+
+**The existing `SCAN_CONDITION_ORDER` enumeration remains the final tie-break**, unchanged, so
+an ordering that distinguishes nothing degrades to today's behaviour rather than to an
+arbitrary one.
+
+**What remains forbidden, in full:** an opaque or composite score · a learned, fitted,
+probabilistic or model-produced ranking · hidden or tunable weights · ordering by estimated
+money · any cross-product priority unit · any ordering whose reason cannot be shown to the
+owner · any ordering that depends on a clock, a tenant, a provider or a model.
+
+### 100.3 DECISION — the Atlas boundary
+
+> **The Scan may reason about ORDER and ADJACENCY within one business process it questioned
+> directly. It may never assert a CAUSE, and it may never reason ACROSS domains. Atlas's
+> charter is untouched.**
+
+| The Scan MAY | The Scan MUST NOT |
+|---|---|
+| Represent the enquiry-to-booked-work process **from the owner's own answers** | Represent any process it did not ask about |
+| Identify ordering and adjacency between stages of that process | Claim a stage *caused* a condition at another stage |
+| Name the **earliest** stage where the answers indicate work is being lost | Present that stage as the root cause |
+| Express **hypotheses** with their own tier, confidence and evidence (§103) | Present a hypothesis as an established cause, or mark one as the winner |
+| Identify dependencies between its own recommendations (§104) | Treat a dependency as evidence of causation |
+| State what does **not** appear to be the immediate problem | State that something is *not* a cause |
+| Identify evidence gaps (§105) | Estimate what closing a gap would reveal about the business |
+| Say *"your answers suggest the larger opportunity appears after initial contact"* | Say *"your marketing process caused the booking problem"* |
+
+Three rules make the boundary enforceable rather than aspirational:
+
+- **One process, and it is the one the questions cover.** The Scan holds exactly one
+  `business_process` in Phase 1. A second process is a Part XI boundary change (§81.3), not a
+  new stage.
+- **Cross-domain synthesis belongs to Atlas** (§42.3's coupling-free cross-product diagnosis).
+  A Scan finding may become **one input** to an Atlas synthesis; the Scan never performs the
+  synthesis, and never reads another product's findings to reach its own.
+- **Adjacency is arithmetic, not causation.** *"An enquiry nobody answered cannot later be
+  followed up"* is a statement about the order of a path the owner described. It is not a claim
+  about their business's causal structure, and the contracts below keep the two distinguishable
+  in the type rather than only in the prose.
+
+## 101. The Enquiry Funnel contract
+
+A **BusinessProcess** is an analytical representation of what the owner told us, in stages.
+**It is not an observation, not a measurement, and not a claim about any system the business
+runs.** In Phase 1 there is exactly one: `enquiry_to_booked_work`.
+
+A **FunnelStage** carries an id, a position, the question ids that inform it, and a **state**
+from a closed set:
+
+| State | Meaning | Source discipline |
+|---|---|---|
+| `owner_declared` | The owner stated it directly | `business_provided`, never promoted to `verified` (§87.2, §89.4) |
+| `derived` | Computed deterministically from declared answers | `derived_deterministic` |
+| `unknown` | The owner said *not sure*, or the question was not answered | A stated *not sure* and an absence are **both** unknown here, and the stage records which it was |
+| `inconsistent` | Two answers informing this stage disagree | Shown, **never silently resolved** (§87.4) |
+
+Four rules:
+
+- **No stage is ever `observed`.** The Scan observes nothing (§84.1), and a type that cannot
+  express an observation cannot accidentally claim one — the structural property `scanTypes`
+  already relies on.
+- **A stage with no finding is rendered as adequate, not as empty.** Saying *"this part appears
+  to be working"* is a claim the answers support, and it is what makes the criticism elsewhere
+  credible. Silence is not the same statement.
+- **`inconsistent` suppresses the finding it would have supported and does not invalidate the
+  run** — §87.4's existing treatment of `q4_exceeds_q3`, generalised rather than replaced.
+- **Stage references are opaque ids, never array positions.** A position is not a reference and
+  would not survive promotion (§89) or comparison between runs (§107.3).
+
+## 102. The Opportunity Cluster contract
+
+A **cluster** is a stated relation between findings. It is **not** a finding, not a score and
+not a new record type: it references the findings it relates and holds no copy of them (Part IV
+M7's reference rule).
+
+| Relation | Established by | What may be said |
+|---|---|---|
+| `sequential_in_one_process` | Findings on adjacent stages of the same process | "Two points on one path, not two problems" |
+| `shared_cause_candidate` | Their hypothesis sets intersect (§103) | "Both **may** come from the same thing" — a candidate, never an assertion |
+| `competing_for_same_resource` | Both recommendations need the same owner attention | "Doing both at once is how neither gets done" |
+| `masked_measurement` | An upstream integrity gap makes downstream answers unreliable | "The numbers below rest on recollection until this is fixed" |
+| `independent` | No relation rule fired | Presented as parallel — **and this is a real output** |
+
+- **A cluster has its own provenance and its own confidence and inherits neither** (§92's
+  governing principle). A relation can be weaker than both things it relates, and a cluster
+  whose confidence is the maximum of its members' is a confidence that was never assessed.
+- **Findings keep their own evidence and provenance inside a cluster.** Clustering never
+  collapses, summarises, re-ranks or re-confidences a member.
+- **A cluster is never invented to create a narrative.** If no relation rule fires the answer is
+  `independent`, and a single-finding report has no clusters at all.
+
+## 103. The Hypothesis contract
+
+A **hypothesis** is a candidate explanation. The canonical home already exists: §42.2's Finding
+profile carries `hypotheses[]` — *"each a candidate cause with its **own** §23 tier, confidence
+and evidence refs. A ranked list, not a winner"* — together with `contradicting_evidence` and
+`assumptions`. **Part XIV adds no new type**; it states the narrowed form the Scan may populate.
+
+The four claim classes, which must stay distinguishable **in the type and not only in the
+wording**:
+
+| Class | What it asserts | Status in the Scan |
+|---|---|---|
+| `observation` | Something happened, or a value was read | **Unreachable.** The Scan observes nothing |
+| `business_state` | A stage's condition, as the owner described it | Reachable, `business_provided` |
+| `hypothesis` | A candidate explanation, with evidence and a tier | **The Scan's ceiling** |
+| `asserted_cause` | This caused that | **Forbidden to the Scan in every phase**, and Atlas's only under §23's tiers (§100.3) |
+
+Rules:
+
+- **A hypothesis requires evidence the owner supplied, and names it.** A hypothesis with no
+  evidence reference is not a hypothesis; it is a guess, and must not exist.
+- **Hypotheses are a ranked list with no winner**, per §42.2. The Scan may order them; it may
+  never mark one as the cause, and a single-element list is still a list, not a conclusion.
+- **A competing explanation is populated or explicitly empty.** An empty list is a claim and
+  must be made deliberately rather than by omission.
+- **Provenance is that of the weakest step** (§42.2). A hypothesis phrased or selected by a
+  model is `ai_inferred` and **may never become a durable fact** (§20.6). A hypothesis produced
+  by a deterministic rule over stated answers is `derived_deterministic` and must not be
+  labelled as inference — both misreportings are forbidden, in both directions.
+- **No hidden model reasoning is stored on a hypothesis.** Reason codes are the learnable form
+  (§92.3).
+
+## 104. The Dependency contract
+
+A **dependency** is an ordering constraint between two of the Scan's own recommendations.
+
+Relations: `blocked_by` · `should_precede` · `should_follow` · `independent`.
+
+- **A dependency must name the enumerated rule that produced it**, and that rule must be
+  canonical — stage order, measurement integrity, capacity headroom, or conversion before
+  volume. A dependency with no rule behind it is prose.
+- **A dependency is not evidence of causation** (§100.3). *"Fix this first"* is a statement
+  about the order in which actions can be **measured**, not about what causes what.
+- **Dependencies are shown even when both items are recommended**, so the owner sees why the
+  order is what it is rather than only the order.
+- **`independent` is a real result.** A dependency is never invented to justify a sequence, and
+  a single-recommendation report has none.
+
+## 105. The Evidence Gap contract
+
+An **EvidenceGap** names information that would materially improve diagnosis, prioritisation,
+impact sizing, recommended action or confidence. It is the canonical home for a future
+*"what would increase confidence?"* surface.
+
+A gap carries: the enumerated gap code · what it blocks (`diagnosis` · `prioritisation` ·
+`sizing` · `action` · `confidence`) · the question whose answer would close it, where it is one
+of NiteOwl's own · what the owner could do to find out, where it is not · an
+`expected_information_gain` from a closed enumeration · and an effort band.
+
+> **`expected_information_gain` is a claim about NITEOWL'S OWN RULES, never about the
+> business.** *"This would let us put a range on it"* is verifiable from the sizing gates.
+> *"This would probably reveal £X of lost work"* is forbidden — it is an estimate wearing a
+> gap's clothing, and Part X **P39** bars it.
+
+Gaps are **derived, never primary**: every one must be reconstructible from the finding's
+existing confidence caps and unknown reasons. A gap that needs its own store is a gap that has
+become a second record of something already recorded (§48.3).
+
+## 106. The four-state Impact classification
+
+§82.3 already makes *"we cannot size this"* a first-class result, and §20.7 rule 9 already
+separates an outcome from an impact. What was missing is that **"unsizeable" has several
+meanings and one voice.** The classification is a **presentation contract over the reasons the
+sizing module already produces** — it adds no arithmetic, changes no gate, and computes no new
+number.
+
+| State | Means | Discipline |
+|---|---|---|
+| `quantified` | A range was computed from stated operands | Range never a point, per week never annualised, operands and assumptions shown, `estimate_basis` recomputable (§88.2, §88.4) |
+| `directional` | Real, and the direction is supportable but the size is not | **Must never be silently upgraded to `quantified`** by widening a bucket or relaxing the order-of-magnitude test. Both exist to refuse precision theatre |
+| `material_unquantifiable` | A genuine finding for which **no permitted expression exists** | The honest case, and it must read as a judgement rather than a limitation. Sizing it would need a rate nobody can supply without inventing it (§88.1) |
+| `insufficient_evidence` | One or more operands were not supplied | Names the missing operand and links the gap (§105) |
+
+Two results that are **not** opportunities and must never be rendered as failures: an owner who
+stated there is no loss, and a run whose answers are inconsistent and whose sizing is therefore
+correctly withheld.
+
+The three distinctions that must survive, all pre-existing:
+
+- **An estimated opportunity is not a measured outcome.** `derived_deterministic`, never
+  `observed`, and no later confirmation, promotion or adoption changes that (§88.4).
+- **An estimated opportunity is not an impact.** §95's Impact assertion has its own
+  `measurement_basis`, and §20.7 rule 9 keeps the two apart.
+- **An estimate is never the baseline a later outcome is graded against** (§82.5, **P39**), and
+  a free scan's estimate never becomes the baseline a later **paid** outcome is graded against
+  (Part X **N2**).
+
+## 107. Compatibility — provenance, learning and the anti-funnel rule
+
+### 107.1 The chain is unchanged
+
+Part XIV deepens stages 2–5 of §92's chain (business state, diagnosis, recommendation,
+evidence) and **produces nothing at stages 6–10**. No authority is granted, no action occurs, no
+outcome is measured, no impact is asserted and nothing is learned. The Scan recommends and never
+acts (§86.1), and recommending is not authorising (§43.4).
+
+Every contract above carries **its own provenance, confidence and timestamp, and inherits none
+of the three** from the stage before it (§92's governing principle). Evidence references carry
+`role` — what was relied on versus what was merely available (§93.2, **T3**).
+
+### 107.2 The learning stack is unchanged
+
+Business Memory → Decision / Outcome / Impact Provenance → Cross-Product Measured Outcome
+Learning → Proprietary Decision Intelligence, **derived and never primary**, with dependency
+pointing downward only (Part IX). **No runtime layer is implemented here.**
+
+One constraint is worth stating plainly, because the Scan's shape invites the opposite
+assumption: **the Scan cannot close the learning loop by itself.** It holds stated answers, and
+a second stated answer is not a measurement. The Scan contributes the recommendation and the
+success criterion written in advance; a **measured** outcome must come from a product that
+observes — §86.1's **L32**, which **P41 must precede**.
+
+### 107.3 Comparability
+
+A change to the ordering rules, the relation rules, the hypothesis rules or the impact
+classification **breaks comparability between runs** and must be visible as a version change
+(`AGENT_ACCESS_LAYER.md` §25.2). Where two runs were produced under different versions, the
+honest comparison result is **not comparable** — never a silent difference.
+
+### 107.4 The anti-funnel rule binds every contract in this part
+
+This part **increases** funnel risk, and the safeguards are therefore stated as properties the
+contracts must have rather than as intentions:
+
+- **A report with no findings must remain fully reachable**, and prioritisation, clustering,
+  dependency and scenario output must all be **empty** on it. No priority, no cluster, no
+  urgency, no product.
+- **`recommended_product: null` and `free_tool_handoff: null` must stay simultaneously
+  reachable** with a complete, useful report — the structural anti-funnel case §84.3 already
+  requires.
+- **Prioritisation ranks genuine findings only.** It may never manufacture, promote or retain a
+  finding in order to have something to rank, and ordering an empty set produces an empty
+  ordering rather than a recommendation.
+- **At least one action must be doable with no purchase** — §81.2's credibility test.
+- **No urgency vocabulary without owner-stated urgency**, and no estimate presented as a cost of
+  delay.
+- ***"No clear opportunity found"* is a designed result**, not a fallback, and is the
+  highest-trust output the Scan can produce.
+
+## 108. Classification and verdict
+
+### 108.1 IN / NOT IN / PREPARE / LATER / NOW
+
+**NOW: none.** No code, schema, migration, flag, prompt, provider, route, UI, test or
+configuration change. Nothing here is implemented and nothing is approved for implementation.
+
+**IN for the contracts** — defined here, built by a later PR: the funnel and its stage states
+(§101) · clusters (§102) · the narrowed hypothesis form (§103) · dependencies (§104) · evidence
+gaps (§105) · the four-state impact classification (§106) · deterministic ordering under
+§100.2's five conditions.
+
+**NOT IN, and unchanged from §86.1** except as narrowed by §100.2: opaque or learned ranking ·
+persistence · consent and promotion · outcome measurement · any Part XIII runtime ·
+cross-product learning · benchmarks and cohort statistics · integrations · a second business
+process · any executed action · account creation as a condition of value · Setup Kit pre-fill.
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P47** | **A deterministic ordering is versioned separately from the rules it orders** (§100.2 condition 4, §43.3) — `prioritisation_rule_set_version` beside the existing rule-set version | Free before the first ordered report exists. Afterwards two runs ordered by different ladders are indistinguishable, and the first re-ordering looks like an improvement |
+| **P48** | **Stage, cluster and dependency references are opaque ids, never positions** (§101, §102) | An index is not a reference. Changing it later invalidates every stored report that used one |
+| **P49** | **`evidence_refs[].role` reaches the Scan's evidence shape** (§93.2, **T3**) — what was relied on versus merely available | Unrecoverable after the run. The distinction cannot be reconstructed from the answers alone |
+| **P50** | **A hypothesis can never be stored as a cause** (§103) — its claim class and tier travel with it | The flattening would happen at promotion (§89), and a candidate that lost its class becomes a fact nobody asserted |
+| **P51** | **§107.4's anti-funnel properties are structural tests, not review items** | A safeguard that is not executable is an intention. The zero-findings report is the one that must be pinned before ordering exists |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L35** | **Scenario / counterfactual output** — a conditional restatement of the owner's own arithmetic, structurally distinct from finding, impact and recommendation, never renderable as a result, never an Impact, never a baseline, and never present on a report with no findings | The evidence, confidence and impact-classification surfaces (§105, §106) are shipped and the report's provenance is already visible. Before that, a scenario is a forecast with better manners |
+
+### 108.2 Verdict
+
+The review asked for two boundaries and six contracts. One boundary was a sentence that said
+more than it meant, and is narrowed to what it always meant; the other was a charter line
+between two products that had never been written down, and is now written in both directions.
+Of the six contracts, **four are narrowings of things Parts XI–XIII already hold** — §42.2's
+`hypotheses[]`, §82.3's first-class unknown, §92's per-stage provenance and §43.3's versioned
+ranking — and two are genuinely new shapes, the funnel and the cluster, both of which are
+analytical representations of answers the owner already gave.
+
+Five PREPARE items, one LATER item, no new record type, no store, no service, no table, no
+layer, no runtime, **no product started and no V1 work created.** The Scan's live behaviour is
+untouched, and the next milestone is still Google's verification review.
+
