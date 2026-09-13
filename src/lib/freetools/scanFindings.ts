@@ -36,8 +36,14 @@
 import { SCAN_QUESTION_SET_VERSION } from "@/lib/freetools/scanQuestions";
 import { computeLostRevenue } from "@/lib/freetools/scanLostRevenue";
 import { recommendFor } from "@/lib/freetools/scanRecommendations";
+import { buildEnquiryFunnel, findEarliestLeak } from "@/lib/freetools/scanFunnel";
+import { deriveDependencies } from "@/lib/freetools/scanDependencies";
+import { prioritise } from "@/lib/freetools/scanPrioritisation";
+import { classifyImpact } from "@/lib/freetools/scanImpactClass";
+import { deriveEvidenceGaps } from "@/lib/freetools/scanEvidenceGaps";
 import {
   SCAN_CONDITION_ORDER,
+  SCAN_PRIORITISATION_RULE_SET_VERSION,
   type ScanAnswers,
   type ScanConfidence,
   type ScanConfidenceCapReason,
@@ -237,16 +243,44 @@ export function buildScanReport(
   context: ScanRunContext,
   inconsistencies: readonly ScanInconsistency[] = []
 ): ScanReport {
-  const findings: ScanReportFinding[] = deriveFindings(answers).map((finding) => ({
-    finding,
-    impact: computeLostRevenue(finding, answers, context),
-    recommendation: recommendFor(finding, answers),
-  }));
+  const derived = deriveFindings(answers);
+
+  const findings: ScanReportFinding[] = derived.map((finding) => {
+    const impact = computeLostRevenue(finding, answers, context);
+    return {
+      finding,
+      impact,
+      recommendation: recommendFor(finding, answers),
+      // Presentation over the impact just computed, never a second
+      // opinion about it: the classifier reads the impact and nothing
+      // else, and it changes no gate and no number (§106).
+      impact_class: classifyImpact(impact),
+    };
+  });
+
+  // The diagnosis layer reads the findings THAT WERE ALREADY DERIVED
+  // rather than re-deriving them. Two readings of one run is the
+  // pattern the canonical-information discipline exists to remove, and
+  // the funnel decides no finding of its own.
+  const conditions = derived.map((finding) => finding.condition);
+  const funnel = buildEnquiryFunnel(answers, conditions, inconsistencies);
+  const dependencies = deriveDependencies(conditions);
 
   return {
     question_set_version: SCAN_QUESTION_SET_VERSION,
     rule_set_version: SCAN_RULE_SET_VERSION,
+    // Unchanged: SCAN_CONDITION_ORDER, exactly as before PR D. The
+    // order to ACT in is `prioritisation`, which references these and
+    // never reorders them.
     findings,
     inconsistencies,
+    prioritisation_rule_set_version: SCAN_PRIORITISATION_RULE_SET_VERSION,
+    funnel,
+    earliest_leak: findEarliestLeak(funnel),
+    // Genuine findings only. An empty set produces an empty ordering
+    // rather than anything to show (§107.4).
+    prioritisation: prioritise(derived, dependencies),
+    dependencies,
+    evidence_gaps: deriveEvidenceGaps(findings, funnel),
   };
 }

@@ -36,7 +36,14 @@ import { deriveFindings } from "@/lib/freetools/scanFindings";
 import { SCAN_CONDITION_ORDER } from "@/lib/freetools/scanTypes";
 import { validateScanAnswers } from "@/lib/freetools/scanValidation";
 
-/** The six Phase 1 pure-logic modules. Nothing else is in scope here. */
+/**
+ * The Phase 1 pure-logic modules. Nothing else is in scope here.
+ *
+ * PR D added five, and they are held to exactly the same structural
+ * guarantees as the original six: a diagnosis layer that could reach a
+ * model, a clock or a tenant would undo the property the whole Scan
+ * rests on, and it is the layer where the temptation is greatest.
+ */
 const SCAN_MODULES = [
   "src/lib/freetools/scanTypes.ts",
   "src/lib/freetools/scanQuestions.ts",
@@ -44,6 +51,11 @@ const SCAN_MODULES = [
   "src/lib/freetools/scanFindings.ts",
   "src/lib/freetools/scanLostRevenue.ts",
   "src/lib/freetools/scanRecommendations.ts",
+  "src/lib/freetools/scanFunnel.ts",
+  "src/lib/freetools/scanDependencies.ts",
+  "src/lib/freetools/scanPrioritisation.ts",
+  "src/lib/freetools/scanImpactClass.ts",
+  "src/lib/freetools/scanEvidenceGaps.ts",
 ];
 
 /** Import statements only — comments discussing Remy are fine. */
@@ -99,7 +111,7 @@ describe("the scan modules cannot reach Remy, a provider or a tenant", () => {
       for (const specifier of specifiers) {
         assert.match(
           specifier,
-          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)["']/,
+          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations|Funnel|Dependencies|Prioritisation|ImpactClass|EvidenceGaps)["']/,
           `${file} imports ${specifier}`
         );
       }
