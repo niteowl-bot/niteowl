@@ -829,7 +829,98 @@ is consumed, not modified.
   provenance runtime; cross-product learning; any model call, prompt or provider change;
   Setup Kit pre-fill; Q1/Q2-aware routing; the standalone Lost Revenue entry; and every later
   Scan phase. `docs/ARCHITECTURE.md` is unchanged and no Remy code, flag, schema or
-  configuration was touched. **PR D has NOT started.**
+  configuration was touched. *(PR D has since shipped as **PR #92**; see below. The rest of
+  this list stands.)*
+
+**ENQUIRY FUNNEL DIAGNOSIS SHIPPED — PR D IS COMPLETE AND CLOSED (PR #92, approved head
+`3f43056`, normal merge commit `97dda2b` 2026-09-13, deployed as
+`dpl_6cAqdZkmi4sqo6GUe2rEnMbswKv4` — Ready on the production aliases — and verified).** This
+is the build against Part XIV's contracts, and it is the point at which the Scan stops being a
+questionnaire with findings attached and starts reasoning about the process the owner
+described. Seventeen files: eleven added, six modified, **+4312 / −12**. `docs/ARCHITECTURE.md`
+is unchanged.
+
+Five new pure modules under `src/lib/freetools/` — `scanFunnel.ts`, `scanDependencies.ts`,
+`scanPrioritisation.ts`, `scanImpactClass.ts`, `scanEvidenceGaps.ts` — all held to the same
+structural boundary suite, which now covers **eleven modules instead of six**. What they add:
+
+- **A deterministic enquiry-to-booked-work funnel** in five stages with opaque ids and fixed
+  positions: `enquiry_received` → `enquiry_answered` → `time_agreed` → `work_booked` →
+  `enquiry_followed_up` (a `recovery` stage, after the booking decision). Each carries the
+  state of what we know — `owner_declared`, `unknown` with `owner_not_sure` or `not_answered`
+  recorded separately, `inconsistent` — **separately from its health**: `finding`,
+  `appears_adequate`, `not_established` with its reason, or `not_assessed`. **No stage can be
+  `observed`**, and `derived` is declared but never emitted
+- **Two stages are never given a verdict, deliberately.** `enquiry_received` (Q1–Q3) is demand
+  generation, and `work_booked` (Q9) would reach a condition class §81.3 excluded. Both render
+  context only. **Adequacy is a claim and is refused where the answers do not support it** —
+  Q4 = 0 with Q5 = *no* is `not_established` / `no_way_of_knowing`, **not** an inconsistency,
+  because the two statements can both be true
+- **Earliest-leak detection** — the earliest *assessable* stage with a finding, reported with
+  what looks adequate before it **and** what was never established before it. The second list
+  is the honesty clause: without it, "earliest" implies nothing earlier is wrong
+- **Versioned prioritisation, separate from `report.findings` order.** A four-rung visible
+  ladder (blocking → path position → confidence → `SCAN_CONDITION_ORDER` as final tie-break);
+  every position carries the **enumerated reason code of the rule that placed it**. Only two
+  rungs fire in Phase 1 and a sweep pins that the others never bind.
+  `SCAN_PRIORITISATION_RULE_SET_VERSION` is a **separate constant feeding a separate report
+  field** (P47)
+- **Deterministic dependencies** — one entry per pair, `should_precede` under `stage_order`.
+  `blocked_by`, `independent`, `should_follow` and three of the four canonical rules are
+  declared and **never emitted** in Phase 1, pinned by sweep. Every sentence states it is
+  about the order things can be **measured** in, never about cause
+- **Four-state impact classification** (`quantified` / `directional` /
+  `material_unquantifiable` / `insufficient_evidence`) as **presentation only** over the
+  reason codes sizing already produces. The classifier cannot reach the operands, so
+  `directional` cannot be upgraded
+- **Evidence-gap reporting** — fourteen codes derived from confidence caps, sizing reasons and
+  **funnel stage state**, deduplicated and stably ordered. The raw answers are not read, which
+  is what makes the set reconstructible from the report. `no_permitted_expression` produces
+  **no gap**
+- **The user-visible report** gains *"Where your enquiries are going"* (on every report,
+  including zero-findings), *"Where to start"*, a priority line and impact-class line on each
+  existing card, *"How these relate"* and *"What would sharpen this"*. The surface holds no
+  rule of its own
+
+**What PR #92 preserved, verified rather than assumed:** existing finding detection unchanged
+(`deriveFindings` untouched) · `report.findings` still in **`SCAN_CONDITION_ORDER`** ·
+**`SCAN_RULE_SET_VERSION` unchanged at `v1`** · zero-findings behaviour preserved and pinned ·
+**the nine questions untouched** in wording, options, requiredness and order · `scanQuestions`,
+`scanValidation`, `scanLostRevenue` and `scanRecommendations` with **zero diff** · **no Remy
+change** · and **no persistence, database, schema, tenant, account, API route, model, prompt,
+provider, network call, clock, analytics or external runtime** added. All twelve deleted lines
+were audited individually and every one is an in-place widening; **no pre-existing assertion
+was weakened to make the implementation pass.**
+
+**Verification:** PR D suites 124 pass / 0 fail; free-tools 455 / 0; full repository **1998
+pass / 0 fail / 0 skipped**; `tsc` clean; ESLint at the existing baseline with 0 problems in
+PR D files; build successful; `git diff --check` clean. In production: `/api/health` HTTP 200
+`database: ok`, homepage HTTP 200, **`/free-tools/business-opportunity-scan` HTTP 200**, and
+**the deployed client bundle was confirmed to contain the funnel implementation** — the string
+*"Where your enquiries are going"* located in `/_next/static/chunks/1o1od15vo02n2.js` — so the
+diagnosis layer is genuinely live, not merely built. The feature branch was deleted locally
+and on origin after `git branch -d` accepted it. **Deployment-to-merge correspondence is NOT
+SHA-verified** (no Git metadata from `vercel inspect`, as for PRs #54, #58, #60, #62, #66, #68,
+#70 and #89); identification rests on the deployment appearing two seconds after the merge and
+carrying the production aliases.
+
+**One implementation discrepancy, found and corrected before merge.**
+`unanswered_count_not_given` and `unanswered_count_unknown` were specified to derive from the
+sizing reasons `q4_missing` / `q4_not_sure` — but **sizing only runs on a finding, and an
+absent or "not sure" Q4 raises none** (§87.4), so both codes were unreachable. They now derive
+from the `enquiry_answered` **stage state**, with the approved blocking, information-gain and
+effort semantics preserved exactly; the Q6/Q7 gaps moved onto the same table, so there is **one
+mechanism instead of two**. **No finding is manufactured and sizing still never runs without
+one.**
+
+**What PR #92 did NOT do, and what its merge does not approve:** clusters (§102) and hypotheses
+(§103) — both Part XIV contracts, both deliberately out of scope · scenario output (**L35**) ·
+`evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token linkage and the
+consent and promotion flow (Part XII §89) · outcome or impact measurement · any Part XIII
+provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit pre-fill · the
+standalone Lost Revenue entry · a second business process · a fourth condition code · and every
+later Scan phase. **PR D is complete and closed**, and the next milestone is still Google's
+verification review.
 
 **Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
 (confidence levels and cap policy that the implementation chose and canon does not yet
@@ -1189,10 +1280,13 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
 - **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). Do not rebuild
 - **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. **Phase 1
   pure logic SHIPPED** (PR #84), **Phase 1 recommendation layer SHIPPED** (PR #87, merge
-  `6055f64`) and the **Phase 1 public surface SHIPPED, LIVE and production-verified** (PR #89,
-  merge `f3ab620`, 2026-09-12) — a visitor can now complete the Scan and read a report.
-  Persistence, run identity, consent flow, outcome measurement, Part XIII runtime and later
-  phases NOT started and not approved
+  `6055f64`), the **Phase 1 public surface SHIPPED, LIVE and production-verified** (PR #89,
+  merge `f3ab620`, 2026-09-12) — a visitor can now complete the Scan and read a report — and
+  the **Enquiry Funnel Diagnosis SHIPPED, LIVE and production-verified** (**PR D**, delivered
+  as PR #92, merge `97dda2b`, 2026-09-13): the funnel, earliest leak, versioned prioritisation,
+  dependencies, four-state impact classification and evidence gaps. **PR D is complete and
+  closed.** Persistence, run identity, consent flow, outcome measurement, Part XIII runtime,
+  clusters, hypotheses and later phases NOT started and not approved
 - **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
   a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
   entry NOT started
