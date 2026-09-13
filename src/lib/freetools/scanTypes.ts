@@ -433,6 +433,18 @@ export interface ScanReport {
   readonly dependencies: readonly ScanDependency[];
   /** What would let NiteOwl apply its own rules more confidently (§105). */
   readonly evidence_gaps: readonly ScanEvidenceGap[];
+  /**
+   * §107.3 — the relation rules carry their own version, so a change to
+   * how two findings are related is visible as exactly that.
+   */
+  readonly cluster_rule_set_version: string;
+  /**
+   * Stated relations between pairs of findings (§102).
+   *
+   * Empty below two findings, always. Clusters reference the findings
+   * above and change none of them.
+   */
+  readonly clusters: readonly ScanCluster[];
 }
 
 /**
@@ -888,3 +900,134 @@ export interface ScanEvidenceGap {
   readonly wording: string;
   readonly source_type: "derived_deterministic";
 }
+
+// ── Opportunity clusters — PR E (Part XIV §102) ───────────────────
+//
+// A CLUSTER IS A STATED RELATION BETWEEN TWO FINDINGS. It is not a
+// finding, not a score, not a new record type and NOT A CONTAINER: it
+// references the findings it relates and holds no copy of them (§102,
+// Part IV M7's reference rule).
+//
+// The distinction matters because a grouping and a relation behave
+// differently under the one value that decides it: `independent`. A
+// bucket cannot hold two things that are not in a bucket together, so
+// the vocabulary here is relational and pairwise throughout.
+//
+// IT EXISTS TO STOP TWO READINGS, NOT TO CREATE ONE. Two findings on
+// one path should not read as two separate problems; two findings we
+// have not related should not read as if we had. A cluster is never
+// invented to create a narrative (§102), and where no relation rule
+// fires the honest answer — `independent` — is a real output.
+//
+// A CLUSTER CARRIES ITS OWN PROVENANCE AND ITS OWN CONFIDENCE AND
+// INHERITS NEITHER (§102, §92's governing principle). A relation can be
+// weaker than both things it relates, and a cluster whose confidence is
+// the maximum of its members' is a confidence that was never assessed.
+// Clustering never collapses, summarises, re-ranks or re-confidences a
+// member, and nothing upstream reads a cluster.
+
+/**
+ * §102's closed set of relations.
+ *
+ * THREE OF THE FIVE ARE DECLARED AND CANNOT BE EMITTED IN PHASE 1, and
+ * each is blocked by a missing contract rather than by a missing
+ * implementation:
+ *
+ *   `shared_cause_candidate` is established by intersecting hypothesis
+ *     sets (§103), and hypotheses do not exist. No proxy stands in for
+ *     them — a shared question, a shared cap or a shared stage is not a
+ *     shared candidate cause, and treating one as if it were would
+ *     smuggle hypothesis generation into clustering.
+ *
+ *   `competing_for_same_resource` needs a canonical resource model, and
+ *     there is none: no recommendation carries a resource, and "every
+ *     action needs the owner's attention" is a truism that would fire
+ *     on every pair. A rule that never discriminates is narrative.
+ *
+ *   `masked_measurement` needs an upstream integrity gap that makes a
+ *     DOWNSTREAM FINDING's answers unreliable. Q5's gap is genuinely
+ *     upstream, but Q6 states a practice rather than a measurement and
+ *     Q7 concerns conversations that did happen, so no canon-traceable
+ *     finding-to-finding trigger exists yet.
+ *
+ * They stay in the vocabulary because canon names them and a later
+ * phase will need them, and a sweep test pins that they never fire —
+ * which is what stops one being quietly enabled by a proxy.
+ */
+export type ScanClusterRelation =
+  | "sequential_in_one_process"
+  | "shared_cause_candidate"
+  | "competing_for_same_resource"
+  | "masked_measurement"
+  | "independent";
+
+/**
+ * The enumerated rule that produced a relation.
+ *
+ * A relation with no rule behind it is prose, exactly as §104 requires
+ * of a dependency. Three of these five are declared and never fire,
+ * mirroring the three relations above.
+ */
+export type ScanClusterRuleCode =
+  | "adjacent_funnel_stages"
+  | "intersecting_hypotheses"
+  | "shared_owner_resource"
+  | "upstream_integrity_gap"
+  | "no_relation_rule_fired";
+
+/**
+ * One stated relation between exactly two findings.
+ *
+ * THE MEMBERS ARE REFERENCES, NEVER COPIES. A condition code is the
+ * opaque id the report already uses, and a stage id is the funnel's
+ * (P48: an index is not a reference). Both are fixed two-item tuples,
+ * so a cluster over a SET — a grouping — is unrepresentable rather than
+ * merely discouraged.
+ *
+ * THERE IS NO `business_provided` EVIDENCE ON A CLUSTER, and the type
+ * cannot express one. The owner never told us two findings were
+ * related; the relation is NiteOwl's own structural reading of its own
+ * stage table. Giving a cluster the owner's evidence would launder our
+ * inference into their testimony — so a cluster's whole basis is `rule`
+ * plus the stage ids it read, and both are ours.
+ */
+export interface ScanCluster {
+  /**
+   * Deterministic and derived from the relation plus the canonical
+   * member order. Never an array index, never generated, never random,
+   * and stable across identical runs.
+   */
+  readonly cluster_id: string;
+  readonly relation: ScanClusterRelation;
+  readonly rule: ScanClusterRuleCode;
+  /** Earlier funnel stage first. References, never copies (§102). */
+  readonly member_conditions: readonly [ScanConditionCode, ScanConditionCode];
+  /** The stage ids the rule actually read, in the same order. */
+  readonly member_stage_ids: readonly [ScanFunnelStageId, ScanFunnelStageId];
+  /**
+   * CONFIDENCE IN THE RELATION CLAIM, NEVER IN EITHER FINDING.
+   *
+   * The name is load-bearing. §102 forbids a cluster confidence derived
+   * from its members — inherited, copied, averaged, or taken as their
+   * minimum or maximum — so this is fixed by the relation alone and a
+   * test proves two `high` members still yield `low` for `independent`.
+   */
+  readonly relation_confidence: ScanConfidence;
+  /** Always derived. A cluster is never observed and never stated. */
+  readonly source_type: "derived_deterministic";
+  /** Fixed owner-facing wording, pinned verbatim by test. */
+  readonly wording: string;
+}
+
+/**
+ * The cluster rule set's own version — REQUIRED BY CANON, not optional.
+ *
+ * §107.3 names *"the relation rules"* alongside the ordering rules as
+ * something whose change **breaks comparability between runs and must
+ * be visible as a version change**. It is therefore its own constant
+ * rather than a share of `SCAN_RULE_SET_VERSION` (findings, sizing,
+ * recommendations) or `SCAN_PRIORITISATION_RULE_SET_VERSION`
+ * (ordering): a change to how two findings are related must be visible
+ * as exactly that, and not hidden inside either of the others.
+ */
+export const SCAN_CLUSTER_RULE_SET_VERSION = "v1";

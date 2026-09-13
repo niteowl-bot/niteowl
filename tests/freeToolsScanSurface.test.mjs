@@ -53,6 +53,9 @@ import {
   NO_FINDINGS_WORDING,
   CURRENCY_CHOICES,
   OTHER_CURRENCY,
+  CLUSTERS_NONE_ESTABLISHED_WORDING,
+  CLUSTER_RELATION_LABELS,
+  CLUSTER_RULE_LABELS,
   DEPENDENCY_RELATION_LABELS,
   DEPENDENCY_RULE_LABELS,
   GAP_BLOCKS_LABELS,
@@ -949,11 +952,15 @@ describe("dependencies and evidence gaps render what the engine produced", () =>
     assert.match(html, /data-assumptions/);
   });
 
-  test("the footer names the ordering version alongside the other two", () => {
+  test("the footer names every rule-set version, each from its own field", () => {
+    // PR E added the relation rules alongside the other three. The
+    // assertion stays an EXACT match on the whole line and is extended
+    // rather than loosened: each version is read from its own report
+    // field, so one sharing another's constant would still fail.
     const { report, html } = renderReport(ALL_THREE_SIZED);
     assert.ok(
       unescape(html).includes(
-        `Question set ${report.question_set_version}, rules ${report.rule_set_version}, ordering rules ${report.prioritisation_rule_set_version}.`
+        `Question set ${report.question_set_version}, rules ${report.rule_set_version}, ordering rules ${report.prioritisation_rule_set_version}, relation rules ${report.cluster_rule_set_version}.`
       )
     );
   });
@@ -985,5 +992,116 @@ describe("the PR D sections add no persistence, no network and no decision", () 
     for (const file of SURFACE_FILES) {
       assert.doesNotMatch(code(file), /dangerouslySetInnerHTML/);
     }
+  });
+});
+
+// ── 8. PR E — clusters on the page ────────────────────────────────
+//
+// No new section: clusters reuse "How these relate", which already
+// exists and already renders only where there are two findings to
+// relate. What is checked here is that the page states exactly what
+// the engine established — one line per established relation, and one
+// sentence covering every pair it did not relate.
+
+describe("every PR E code the surface can be handed has a label", () => {
+  test("every relation and every rule code is named", () => {
+    const src = read("src/lib/freetools/scanTypes.ts");
+    const members = (typeName) => {
+      const union = src.match(new RegExp(`export type ${typeName} =([\\s\\S]*?);`));
+      assert.ok(union, `${typeName} is not declared where expected`);
+      return (union[1].match(/"[^"]+"/g) ?? []).map((s) => s.slice(1, -1));
+    };
+    for (const relation of members("ScanClusterRelation")) {
+      assert.equal(
+        typeof CLUSTER_RELATION_LABELS[relation],
+        "string",
+        `no label for relation ${relation}`
+      );
+    }
+    for (const rule of members("ScanClusterRuleCode")) {
+      assert.equal(typeof CLUSTER_RULE_LABELS[rule], "string", `no label for rule ${rule}`);
+    }
+  });
+});
+
+describe("clusters render inside the existing relate section", () => {
+  test("an established relation renders one line, with its wording verbatim", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    const sequential = report.clusters.filter(
+      (c) => c.relation === "sequential_in_one_process"
+    );
+    assert.equal(sequential.length, 1);
+    assert.equal(count(html, /data-cluster="sequential_in_one_process"/g), 1);
+    assert.match(html, /data-cluster-rule="adjacent_funnel_stages"/);
+    assert.ok(unescape(html).includes(sequential[0].wording));
+  });
+
+  test("independent pairs get ONE sentence, never a row each", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    const independent = report.clusters.filter((c) => c.relation === "independent");
+    assert.equal(independent.length, 2);
+    // Two independent pairs, one sentence, and no row for either.
+    assert.equal(count(html, /data-clusters-none-established/g), 1);
+    assert.equal(count(html, /data-cluster="independent"/g), 0);
+    assert.ok(unescape(html).includes(CLUSTERS_NONE_ESTABLISHED_WORDING));
+  });
+
+  test("the summary refuses to claim the findings are unrelated", () => {
+    assert.match(CLUSTERS_NONE_ESTABLISHED_WORDING, /not the same as knowing they are separate/);
+    assert.doesNotMatch(CLUSTERS_NONE_ESTABLISHED_WORDING, /they are unrelated\.|are separate problems/i);
+  });
+
+  test("no new section is added — clusters live under the existing heading", () => {
+    const { html } = renderReport(ALL_THREE_SIZED);
+    assert.equal(count(html, /data-dependencies/g), 1);
+    const section = html.indexOf("data-dependencies");
+    const cluster = html.indexOf('data-cluster="sequential_in_one_process"');
+    const dependency = html.indexOf("data-dependency=");
+    assert.ok(section >= 0 && cluster > section, "the cluster line is outside the section");
+    assert.ok(cluster < dependency, "clusters must precede the dependency rows");
+  });
+
+  test("a one-finding report renders no cluster content at all", () => {
+    const { report, html } = renderReport({ q6_followup: "nothing_planned" });
+    assert.equal(report.findings.length, 1);
+    assert.deepEqual(report.clusters, []);
+    assert.equal(count(html, /data-cluster/g), 0);
+    assert.equal(count(html, /data-clusters-none-established/g), 0);
+  });
+
+  test("a zero-findings report renders no cluster content at all", () => {
+    const { report, html } = renderReport();
+    assert.equal(report.findings.length, 0);
+    assert.deepEqual(report.clusters, []);
+    assert.equal(count(html, /data-cluster/g), 0);
+    assert.equal(count(html, /data-clusters-none-established/g), 0);
+  });
+
+  test("a two-finding adjacent report shows the relation and no summary", () => {
+    const { report, html } = renderReport({
+      q4_unanswered_per_week: { kind: "count", value: 4 },
+      q7_messages_to_book: "more_than_three",
+    });
+    assert.deepEqual(
+      report.clusters.map((c) => c.relation),
+      ["sequential_in_one_process"]
+    );
+    assert.equal(count(html, /data-cluster="sequential_in_one_process"/g), 1);
+    assert.equal(count(html, /data-clusters-none-established/g), 0);
+  });
+
+  test("the surface holds no cluster rule of its own", () => {
+    const client = code(`${SURFACE_DIR}/ScanClient.tsx`);
+    assert.doesNotMatch(client, /deriveClusters\(|CLUSTER_RULE_LADDER|adjacent_funnel_stages/);
+    assert.match(client, /report\.clusters/);
+  });
+
+  test("finding cards and their order are untouched by clustering", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    const cards = report.findings.map((f) =>
+      html.indexOf(`data-condition="${f.finding.condition}"`)
+    );
+    assert.deepEqual(cards, [...cards].sort((a, b) => a - b));
+    assert.equal(count(html, /data-condition=/g), 3);
   });
 });

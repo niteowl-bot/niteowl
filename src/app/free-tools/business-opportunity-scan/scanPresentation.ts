@@ -44,6 +44,8 @@ import type {
   ScanStageKind,
   ScanStageNotEstablishedReason,
   ScanStageState,
+  ScanClusterRelation,
+  ScanClusterRuleCode,
 } from "@/lib/freetools/scanTypes";
 import type { ScanValidationErrorCode } from "@/lib/freetools/scanValidation";
 import { SCAN_QUESTIONS } from "@/lib/freetools/scanQuestions";
@@ -550,3 +552,43 @@ export function earliestLeakSentences(leak: ScanEarliestLeak): string[] {
 
   return sentences;
 }
+
+// ── PR E: labels for clusters ─────────────────────────────────────
+//
+// STILL PRESENTATION ONLY. Which relation holds between two findings,
+// and how confident we are in that relation, were decided by a pure
+// module. This file names the codes and adds no rule of its own.
+//
+// THE INDEPENDENT SUMMARY IS THE CAREFUL ONE. Rendering a row per
+// unrelated pair would pad the report with non-statements; rendering
+// nothing would let the reader supply a connection we never made.
+// One sentence, saying what our rules did and did not establish.
+
+export const CLUSTER_RELATION_LABELS: Readonly<
+  Record<ScanClusterRelation, string>
+> = {
+  sequential_in_one_process: "Two points on one path",
+  shared_cause_candidate: "May share a cause",
+  competing_for_same_resource: "Compete for the same attention",
+  masked_measurement: "One makes the other harder to measure",
+  independent: "No link established",
+};
+
+/** The canonical rule behind a relation — §102 forbids one without. */
+export const CLUSTER_RULE_LABELS: Readonly<Record<ScanClusterRuleCode, string>> = {
+  adjacent_funnel_stages: "these sit next to each other on the enquiry path",
+  intersecting_hypotheses: "the possible explanations overlap",
+  shared_owner_resource: "both need the same attention from you",
+  upstream_integrity_gap: "an earlier gap affects how reliable the later answer is",
+  no_relation_rule_fired: "none of our rules related them",
+};
+
+/**
+ * The one sentence that stands in for every `independent` pair.
+ *
+ * NOT "these are unrelated". The Scan has not established a link, and
+ * saying that plainly is what stops an absence of evidence being read
+ * as evidence of absence.
+ */
+export const CLUSTERS_NONE_ESTABLISHED_WORDING =
+  "No link has been established between the other findings. Our rules did not relate them, which is not the same as knowing they are separate — where nothing has been established, we say so rather than filling the gap.";

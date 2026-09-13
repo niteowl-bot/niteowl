@@ -52,6 +52,8 @@ import type {
 } from "@/lib/freetools/scanTypes";
 import {
   CAP_REASON_LABELS,
+  CLUSTERS_NONE_ESTABLISHED_WORDING,
+  CLUSTER_RELATION_LABELS,
   CONFIDENCE_LABELS,
   CURRENCY_CHOICES,
   DEPENDENCY_RELATION_LABELS,
@@ -225,11 +227,56 @@ function DependencySection({ report }: { report: ScanReport }) {
     report.findings.find((f) => f.finding.condition === condition)?.recommendation
       .headline ?? condition;
 
+  // Split by what the engine established, never by what reads better:
+  // a relation it stated, and a pair it did not relate.
+  const related = report.clusters.filter((c) => c.relation !== "independent");
+  const unrelated = report.clusters.filter((c) => c.relation === "independent");
+
   return (
     <section className="ft-doc-section border-t border-slate-800 pt-6" data-dependencies>
       <h2 className="text-white font-semibold text-xl mb-3">
         {DEPENDENCY_SECTION_TITLE}
       </h2>
+
+      {/*
+        Clusters sit above the ordering, because "these are two points
+        on one path, not two problems" is what the owner needs before
+        being told which to work on first. Only the established
+        relations get a line of their own; every pair our rules did not
+        relate is covered once, below, rather than a row each (§102).
+      */}
+      {related.length > 0 && (
+        <ul className="space-y-3 mb-4">
+          {related.map((cluster) => (
+            <li
+              key={cluster.cluster_id}
+              data-cluster={cluster.relation}
+              data-cluster-rule={cluster.rule}
+            >
+              <p className="text-slate-200 text-[15px]">
+                {headlineFor(cluster.member_conditions[0])}{" "}
+                <span className="text-slate-500">
+                  {CLUSTER_RELATION_LABELS[cluster.relation].toLowerCase()}
+                </span>{" "}
+                {headlineFor(cluster.member_conditions[1])}
+              </p>
+              <p className="text-slate-400 text-sm leading-relaxed mt-0.5">
+                {cluster.wording}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {unrelated.length > 0 && (
+        <p
+          className="text-slate-400 text-sm leading-relaxed mb-4"
+          data-clusters-none-established
+        >
+          {CLUSTERS_NONE_ESTABLISHED_WORDING}
+        </p>
+      )}
+
       <ul className="space-y-3">
         {report.dependencies.map((dependency) => (
           <li
@@ -508,7 +555,8 @@ export function ScanReportDocument({
           <p className="ft-doc-note text-slate-500 text-[13px] leading-relaxed mt-3">
             Your own answers, exactly as given. Question set {report.question_set_version}, rules{" "}
             {report.rule_set_version}, ordering rules{" "}
-            {report.prioritisation_rule_set_version}.
+            {report.prioritisation_rule_set_version}, relation rules{" "}
+            {report.cluster_rule_set_version}.
           </p>
         </section>
       </div>
