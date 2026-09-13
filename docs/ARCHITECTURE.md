@@ -9027,4 +9027,3 @@ analytical representations of answers the owner already gave.
 Five PREPARE items, one LATER item, no new record type, no store, no service, no table, no
 layer, no runtime, **no product started and no V1 work created.** The Scan's live behaviour is
 untouched, and the next milestone is still Google's verification review.
-
