@@ -41,7 +41,9 @@ import { deriveDependencies } from "@/lib/freetools/scanDependencies";
 import { prioritise } from "@/lib/freetools/scanPrioritisation";
 import { classifyImpact } from "@/lib/freetools/scanImpactClass";
 import { deriveEvidenceGaps } from "@/lib/freetools/scanEvidenceGaps";
+import { deriveClusters } from "@/lib/freetools/scanClusters";
 import {
+  SCAN_CLUSTER_RULE_SET_VERSION,
   SCAN_CONDITION_ORDER,
   SCAN_PRIORITISATION_RULE_SET_VERSION,
   type ScanAnswers,
@@ -282,5 +284,10 @@ export function buildScanReport(
     prioritisation: prioritise(derived, dependencies),
     dependencies,
     evidence_gaps: deriveEvidenceGaps(findings, funnel),
+    cluster_rule_set_version: SCAN_CLUSTER_RULE_SET_VERSION,
+    // Strictly downstream: clusters read the findings already derived
+    // and nothing reads clusters. Nothing above this line changes
+    // because of what comes back (§102).
+    clusters: deriveClusters(derived),
   };
 }
