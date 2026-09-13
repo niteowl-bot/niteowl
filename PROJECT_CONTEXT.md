@@ -13,7 +13,7 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–XIII.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–XIV.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
@@ -23,8 +23,9 @@ review extends them rather than adding a third:
   (**a contract, not a plan** — its Phase 1 pure logic has since shipped as PR #84; the
   product surface, persistence and consent flow it describes have not), Part XII the
   Scan's three Phase 1 contract decisions, Part XIII the Decision, Outcome and Impact
-  Provenance contracts and the canonical provenance chain. **§21 is the single canonical
-  architecture diagram**, and Parts VII–XIII do not redraw it.
+  Provenance contracts and the canonical provenance chain, Part XIV the Business Opportunity
+  Scan's intelligence contracts. **§21 is the single canonical
+  architecture diagram**, and Parts VII–XIV do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -131,6 +132,45 @@ gains rule 9 (an outcome is not an impact) and the new fields in place; §23's a
 points at §95.2. **NOW: none** — three PREPARE items (P44–P46), one LATER (L34), no code, schema,
 flag, prompt, provider or configuration change, no store, no service, no table, no layer, no
 chain table, no product started, no boundary moved, **and no V1 work created.**
+
+Part XIV (added 2026-09-12) is the **architecture strengthening the Business Opportunity Scan
+intelligence review required before PR D could start**, and it is deliberately the narrowest of
+the fourteen. The review found the largest available improvement to the Scan's report needs no
+new question, no persistence, no model and no provider — only that the report say which finding
+matters most, how the findings relate, and what NiteOwl is *not* claiming. Two boundaries stood
+in the way and both were real. **First, §86.1 excluded *"a scoring model, ranking model or
+learned prioritisation"* as one undifferentiated item**, which would also have excluded a
+deterministic, explainable, versioned, product-scoped ordering over rules the architecture
+already holds — something §43.3 has always permitted every product. That sentence is **narrowed
+to what it always meant** (no opaque score, no learned or probabilistic ranking, no hidden
+weights), and §43.3 gains the matching statement plus the rule that **an ordering is versioned
+separately from the rules it orders**. **Second, the Atlas boundary had never been written
+down.** §100.3 writes it in both directions: the Scan may reason about **order and adjacency
+within the one process it questioned directly**, name the earliest stage where work appears to
+be lost, express hypotheses, identify dependencies and say what is *not* the immediate problem;
+it may **never assert a cause, never reason across domains and never become a general causal
+analysis engine**. Atlas's charter is untouched, and a Scan finding may be **one input** to an
+Atlas synthesis but never the synthesis.
+
+Six contracts are defined — the enquiry funnel and its four stage states (§101), opportunity
+clusters (§102), the narrowed hypothesis form (§103), dependencies (§104), evidence gaps (§105)
+and the four-state impact classification (§106). **Four of the six are narrowings of things
+Parts XI–XIII already held** — §42.2's `hypotheses[]` (*a ranked list, not a winner*), §82.3's
+first-class unknown, §92's per-stage provenance and §43.3's versioned ranking — and only the
+funnel and the cluster are new shapes, both of them analytical representations of answers the
+owner already gave. Three rules carry the most weight: **no stage is ever `observed`** (the Scan
+observes nothing, and a type that cannot express an observation cannot claim one); a **cluster
+or dependency is never invented to create a narrative**, so `independent` is a real output; and
+`expected_information_gain` on an evidence gap is **a claim about NiteOwl's own rules, never
+about the business** — *"this would let us put a range on it"* is verifiable, *"this would
+reveal £X"* is an estimate wearing a gap's clothing and P39 bars it. §107.4 restates the
+anti-funnel rule as properties the contracts must have: a zero-findings report stays reachable
+with **empty** prioritisation, clustering and dependency output, `recommended_product: null` and
+`free_tool_handoff: null` stay simultaneously reachable, and prioritisation **ranks genuine
+findings only**. **NOW: none** — five PREPARE items (P47–P51), one LATER (L35), no code, schema,
+migration, flag, prompt, provider, route, UI, test or configuration change, no store, no
+service, no table, no layer, no runtime, **no product started, no live Scan behaviour changed
+and no V1 work created. PR D is NOT started and is not authorised by this part.**
 
 ---
 
