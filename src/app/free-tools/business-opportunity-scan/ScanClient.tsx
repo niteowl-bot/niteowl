@@ -44,6 +44,8 @@ import type { ScanValidationError } from "@/lib/freetools/scanValidation";
 import { buildScanReport } from "@/lib/freetools/scanFindings";
 import type {
   ScanAnswers,
+  ScanBusinessProcess,
+  ScanEvidenceGap,
   ScanQuestionId,
   ScanReport,
   ScanReportFinding,
@@ -52,15 +54,34 @@ import {
   CAP_REASON_LABELS,
   CONFIDENCE_LABELS,
   CURRENCY_CHOICES,
+  DEPENDENCY_RELATION_LABELS,
+  DEPENDENCY_SECTION_TITLE,
   ERROR_LABELS,
+  FUNNEL_SECTION_NOTE,
+  FUNNEL_SECTION_TITLE,
+  GAPS_SECTION_NOTE,
+  GAPS_SECTION_TITLE,
+  GAP_BLOCKS_LABELS,
+  GAP_EFFORT_LABELS,
+  IMPACT_CLASS_LABELS,
+  INFORMATION_GAIN_LABELS,
   NO_FINDINGS_WORDING,
   OTHER_CURRENCY,
+  PRIORITY_ORDER_NOT_CAUSE,
+  PRIORITY_SECTION_TITLE,
   PRODUCT_ATTRIBUTION,
+  STAGE_ASSESSMENT_LABELS,
+  STAGE_KIND_LABELS,
+  STAGE_NOT_ASSESSED_NOTE,
+  STAGE_NOT_ESTABLISHED_LABELS,
+  STAGE_STATE_LABELS,
   UNKNOWN_REASON_LABELS,
   answerLabel,
   draftToPayload,
+  earliestLeakSentences,
   emptyDraft,
   formatImpactRange,
+  stageLabel,
   valueLabel,
 } from "@/app/free-tools/business-opportunity-scan/scanPresentation";
 import type { CountDraft, DraftValue, MoneyDraft, ScanDraft } from "@/app/free-tools/business-opportunity-scan/scanPresentation";
@@ -85,15 +106,208 @@ const errorClass = "text-[13px] text-rose-300 mt-2";
 
 // ── The report ────────────────────────────────────────────────────
 
-function FindingCard({ entry, index }: { entry: ScanReportFinding; index: number }) {
-  const { finding, impact, recommendation } = entry;
+/**
+ * The funnel — the path the owner's own answers describe, in order.
+ *
+ * IT RENDERS THE ENGINE'S VERDICT AND SUPPLIES NONE. A stage that is
+ * `not_assessed` gets a plain note saying so rather than a verdict, and
+ * `appears_adequate` keeps its "from what you told us" qualification
+ * wherever it appears — the Scan has looked at nothing (§84.1).
+ */
+function FunnelSection({ funnel }: { funnel: ScanBusinessProcess }) {
+  return (
+    <section className="ft-doc-section border-t border-slate-800 pt-6" data-funnel>
+      <h2 className="text-white font-semibold text-xl mb-2">{FUNNEL_SECTION_TITLE}</h2>
+      <p className="text-slate-400 text-sm leading-relaxed mb-4">{FUNNEL_SECTION_NOTE}</p>
+      <ol className="space-y-3">
+        {funnel.stages.map((stage) => (
+          <li
+            key={stage.stage_id}
+            className="rounded-lg border border-slate-800 bg-slate-900/40 px-3.5 py-3"
+            data-stage={stage.stage_id}
+            data-stage-assessment={stage.assessment}
+            data-stage-state={stage.state}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-3">
+              <span className="text-slate-200 text-[15px] font-medium">
+                {stageLabel(stage.stage_id)}
+              </span>
+              <span className="text-slate-500 text-[13px]">
+                {STAGE_KIND_LABELS[stage.kind]}
+              </span>
+            </div>
+            <p className="text-slate-300 text-[15px] mt-1">
+              {stage.assessable
+                ? STAGE_ASSESSMENT_LABELS[stage.assessment]
+                : STAGE_NOT_ASSESSED_NOTE[stage.stage_id] ??
+                  STAGE_ASSESSMENT_LABELS[stage.assessment]}
+            </p>
+            {stage.not_established_reason && (
+              <p className="text-slate-400 text-sm mt-1" data-stage-reason={stage.not_established_reason}>
+                {STAGE_NOT_ESTABLISHED_LABELS[stage.not_established_reason]}
+              </p>
+            )}
+            <p className="text-slate-500 text-[13px] mt-2">
+              {STAGE_STATE_LABELS[stage.state]}:{" "}
+              {stage.informed_by
+                .map((id) => scanQuestion(id)?.wording ?? id)
+                .join(" · ")}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * Where to start — the earliest visible leak and the ordered priorities.
+ *
+ * Every position shows THE RULE THAT PLACED IT, as a sentence, and the
+ * order-not-cause line sits under the list rather than in a footnote:
+ * ordering findings is the closest the Scan comes to another product's
+ * territory, and this is the line that keeps it on its own side
+ * (§100.2 condition 2, §100.3).
+ */
+function PrioritySection({
+  report,
+}: {
+  report: ScanReport;
+}) {
+  const headlineFor = (condition: string) =>
+    report.findings.find((f) => f.finding.condition === condition)?.recommendation
+      .headline ?? condition;
+
+  return (
+    <section className="ft-doc-section border-t border-slate-800 pt-6" data-priorities>
+      <h2 className="text-white font-semibold text-xl mb-3">{PRIORITY_SECTION_TITLE}</h2>
+
+      {report.earliest_leak && (
+        <div className="mb-4" data-earliest-leak={report.earliest_leak.stage_id}>
+          {earliestLeakSentences(report.earliest_leak).map((sentence) => (
+            <p key={sentence} className="text-slate-300 text-[15px] leading-relaxed">
+              {sentence}
+            </p>
+          ))}
+        </div>
+      )}
+
+      <ol className="space-y-3">
+        {report.prioritisation.map((priority) => (
+          <li
+            key={priority.condition}
+            data-priority={priority.position}
+            data-priority-reason={priority.reason_code}
+          >
+            <p className="text-slate-200 text-[15px]">
+              <span className="text-indigo-400 font-medium">
+                {priority.position}.
+              </span>{" "}
+              {headlineFor(priority.condition)}
+            </p>
+            <p className="text-slate-400 text-sm leading-relaxed mt-0.5">
+              {priority.reason_wording}
+            </p>
+          </li>
+        ))}
+      </ol>
+
+      <p className="text-slate-500 text-[13px] leading-relaxed mt-4" data-order-not-cause>
+        {PRIORITY_ORDER_NOT_CAUSE}
+      </p>
+    </section>
+  );
+}
+
+/** How the findings relate in working order. Only where there is a pair. */
+function DependencySection({ report }: { report: ScanReport }) {
+  const headlineFor = (condition: string) =>
+    report.findings.find((f) => f.finding.condition === condition)?.recommendation
+      .headline ?? condition;
+
+  return (
+    <section className="ft-doc-section border-t border-slate-800 pt-6" data-dependencies>
+      <h2 className="text-white font-semibold text-xl mb-3">
+        {DEPENDENCY_SECTION_TITLE}
+      </h2>
+      <ul className="space-y-3">
+        {report.dependencies.map((dependency) => (
+          <li
+            key={`${dependency.from_condition}-${dependency.to_condition}`}
+            data-dependency={dependency.relation}
+            data-dependency-rule={dependency.rule}
+          >
+            <p className="text-slate-200 text-[15px]">
+              {headlineFor(dependency.from_condition)}{" "}
+              <span className="text-slate-500">
+                {DEPENDENCY_RELATION_LABELS[dependency.relation].toLowerCase()}
+              </span>{" "}
+              {headlineFor(dependency.to_condition)}
+            </p>
+            <p className="text-slate-400 text-sm leading-relaxed mt-0.5">
+              {dependency.wording}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** What would let our own rules go further — never a guess about the business. */
+function EvidenceGapSection({ gaps }: { gaps: readonly ScanEvidenceGap[] }) {
+  return (
+    <section className="ft-doc-section border-t border-slate-800 pt-6" data-gaps>
+      <h2 className="text-white font-semibold text-xl mb-2">{GAPS_SECTION_TITLE}</h2>
+      <p className="text-slate-400 text-sm leading-relaxed mb-4">{GAPS_SECTION_NOTE}</p>
+      <ul className="space-y-4">
+        {gaps.map((gap) => (
+          <li key={gap.gap_code} data-gap={gap.gap_code}>
+            <p className="text-slate-300 text-[15px] leading-relaxed">{gap.wording}</p>
+            <p className="text-slate-400 text-sm leading-relaxed mt-1">
+              {INFORMATION_GAIN_LABELS[gap.expected_information_gain]}{" "}
+              {gap.closing_question_id
+                ? `Answering “${scanQuestion(gap.closing_question_id)?.wording}” would close it.`
+                : gap.owner_action}
+            </p>
+            <p className="text-slate-500 text-[13px] mt-1">
+              {GAP_EFFORT_LABELS[gap.effort_band]} · Holds back{" "}
+              {gap.blocks.map((b) => GAP_BLOCKS_LABELS[b]).join(" and ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function FindingCard({
+  entry,
+  index,
+  priority,
+  ofTotal,
+}: {
+  entry: ScanReportFinding;
+  index: number;
+  priority: number | null;
+  ofTotal: number;
+}) {
+  const { finding, impact, recommendation, impact_class } = entry;
   const capReason = finding.confidence_cap_reason;
   return (
     <article
       data-condition={finding.condition}
       className="ft-doc-section border-t border-slate-800 pt-6"
     >
-      <p className="text-indigo-400 text-sm font-medium mb-1">Finding {index + 1}</p>
+      <p className="text-indigo-400 text-sm font-medium mb-1">
+        Finding {index + 1}
+        {priority !== null && (
+          <span data-priority-position={priority}>
+            {" "}
+            · Priority {priority} of {ofTotal}
+          </span>
+        )}
+      </p>
       <h2 className="text-white font-semibold text-xl mb-3">{recommendation.headline}</h2>
       <p className="text-slate-300 text-[15px] leading-relaxed">
         {recommendation.why_it_matters}
@@ -121,6 +335,9 @@ function FindingCard({ entry, index }: { entry: ScanReportFinding; index: number
       </p>
 
       <h3 className="text-slate-200 font-medium mt-6 mb-2">What it may be worth</h3>
+      <p className="text-slate-400 text-sm leading-relaxed mb-2" data-impact-class={impact_class.impact_class}>
+        {IMPACT_CLASS_LABELS[impact_class.impact_class]}. {impact_class.wording}
+      </p>
       {impact.kind === "estimate" ? (
         <div data-impact="estimate">
           <p className="text-white text-lg font-semibold">
@@ -230,6 +447,22 @@ export function ScanReportDocument({
       )}
 
       <div className="ft-doc-sections space-y-8">
+        {/*
+          The funnel is shown on EVERY report, findings or none. "Here is
+          the path you described and here is what looks like it is
+          working" is the highest-trust thing the Scan can say, and a
+          zero-finding report is exactly where it earns its keep (§107.4).
+        */}
+        <FunnelSection funnel={report.funnel} />
+
+        {/*
+          Ordering, dependencies and the earliest leak appear only where
+          there are genuine findings to order. On a zero-finding report
+          they are empty and nothing is rendered — no priority, no
+          urgency, no product (§107.4).
+        */}
+        {report.prioritisation.length > 0 && <PrioritySection report={report} />}
+
         {report.findings.length === 0 ? (
           <section className="ft-doc-section border-t border-slate-800 pt-6" data-no-findings>
             <h2 className="text-white font-semibold text-xl mb-3">No clear opportunity found</h2>
@@ -237,8 +470,24 @@ export function ScanReportDocument({
           </section>
         ) : (
           report.findings.map((entry, i) => (
-            <FindingCard key={entry.finding.condition} entry={entry} index={i} />
+            <FindingCard
+              key={entry.finding.condition}
+              entry={entry}
+              index={i}
+              priority={
+                report.prioritisation.find(
+                  (p) => p.condition === entry.finding.condition
+                )?.position ?? null
+              }
+              ofTotal={report.prioritisation.length}
+            />
           ))
+        )}
+
+        {report.dependencies.length > 0 && <DependencySection report={report} />}
+
+        {report.evidence_gaps.length > 0 && (
+          <EvidenceGapSection gaps={report.evidence_gaps} />
         )}
 
         <section className="ft-doc-section border-t border-slate-800 pt-6" data-what-you-told-us>
@@ -258,7 +507,8 @@ export function ScanReportDocument({
           </dl>
           <p className="ft-doc-note text-slate-500 text-[13px] leading-relaxed mt-3">
             Your own answers, exactly as given. Question set {report.question_set_version}, rules{" "}
-            {report.rule_set_version}.
+            {report.rule_set_version}, ordering rules{" "}
+            {report.prioritisation_rule_set_version}.
           </p>
         </section>
       </div>

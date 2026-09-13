@@ -53,6 +53,20 @@ import {
   NO_FINDINGS_WORDING,
   CURRENCY_CHOICES,
   OTHER_CURRENCY,
+  DEPENDENCY_RELATION_LABELS,
+  DEPENDENCY_RULE_LABELS,
+  GAP_BLOCKS_LABELS,
+  GAP_EFFORT_LABELS,
+  IMPACT_CLASS_LABELS,
+  INFORMATION_GAIN_LABELS,
+  PRIORITY_ORDER_NOT_CAUSE,
+  STAGE_ASSESSMENT_LABELS,
+  STAGE_KIND_LABELS,
+  STAGE_LABELS,
+  STAGE_NOT_ASSESSED_NOTE,
+  STAGE_NOT_ESTABLISHED_LABELS,
+  STAGE_STATE_LABELS,
+  earliestLeakSentences,
   emptyDraft,
   draftToPayload,
   answerLabel,
@@ -701,5 +715,275 @@ describe("the surface cannot persist, fetch, reach a provider, inject HTML or ro
     const { html } = renderReport(ALL_THREE_SIZED);
     assert.match(html, /ft-print-only ft-print-header/);
     assert.match(html, /ft-doc-notice/);
+  });
+});
+
+// ── 7. PR D — the diagnosis layer on the page ─────────────────────
+//
+// The same discipline as the rest of this suite: the surface renders
+// what the pure modules delivered, in the order delivered, and adds no
+// judgement of its own. What is new is that there are now four more
+// things it could invent, so each one is checked against the object
+// that produced it rather than against a sentence.
+
+describe("every PR D code the surface can be handed has a label", () => {
+  test("every stage id, state, assessment and not-established reason is named", () => {
+    const src = read("src/lib/freetools/scanTypes.ts");
+    const members = (typeName) => {
+      const union = src.match(new RegExp(`export type ${typeName} =([\\s\\S]*?);`));
+      assert.ok(union, `${typeName} is not declared where expected`);
+      return (union[1].match(/"[^"]+"/g) ?? []).map((s) => s.slice(1, -1));
+    };
+
+    for (const id of members("ScanFunnelStageId")) {
+      assert.equal(typeof STAGE_LABELS[id], "string", `no label for stage ${id}`);
+      assert.ok(STAGE_LABELS[id].length > 0);
+    }
+    for (const state of members("ScanStageState")) {
+      assert.equal(typeof STAGE_STATE_LABELS[state], "string", `no label for state ${state}`);
+    }
+    for (const assessment of members("ScanStageAssessment")) {
+      assert.equal(
+        typeof STAGE_ASSESSMENT_LABELS[assessment],
+        "string",
+        `no label for assessment ${assessment}`
+      );
+    }
+    for (const reason of members("ScanStageNotEstablishedReason")) {
+      assert.equal(
+        typeof STAGE_NOT_ESTABLISHED_LABELS[reason],
+        "string",
+        `no label for reason ${reason}`
+      );
+    }
+    for (const kind of members("ScanStageKind")) {
+      assert.equal(typeof STAGE_KIND_LABELS[kind], "string", `no label for kind ${kind}`);
+    }
+    for (const impactClass of members("ScanImpactClass")) {
+      assert.equal(
+        typeof IMPACT_CLASS_LABELS[impactClass],
+        "string",
+        `no label for impact class ${impactClass}`
+      );
+    }
+    for (const blocks of members("ScanEvidenceGapBlocks")) {
+      assert.equal(typeof GAP_BLOCKS_LABELS[blocks], "string", `no label for blocks ${blocks}`);
+    }
+    for (const gain of members("ScanInformationGain")) {
+      assert.equal(
+        typeof INFORMATION_GAIN_LABELS[gain],
+        "string",
+        `no label for information gain ${gain}`
+      );
+    }
+    for (const band of members("ScanGapEffortBand")) {
+      assert.equal(typeof GAP_EFFORT_LABELS[band], "string", `no label for effort band ${band}`);
+    }
+    for (const relation of members("ScanDependencyRelation")) {
+      assert.equal(
+        typeof DEPENDENCY_RELATION_LABELS[relation],
+        "string",
+        `no label for relation ${relation}`
+      );
+    }
+    for (const rule of members("ScanDependencyRuleCode")) {
+      assert.equal(typeof DEPENDENCY_RULE_LABELS[rule], "string", `no label for rule ${rule}`);
+    }
+  });
+});
+
+describe("the funnel section renders the engine's stages, in order", () => {
+  test("five stages, in position order, each with its own marker", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    const positions = report.funnel.stages.map((s) => html.indexOf(`data-stage="${s.stage_id}"`));
+    assert.ok(positions.every((p) => p >= 0), "a stage is missing from the page");
+    assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+  });
+
+  test("each stage renders the assessment the engine gave it", () => {
+    const { report, html } = renderReport({ q7_messages_to_book: "not_sure" });
+    for (const stage of report.funnel.stages) {
+      assert.match(
+        html,
+        new RegExp(`data-stage="${stage.stage_id}" data-stage-assessment="${stage.assessment}"`)
+      );
+    }
+  });
+
+  test("adequacy is always qualified as being what the owner told us", () => {
+    const { html } = renderReport();
+    const label = STAGE_ASSESSMENT_LABELS.appears_adequate;
+    assert.match(label, /^From what you told us/);
+    assert.ok(unescape(html).includes(label));
+  });
+
+  test("a non-assessable stage gets its own note and no verdict", () => {
+    const { html } = renderReport(ALL_THREE_SIZED);
+    assert.match(html, /data-stage="enquiry_received" data-stage-assessment="not_assessed"/);
+    assert.match(html, /data-stage="work_booked" data-stage-assessment="not_assessed"/);
+    assert.ok(unescape(html).includes(STAGE_NOT_ASSESSED_NOTE.enquiry_received));
+    assert.ok(unescape(html).includes(STAGE_NOT_ASSESSED_NOTE.work_booked));
+    // And never the adequacy claim.
+    assert.equal(count(html, /data-stage-assessment="appears_adequate"/g), 0);
+  });
+
+  test("a stage that could not be established says why, verbatim", () => {
+    const { report, html } = renderReport({ q6_followup: "not_sure" });
+    const stage = report.funnel.stages.find((s) => s.stage_id === "enquiry_followed_up");
+    assert.equal(stage.not_established_reason, "owner_not_sure");
+    assert.match(html, /data-stage-reason="owner_not_sure"/);
+    assert.ok(
+      unescape(html).includes(STAGE_NOT_ESTABLISHED_LABELS.owner_not_sure)
+    );
+  });
+});
+
+describe("the priority section renders the ordering and its reasons", () => {
+  test("each priority appears once, in the engine's order, with its reason verbatim", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    assert.equal(report.prioritisation.length, 3);
+    const positions = report.prioritisation.map((p) =>
+      html.indexOf(`data-priority="${p.position}"`)
+    );
+    assert.ok(positions.every((p) => p >= 0));
+    assert.deepEqual(positions, [...positions].sort((a, b) => a - b));
+    for (const p of report.prioritisation) {
+      assert.ok(unescape(html).includes(p.reason_wording), `missing reason: ${p.reason_code}`);
+      assert.match(html, new RegExp(`data-priority-reason="${p.reason_code}"`));
+    }
+  });
+
+  test("the order-not-cause line is always present beside the ordering", () => {
+    const { html } = renderReport(ALL_THREE_SIZED);
+    assert.match(html, /data-order-not-cause/);
+    assert.ok(unescape(html).includes(PRIORITY_ORDER_NOT_CAUSE));
+  });
+
+  test("the earliest leak is rendered with its stage and its qualifications", () => {
+    const { report, html } = renderReport({ q7_messages_to_book: "more_than_three" });
+    assert.equal(report.earliest_leak.stage_id, "time_agreed");
+    assert.match(html, /data-earliest-leak="time_agreed"/);
+    for (const sentence of earliestLeakSentences(report.earliest_leak)) {
+      assert.ok(unescape(html).includes(sentence), `missing: ${sentence}`);
+    }
+    assert.ok(
+      unescape(html).includes("does not look like the immediate problem"),
+      "the adequate-before-it clause is missing"
+    );
+  });
+
+  test("an unestablished earlier stage produces the honesty clause", () => {
+    const { report, html } = renderReport({
+      q4_unanswered_per_week: { kind: "not_sure" },
+      q7_messages_to_book: "more_than_three",
+    });
+    assert.deepEqual(report.earliest_leak.earlier_stages_not_established, ["enquiry_answered"]);
+    assert.ok(
+      unescape(html).includes("not necessarily the earliest point where work is being lost")
+    );
+  });
+
+  test("the finding cards keep their delivered order and gain a priority line", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    // Unchanged from before PR D: cards follow report.findings.
+    const cards = report.findings.map((f) =>
+      html.indexOf(`data-condition="${f.finding.condition}"`)
+    );
+    assert.deepEqual(cards, [...cards].sort((a, b) => a - b));
+    for (const p of report.prioritisation) {
+      assert.match(html, new RegExp(`data-priority-position="${p.position}"`));
+    }
+    assert.ok(unescape(html).includes("Priority 1 of 3"));
+  });
+});
+
+describe("dependencies and evidence gaps render what the engine produced", () => {
+  test("a two-finding report renders exactly its one dependency, verbatim", () => {
+    const { report, html } = renderReport({
+      q6_followup: "nothing_planned",
+      q7_messages_to_book: "more_than_three",
+    });
+    assert.equal(report.dependencies.length, 1);
+    assert.equal(count(html, /data-dependency=/g), 1);
+    assert.match(html, /data-dependency-rule="stage_order"/);
+    assert.ok(unescape(html).includes(report.dependencies[0].wording));
+  });
+
+  test("a one-finding report renders no dependency section at all", () => {
+    const { report, html } = renderReport({ q6_followup: "nothing_planned" });
+    assert.deepEqual(report.dependencies, []);
+    assert.equal(count(html, /data-dependencies/g), 0);
+  });
+
+  test("every gap is rendered with its gain, its route to closing it and its effort", () => {
+    const { report, html } = renderReport({
+      q4_unanswered_per_week: { kind: "count", value: 3 },
+      q5_miss_visibility: "sometimes",
+    });
+    assert.ok(report.evidence_gaps.length > 0);
+    for (const gap of report.evidence_gaps) {
+      assert.match(html, new RegExp(`data-gap="${gap.gap_code}"`));
+      assert.ok(unescape(html).includes(gap.wording), `missing gap wording: ${gap.gap_code}`);
+      assert.ok(
+        unescape(html).includes(INFORMATION_GAIN_LABELS[gap.expected_information_gain])
+      );
+      assert.ok(unescape(html).includes(GAP_EFFORT_LABELS[gap.effort_band]));
+    }
+  });
+
+  test("no gap section on a report with no gaps", () => {
+    const { report, html } = renderReport({ q6_followup: "nothing_planned" });
+    assert.deepEqual(report.evidence_gaps, []);
+    assert.equal(count(html, /data-gaps/g), 0);
+  });
+
+  test("the impact class is shown beside the impact, and never replaces it", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    for (const entry of report.findings) {
+      assert.match(html, new RegExp(`data-impact-class="${entry.impact_class.impact_class}"`));
+      assert.ok(unescape(html).includes(entry.impact_class.wording));
+    }
+    // The shipped impact rendering is untouched.
+    assert.match(html, /data-impact="estimate"/);
+    assert.match(html, /data-impact="unknown"/);
+    assert.match(html, /data-assumptions/);
+  });
+
+  test("the footer names the ordering version alongside the other two", () => {
+    const { report, html } = renderReport(ALL_THREE_SIZED);
+    assert.ok(
+      unescape(html).includes(
+        `Question set ${report.question_set_version}, rules ${report.rule_set_version}, ordering rules ${report.prioritisation_rule_set_version}.`
+      )
+    );
+  });
+});
+
+describe("the PR D sections add no persistence, no network and no decision", () => {
+  test("the surface still holds no rule about stages, ordering or gaps", () => {
+    const client = code(`${SURFACE_DIR}/ScanClient.tsx`);
+    // No stage table, no comparator, no gap table on the page.
+    assert.doesNotMatch(client, /SCAN_FUNNEL_STAGES|stageForCondition|prioritise\(|deriveDependencies\(|deriveEvidenceGaps\(|classifyImpact\(/);
+    // And it reads the report's own fields rather than recomputing them.
+    assert.match(client, /report\.funnel/);
+    assert.match(client, /report\.prioritisation/);
+    assert.match(client, /report\.dependencies/);
+    assert.match(client, /report\.evidence_gaps/);
+  });
+
+  test("the new sections introduce no storage, fetch or identifier", () => {
+    for (const file of SURFACE_FILES) {
+      assert.doesNotMatch(
+        code(file),
+        /localStorage|sessionStorage|document\.cookie|indexedDB|fetch\(|randomUUID|crypto\./,
+        `${file} reaches for something the scan surface must not`
+      );
+    }
+  });
+
+  test("no PR D section renders raw HTML", () => {
+    for (const file of SURFACE_FILES) {
+      assert.doesNotMatch(code(file), /dangerouslySetInnerHTML/);
+    }
   });
 });

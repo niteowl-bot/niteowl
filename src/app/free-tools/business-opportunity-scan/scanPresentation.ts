@@ -32,6 +32,18 @@ import type {
   ScanRecommendedProduct,
   LostRevenueUnknownReason,
   EstimateResult,
+  ScanDependencyRelation,
+  ScanDependencyRuleCode,
+  ScanEarliestLeak,
+  ScanEvidenceGapBlocks,
+  ScanFunnelStageId,
+  ScanGapEffortBand,
+  ScanImpactClass,
+  ScanInformationGain,
+  ScanStageAssessment,
+  ScanStageKind,
+  ScanStageNotEstablishedReason,
+  ScanStageState,
 } from "@/lib/freetools/scanTypes";
 import type { ScanValidationErrorCode } from "@/lib/freetools/scanValidation";
 import { SCAN_QUESTIONS } from "@/lib/freetools/scanQuestions";
@@ -337,4 +349,204 @@ export function draftToPayload(draft: ScanDraft): Record<string, unknown> {
     }
   }
   return payload;
+}
+
+// ── PR D: labels for the diagnosis layer ──────────────────────────
+//
+// STILL PRESENTATION ONLY. Every judgement below was made by a pure
+// module: which stage a finding sits at, what order to work in and why,
+// what relates to what, how an impact should be spoken about, and what
+// is missing. This file names the codes and adds no rule of its own.
+//
+// A label that is a claim is written as a claim ABOUT WHAT THE OWNER
+// TOLD US. "This looks like it is working" is qualified everywhere it
+// appears, because the Scan has looked at nothing (§84.1).
+
+export const STAGE_LABELS: Readonly<Record<ScanFunnelStageId, string>> = {
+  enquiry_received: "Enquiries reaching you",
+  enquiry_answered: "Enquiries getting an answer",
+  time_agreed: "Agreeing a time",
+  work_booked: "Enquiries becoming work",
+  enquiry_followed_up: "Following up the ones that did not book",
+};
+
+/** One stage's label; the id itself if somehow unlabelled. */
+export function stageLabel(stageId: ScanFunnelStageId): string {
+  return STAGE_LABELS[stageId] ?? stageId;
+}
+
+/**
+ * The state of OUR knowledge of a stage — not its health.
+ *
+ * `derived` is labelled although Phase 1 never produces it: an
+ * unlabelled canonical value is how a code reaches the screen raw.
+ */
+export const STAGE_STATE_LABELS: Readonly<Record<ScanStageState, string>> = {
+  owner_declared: "From your answers",
+  derived: "Worked out from your answers",
+  unknown: "Not established",
+  inconsistent: "Your answers disagree here",
+};
+
+/** What the funnel says about a stage, in the owner's terms. */
+export const STAGE_ASSESSMENT_LABELS: Readonly<
+  Record<ScanStageAssessment, string>
+> = {
+  finding: "Something to look at",
+  appears_adequate: "From what you told us, this looks like it is working",
+  not_established: "We could not establish this",
+  not_assessed: "Context only — this scan does not judge this stage",
+};
+
+/** Why adequacy could not be claimed — §87.3's "the cap is displayed", generalised. */
+export const STAGE_NOT_ESTABLISHED_LABELS: Readonly<
+  Record<ScanStageNotEstablishedReason, string>
+> = {
+  answer_not_given: "You did not answer the question this rests on.",
+  owner_not_sure: "You told us you are not sure, which we take at face value.",
+  answers_inconsistent:
+    "Two of your answers here disagree, so we have not drawn anything from them.",
+  no_way_of_knowing:
+    "You told us no enquiries go unanswered, and also that you have no way of knowing when one is missed. We are not treating that as either good or bad news.",
+};
+
+/**
+ * Why a stage is marked context only.
+ *
+ * SAID OUT LOUD RATHER THAN LEFT AS SILENCE. A stage shown with no
+ * verdict invites the reader to supply one, and the two stages this
+ * covers are exactly the two where an invented verdict would reach a
+ * domain the Scan has no evidence for.
+ */
+export const STAGE_NOT_ASSESSED_NOTE: Readonly<
+  Partial<Record<ScanFunnelStageId, string>>
+> = {
+  enquiry_received:
+    "How many enquiries you get is not something this scan judges — it looks at what happens to the ones you already have.",
+  work_booked:
+    "The share of enquiries that become work is used for sizing, and this scan does not draw a conclusion from it on its own.",
+};
+
+/** The kind of stage. Follow-up is a recovery step, not a forward one. */
+export const STAGE_KIND_LABELS: Readonly<Record<ScanStageKind, string>> = {
+  forward: "On the way through",
+  recovery: "After a booking did not happen",
+};
+
+/** How an impact may be spoken about — §106's four states. */
+export const IMPACT_CLASS_LABELS: Readonly<Record<ScanImpactClass, string>> = {
+  quantified: "Sized, as a range",
+  directional: "Real, but we will not put a size on it",
+  material_unquantifiable: "Real, and not something anyone can size honestly",
+  insufficient_evidence: "Not enough to size it",
+};
+
+/** What an evidence gap is holding back (§105). */
+export const GAP_BLOCKS_LABELS: Readonly<Record<ScanEvidenceGapBlocks, string>> = {
+  diagnosis: "looking at this part of the path at all",
+  prioritisation: "deciding where this sits in the order",
+  sizing: "putting a range on it",
+  action: "recommending a next step",
+  confidence: "holding this more confidently",
+};
+
+/**
+ * What closing a gap would do — FOR NITEOWL'S RULES, never for the
+ * business (§105).
+ *
+ * Each of these is checkable against a gate in the sizing module. None
+ * of them says anything about what the owner would find, and none may
+ * ever be rewritten to.
+ */
+export const INFORMATION_GAIN_LABELS: Readonly<
+  Record<ScanInformationGain, string>
+> = {
+  would_allow_a_size_range: "This would let our rules put a range on it.",
+  would_narrow_the_size_range: "This would let our rules work to a narrower range.",
+  would_raise_confidence: "This would let our rules hold it more confidently.",
+  would_allow_this_stage_to_be_assessed:
+    "This would let our rules look at that part of the path at all.",
+};
+
+/** Roughly what closing a gap takes. Bands, never hours and never money. */
+export const GAP_EFFORT_LABELS: Readonly<Record<ScanGapEffortBand, string>> = {
+  answer_now: "You could answer this now",
+  count_over_a_period: "This needs counting over a little while",
+  needs_a_change_in_how_you_work: "This needs a change in how you work",
+};
+
+/** How two findings relate in the order they can be worked on (§104). */
+export const DEPENDENCY_RELATION_LABELS: Readonly<
+  Record<ScanDependencyRelation, string>
+> = {
+  blocked_by: "Waits on",
+  should_precede: "Comes before",
+  should_follow: "Comes after",
+  independent: "Separate from",
+};
+
+/** The canonical rule behind a dependency — §104 forbids one without. */
+export const DEPENDENCY_RULE_LABELS: Readonly<
+  Record<ScanDependencyRuleCode, string>
+> = {
+  stage_order: "the order of the path an enquiry takes",
+  measurement_integrity: "how reliably this can be measured",
+  capacity_headroom: "how much room there is to take more work",
+  conversion_before_volume: "settling conversion before chasing volume",
+};
+
+// ── Fixed section wording ─────────────────────────────────────────
+
+export const FUNNEL_SECTION_TITLE = "Where your enquiries are going";
+export const FUNNEL_SECTION_NOTE =
+  "The path your own answers describe, in order. We have not looked at any of your systems — this is your description, laid out.";
+
+export const PRIORITY_SECTION_TITLE = "Where to start";
+
+/**
+ * The disclaimer under the priority list.
+ *
+ * NOT OPTIONAL, AND NOT A FOOTNOTE. Ordering findings is the closest
+ * the Scan comes to Atlas's territory, and this sentence is the line
+ * §100.3 draws: order and adjacency, never cause.
+ */
+export const PRIORITY_ORDER_NOT_CAUSE =
+  "This is the order we would work in, based on where each one sits on the path an enquiry takes. It is not a claim that any of them causes another.";
+
+export const DEPENDENCY_SECTION_TITLE = "How these relate";
+export const GAPS_SECTION_TITLE = "What would sharpen this";
+export const GAPS_SECTION_NOTE =
+  "These are things that would let our own rules go further. None of them is a guess about what you would find.";
+
+/** The earliest-leak sentences, built from fixed fragments. */
+export function earliestLeakSentences(leak: ScanEarliestLeak): string[] {
+  const list = (ids: readonly ScanFunnelStageId[]) =>
+    ids.map((id) => stageLabel(id).toLowerCase()).join(", ");
+
+  const sentences = [
+    `The earliest point we can see something going wrong is: ${stageLabel(
+      leak.stage_id
+    )}.`,
+  ];
+
+  if (leak.earlier_stages_adequate.length > 0) {
+    sentences.push(
+      `From what you told us, ${list(
+        leak.earlier_stages_adequate
+      )} does not look like the immediate problem.`
+    );
+  }
+
+  // The honesty clause. Without it, "earliest" quietly implies that
+  // nothing earlier is wrong — which the answers do not support when an
+  // earlier stage was never established at all.
+  if (leak.earlier_stages_not_established.length > 0) {
+    sentences.push(
+      `We could not establish anything about ${list(
+        leak.earlier_stages_not_established
+      )}, so this is the earliest point we can speak to — not necessarily the earliest point where work is being lost.`
+    );
+  }
+
+  return sentences;
 }

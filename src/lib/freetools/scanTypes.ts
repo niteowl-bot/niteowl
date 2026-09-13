@@ -385,6 +385,13 @@ export interface ScanReportFinding {
   readonly impact: ScanImpact;
   /** Exactly one, derived from the condition alone. */
   readonly recommendation: ScanRecommendation;
+  /**
+   * How the impact beside it should be spoken about (§106).
+   *
+   * Presentation over the impact already computed: it reads the impact
+   * and nothing else, and it changes no arithmetic.
+   */
+  readonly impact_class: ScanImpactClassification;
 }
 
 /**
@@ -400,9 +407,32 @@ export interface ScanReportFinding {
 export interface ScanReport {
   readonly question_set_version: string;
   readonly rule_set_version: string;
+  /**
+   * In SCAN_CONDITION_ORDER, unchanged by PR D.
+   *
+   * The order findings are DELIVERED in is canonical and stable. The
+   * order the owner is advised to ACT in is `prioritisation`, which
+   * references these findings and never reorders them — two runs
+   * compared later must agree about what the delivery order means.
+   */
   readonly findings: readonly ScanReportFinding[];
   /** Inconsistencies shown to the owner rather than silently resolved. */
   readonly inconsistencies: readonly ScanInconsistency[];
+  /**
+   * P47 — present on EVERY report, the empty ordering included: a
+   * reader must know which ladder produced an empty ordering too.
+   */
+  readonly prioritisation_rule_set_version: string;
+  /** The one process, as the owner's own answers describe it (§101). */
+  readonly funnel: ScanBusinessProcess;
+  /** The earliest ASSESSABLE stage with a finding, or null (§100.3). */
+  readonly earliest_leak: ScanEarliestLeak | null;
+  /** Genuine findings only, already ordered. Empty when there are none. */
+  readonly prioritisation: readonly ScanPriority[];
+  /** Ordering constraints between the Scan's own recommendations (§104). */
+  readonly dependencies: readonly ScanDependency[];
+  /** What would let NiteOwl apply its own rules more confidently (§105). */
+  readonly evidence_gaps: readonly ScanEvidenceGap[];
 }
 
 /**
@@ -538,4 +568,323 @@ export interface ScanRecommendation {
   readonly authority_level: "recommend";
   readonly source_type: "derived_deterministic";
   readonly rule_set_version: string;
+}
+
+// ── The enquiry funnel — PR D (Part XIV §101) ──────────────────────
+//
+// A BusinessProcess is an ANALYTICAL REPRESENTATION OF WHAT THE OWNER
+// TOLD US, in stages. It is not an observation, not a measurement, and
+// not a claim about any system the business runs (§101). In Phase 1
+// there is exactly one, and a second is a Part XI boundary change
+// (§81.3, §100.3) rather than a new stage.
+//
+// NO STAGE IS EVER OBSERVED. The Scan observes nothing (§84.1), and a
+// type that cannot express an observation cannot accidentally claim
+// one — the same structural property the rest of this file relies on.
+//
+// A STAGE WITH NO FINDING IS RENDERED AS ADEQUATE, NOT AS EMPTY (§101).
+// Saying "this part appears to be working" is a claim the answers
+// support, and it is what makes the criticism elsewhere credible.
+// Silence is not the same statement.
+//
+// BUT ADEQUACY IS STILL A CLAIM, so a stage no Phase 1 condition can
+// anchor to is `not_assessed` rather than adequate. Calling the arrival
+// of enquiries "working" would be a positive claim from questions that
+// establish nothing alone (§87.2), and calling conversion "working"
+// would reach a condition class Phase 1 deliberately excluded (§81.3).
+
+/** The one process Phase 1 holds. A second is a boundary change (§100.3). */
+export type ScanBusinessProcessId = "enquiry_to_booked_work";
+
+/**
+ * The five stage ids — OPAQUE IDS, NEVER ARRAY POSITIONS (P48).
+ *
+ * An index is not a reference: it would not survive promotion (§89) or
+ * comparison between runs (§107.3). `position` exists for ordering and
+ * is never used to refer to a stage.
+ */
+export type ScanFunnelStageId =
+  | "enquiry_received"
+  | "enquiry_answered"
+  | "time_agreed"
+  | "work_booked"
+  | "enquiry_followed_up";
+
+/**
+ * Forward, or a recovery stage reached after a booking did not happen.
+ *
+ * Follow-up is what happens to an enquiry that did NOT book, so it
+ * genuinely sits after the booking decision on the path the owner
+ * described. Naming that explicitly keeps the ordering honest.
+ */
+export type ScanStageKind = "forward" | "recovery";
+
+/** §101's closed set. There is no observed state, and none is reachable. */
+export type ScanStageState =
+  | "owner_declared"
+  | "derived"
+  | "unknown"
+  | "inconsistent";
+
+/**
+ * A stated "not sure" and an absent answer are BOTH unknown, and the
+ * stage records which it was (§101). They are different facts: one is
+ * something the owner told us, the other is something they did not.
+ */
+export type ScanStageUnknownReason = "owner_not_sure" | "not_answered";
+
+/** The stage's health, which is separate from the state of our knowledge. */
+export type ScanStageAssessment =
+  | "finding"
+  | "appears_adequate"
+  | "not_established"
+  | "not_assessed";
+
+/** Why adequacy could not be claimed. Codes, not prose (§20.7 rule 1). */
+export type ScanStageNotEstablishedReason =
+  | "answer_not_given"
+  | "owner_not_sure"
+  | "answers_inconsistent"
+  | "no_way_of_knowing";
+
+/** One stage of the process, as the owner's answers describe it. */
+export interface ScanFunnelStage {
+  readonly stage_id: ScanFunnelStageId;
+  /** For ordering only. Never a reference to the stage (P48). */
+  readonly position: number;
+  readonly kind: ScanStageKind;
+  readonly informed_by: readonly ScanQuestionId[];
+  /** False where no Phase 1 condition can anchor here. */
+  readonly assessable: boolean;
+  readonly state: ScanStageState;
+  readonly unknown_reason: ScanStageUnknownReason | null;
+  readonly assessment: ScanStageAssessment;
+  readonly not_established_reason: ScanStageNotEstablishedReason | null;
+  /** A REFERENCE to the finding anchored here, never a copy of it. */
+  readonly finding_condition: ScanConditionCode | null;
+  readonly source_type: "derived_deterministic";
+}
+
+/** The whole process. Stages in position order. */
+export interface ScanBusinessProcess {
+  readonly process_id: ScanBusinessProcessId;
+  readonly stages: readonly ScanFunnelStage[];
+  readonly source_type: "derived_deterministic";
+}
+
+/**
+ * The earliest stage where the answers indicate work is being lost.
+ *
+ * NOT A ROOT CAUSE, and the wording says so (§100.3). The Scan may name
+ * the earliest stage and may say what does NOT appear to be the
+ * immediate problem; it may never say a stage CAUSED a condition at
+ * another stage.
+ *
+ * `earlier_stages_not_established` is the honesty field: without it,
+ * "earliest" silently implies nothing earlier is wrong, which the
+ * answers do not support when an earlier stage was never established.
+ */
+export interface ScanEarliestLeak {
+  readonly stage_id: ScanFunnelStageId;
+  readonly condition: ScanConditionCode;
+  readonly earlier_stages_adequate: readonly ScanFunnelStageId[];
+  readonly earlier_stages_not_established: readonly ScanFunnelStageId[];
+  readonly source_type: "derived_deterministic";
+}
+
+// ── Prioritisation — PR D (Part XIV §100.2) ───────────────────────
+//
+// THE SCAN MAY ORDER ITS FINDINGS. IT MAY NOT PRODUCE A SCORE.
+//
+// Five conditions, each load-bearing: deterministic · explainable from
+// a visible rule, whose enumerated code travels with every position ·
+// product-scoped, never a NiteOwl priority unit and never an input to
+// another product's ordering · versioned INDEPENDENTLY of the rules it
+// orders · and no hidden score — no weights, no points, no normalised
+// units, no composite number, neither displayed nor computed in memory.
+//
+// ESTIMATED IMPACT IS DELIBERATELY NOT AN ORDERING INPUT (§100.2). In
+// Phase 1 exactly one condition of three is ever sizeable, so ordering
+// by value would order by WHAT NITEOWL HAPPENS TO BE ABLE TO MEASURE
+// rather than by what matters to the business. The estimate is
+// displayed beside a priority and never decides it — and the exclusion
+// is structural: the ordering is never handed an impact to read.
+//
+// SCAN_CONDITION_ORDER REMAINS THE FINAL TIE-BREAK, unchanged, so an
+// ordering that distinguishes nothing degrades to today's behaviour
+// rather than to an arbitrary one.
+
+/**
+ * The ordering rule that placed a finding, relative to the one above it.
+ *
+ * Only the second and the single-finding case bind in Phase 1: the
+ * three conditions anchor to three DIFFERENT stages, so stage position
+ * is already a total order. The other three are declared because canon
+ * names them and because a later condition would need them, and a sweep
+ * test pins that they never fire today — which is what stops a fourth
+ * condition being added silently.
+ */
+export type ScanPriorityReasonCode =
+  | "only_finding"
+  | "blocked_by_another_finding"
+  | "earlier_in_the_enquiry_path"
+  | "better_supported_by_your_answers"
+  | "canonical_condition_order";
+
+/** One position in the ordering. It REFERENCES a finding; it holds none. */
+export interface ScanPriority {
+  /** 1-based. Contiguous, no gaps, no duplicates. */
+  readonly position: number;
+  readonly condition: ScanConditionCode;
+  readonly stage_id: ScanFunnelStageId;
+  readonly reason_code: ScanPriorityReasonCode;
+  /** Fixed owner-facing wording, pinned verbatim by test. */
+  readonly reason_wording: string;
+  readonly source_type: "derived_deterministic";
+}
+
+/**
+ * P47 — the ordering is versioned SEPARATELY from the rules it orders.
+ *
+ * Free before the first ordered report exists. Afterwards two runs
+ * ordered by different ladders are indistinguishable, and the first
+ * re-ordering looks like an improvement (§100.2 condition 4, §43.3).
+ *
+ * It is deliberately NOT SCAN_RULE_SET_VERSION: PR D changes no
+ * finding, sizing or recommendation rule, so findings-comparability is
+ * not broken and that version does not move.
+ */
+export const SCAN_PRIORITISATION_RULE_SET_VERSION = "v1";
+
+// ── Dependencies — PR D (Part XIV §104) ───────────────────────────
+//
+// A DEPENDENCY IS NOT EVIDENCE OF CAUSATION (§100.3, §104). "Fix this
+// first" is a statement about the order in which actions can be
+// MEASURED, not about what causes what, and the wording must say so.
+//
+// A DEPENDENCY MUST NAME THE ENUMERATED RULE THAT PRODUCED IT, and that
+// rule must be canonical. A dependency with no rule behind it is prose.
+
+export type ScanDependencyRelation =
+  | "blocked_by"
+  | "should_precede"
+  | "should_follow"
+  | "independent";
+
+/** §104's four canonical rules. Only stage order fires in Phase 1. */
+export type ScanDependencyRuleCode =
+  | "stage_order"
+  | "measurement_integrity"
+  | "capacity_headroom"
+  | "conversion_before_volume";
+
+/** One ordering constraint between two of the Scan's own recommendations. */
+export interface ScanDependency {
+  readonly from_condition: ScanConditionCode;
+  readonly to_condition: ScanConditionCode;
+  readonly relation: ScanDependencyRelation;
+  readonly rule: ScanDependencyRuleCode;
+  readonly wording: string;
+  readonly source_type: "derived_deterministic";
+}
+
+// ── The four-state impact classification — PR D (§106) ────────────
+//
+// A PRESENTATION CONTRACT OVER THE REASONS THE SIZING MODULE ALREADY
+// PRODUCES. It adds no arithmetic, changes no gate, widens no bucket
+// and computes no new number — "unsizeable" has several meanings and
+// had one voice, and this gives each its own.
+
+export type ScanImpactClass =
+  | "quantified"
+  | "directional"
+  | "material_unquantifiable"
+  | "insufficient_evidence";
+
+/** E1 sizes a loss. There is no other direction in Phase 1. */
+export type ScanImpactDirection = "loss";
+
+/**
+ * How an impact should be spoken about.
+ *
+ * `directional` MUST NEVER BE SILENTLY UPGRADED TO `quantified` (§106)
+ * by widening a bucket or relaxing the order-of-magnitude test — both
+ * exist to refuse precision theatre. The classifier reads a reason code
+ * and has no access to the operands, so it structurally cannot.
+ */
+export interface ScanImpactClassification {
+  readonly impact_class: ScanImpactClass;
+  readonly direction: ScanImpactDirection | null;
+  readonly reason: LostRevenueUnknownReason | null;
+  readonly wording: string;
+  readonly source_type: "derived_deterministic";
+}
+
+// ── Evidence gaps — PR D (Part XIV §105) ──────────────────────────
+//
+// WHAT WOULD LET US APPLY OUR OWN RULES MORE CONFIDENTLY — never an
+// invented fact about the business.
+//
+// Gaps are DERIVED, NEVER PRIMARY (§105): every one is reconstructible
+// from a confidence cap reason, a sizing unknown reason or a stage
+// state. A gap that needed its own store would be a second record of
+// something already recorded (§48.3).
+
+export type ScanEvidenceGapCode =
+  | "miss_visibility_absent"
+  | "miss_visibility_partial"
+  | "unanswered_count_not_given"
+  | "unanswered_count_unknown"
+  | "job_value_not_given"
+  | "job_value_unknown"
+  | "conversion_share_not_given"
+  | "conversion_share_unknown"
+  | "conversion_share_coarse"
+  | "job_value_range"
+  | "operand_ranges_too_wide"
+  | "followup_practice_unknown"
+  | "booking_effort_unknown"
+  | "messages_to_book_unsteady";
+
+/** What the gap holds back. */
+export type ScanEvidenceGapBlocks =
+  | "diagnosis"
+  | "prioritisation"
+  | "sizing"
+  | "action"
+  | "confidence";
+
+/**
+ * THE GAIN IS A CLAIM ABOUT NITEOWL'S OWN RULES, NEVER ABOUT THE
+ * BUSINESS (§105).
+ *
+ * "This would let us put a range on it" is verifiable from the sizing
+ * gates. "This would probably reveal a figure of X" is forbidden — it
+ * is an estimate wearing a gap's clothing, and Part X P39 bars it. The
+ * enumeration is closed so no third kind of sentence can appear.
+ */
+export type ScanInformationGain =
+  | "would_allow_a_size_range"
+  | "would_narrow_the_size_range"
+  | "would_raise_confidence"
+  | "would_allow_this_stage_to_be_assessed";
+
+/** How much work closing the gap is. Bands, never hours and never money. */
+export type ScanGapEffortBand =
+  | "answer_now"
+  | "count_over_a_period"
+  | "needs_a_change_in_how_you_work";
+
+/** One thing that would sharpen the diagnosis. */
+export interface ScanEvidenceGap {
+  readonly gap_code: ScanEvidenceGapCode;
+  readonly blocks: readonly ScanEvidenceGapBlocks[];
+  /** One of OUR questions, where re-asking would close it; null otherwise. */
+  readonly closing_question_id: ScanQuestionId | null;
+  /** What the owner could find out, where no question of ours closes it. */
+  readonly owner_action: string | null;
+  readonly expected_information_gain: ScanInformationGain;
+  readonly effort_band: ScanGapEffortBand;
+  readonly wording: string;
+  readonly source_type: "derived_deterministic";
 }
