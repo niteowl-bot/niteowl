@@ -919,8 +919,89 @@ one.**
 consent and promotion flow (Part XII §89) · outcome or impact measurement · any Part XIII
 provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit pre-fill · the
 standalone Lost Revenue entry · a second business process · a fourth condition code · and every
-later Scan phase. **PR D is complete and closed**, and the next milestone is still Google's
-verification review.
+later Scan phase. **PR D is complete and closed.** *(Clusters have since shipped as **PR #94**;
+see below. The rest of this list stands.)*
+
+**OPPORTUNITY CLUSTERS SHIPPED — PR E IS COMPLETE AND CLOSED (PR #94, approved head `5df75eb`,
+normal merge commit `4cfd87d` 2026-09-13, deployed as `dpl_2ZdxdkENNy42SLrXWy7NaecSNGur` —
+Ready on the production aliases — and verified).** The build against Part XIV **§102**, and
+deliberately the smallest Scan increment: tracing canon rather than filling a table left exactly
+two relations emittable. Eight files: two added, six modified, **+1243 / −4**.
+`docs/ARCHITECTURE.md` is unchanged.
+
+- **A cluster is a stated relation between exactly TWO findings.** It references them by opaque
+  id and **holds no copy**: not a finding, not a score, not a container, not a new record type.
+  One new module, `src/lib/freetools/scanClusters.ts`, held to the same boundary suite, which
+  now covers **twelve modules**
+- **STRICTLY DOWNSTREAM, and structurally so.** `deriveFindings`, `computeLostRevenue`,
+  `prioritise`, `deriveDependencies`, `deriveEvidenceGaps` and `recommendFor` neither import it
+  nor take a clusters argument, and only the assembler imports it. **Clustering never replaces,
+  collapses, summarises, re-ranks or re-confidences a finding**, and `report.findings` is
+  unchanged in count, content and **`SCAN_CONDITION_ORDER`**
+- **Phase 1 emits exactly two relations:** `sequential_in_one_process` (literally adjacent
+  funnel stages) and `independent` (the fallthrough, and per §102 a real output). **Fewer than
+  two findings produces no clusters at all**
+- **The other three relations stay declared and intentionally unreachable**, each blocked by
+  missing CANON rather than missing code: `shared_cause_candidate` needs hypothesis sets
+  (§103); `competing_for_same_resource` needs a canonical resource model; `masked_measurement`
+  needs a canon-traceable finding-to-finding trigger. **No hypothesis, resource or masking
+  model was invented to make them fire, and no proxy stands in** — a sweep pins that they never
+  fire, and a source-level test proves the module cannot read a finding's evidence, confidence
+  or cap
+- **Adjacency is LITERAL.** `work_booked` is never assessed and is not skipped, so
+  `booking.friction` and `enquiry.no_followup` fall through to `independent` rather than being
+  related across a stage the Scan refuses to judge
+- **`independent` means our rules established nothing, never that the findings are unrelated.**
+  Its confidence is deliberately `low`, and the wording says so
+- **A cluster carries its OWN provenance and relation confidence and inherits neither.**
+  `source_type` is **`derived_deterministic`**; the type cannot express `business_provided`.
+  Proven not to inherit: `independent` stays `low` where both members are `high`
+- **`cluster_rule_set_version` is independently versioned** (§107.3), its own constant feeding
+  its own report field, present even when `clusters` is empty. `SCAN_RULE_SET_VERSION` and
+  `SCAN_PRIORITISATION_RULE_SET_VERSION` did not move
+- **No new report section.** The established relation renders as one line inside the existing
+  *"How these relate"* area; pairs the rules did not relate are covered by **one honest
+  sentence** rather than a row each. Finding cards and their order are unchanged; the footer
+  gains only the relation rule-set version
+- **Provider-independent, model-independent, zero-persistence.** No clock, randomness,
+  identifier generation, network, storage, tenant or provider is reachable; imports are limited
+  to `scanFunnel` and `scanTypes`
+
+**Upstream non-interference was proven, not assumed:** across twelve scenarios every PR D field
+— findings, impact and sizing, recommendations with their next steps, product attribution and
+handoffs, `impact_class`, funnel, `earliest_leak`, dependencies, prioritisation and evidence
+gaps — was recomputed from the shipped modules with no clusters in play and **deep-compared**
+against the report. All deep-equal. A suppressed finding (Q4 > Q3) is never clustered, and
+**Remy and every unrelated system were untouched.**
+
+**Verification:** cluster suite **37 pass / 0 fail**; PR D suites **124 pass / 0 fail,
+unmodified**; free-tools **502 / 0**; full repository **2045 pass / 0 fail / 0 skipped**; `tsc`
+clean; ESLint **0 problems in PR E files** with the repository baseline unchanged at **11 (7
+errors, 4 warnings)**; build successful with the Scan route still **static / prerendered**;
+`git diff --check` clean. In production: `/api/health` **HTTP 200** `database: ok`, homepage
+**HTTP 200**, `/free-tools/business-opportunity-scan` **HTTP 200** — and **all twelve client
+chunks were fetched and inspected, locating four distinct cluster markers** (*"two points on
+one path"*, *"not the same as knowing"*, *"No link has been established"*, *"relation rules"*)
+in `/_next/static/chunks/3yivmzi59j782.js`, so the cluster functionality is **genuinely live
+rather than merely routable**. The feature branch `feat/scan-opportunity-clusters` was deleted
+locally and remotely **after** production verification succeeded, with containment proved first.
+**Deployment-to-merge correspondence is NOT SHA-verified** (no Git metadata from `vercel
+inspect`, as for PRs #54 through #92); identification rests on the three-second adjacency, the
+production aliases and the bundle-content proof.
+
+**One reviewed scope extension, accepted deliberately.** `tests/freeToolsScanSurface.test.mjs`
+was outside the permitted-modify list, but its pre-existing **exact-match** footer assertion
+could not survive the required `cluster_rule_set_version`. It was **extended, never loosened**:
+same mechanism, same literal prefix and order, each version read from its own report field, one
+requirement added.
+
+**What PR #94 did NOT do, and what its merge does not approve:** hypotheses (§103) · scenario
+output (**L35**) · `evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token
+linkage and the consent and promotion flow (Part XII §89) · outcome or impact measurement · any
+Part XIII provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit
+pre-fill · the standalone Lost Revenue entry · a second business process · a fourth condition
+code · and every later Scan phase. **PR E is complete and closed**, and the next milestone is
+still Google's verification review.
 
 **Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
 (confidence levels and cap policy that the implementation chose and canon does not yet
@@ -1285,8 +1366,12 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
   the **Enquiry Funnel Diagnosis SHIPPED, LIVE and production-verified** (**PR D**, delivered
   as PR #92, merge `97dda2b`, 2026-09-13): the funnel, earliest leak, versioned prioritisation,
   dependencies, four-state impact classification and evidence gaps. **PR D is complete and
-  closed.** Persistence, run identity, consent flow, outcome measurement, Part XIII runtime,
-  clusters, hypotheses and later phases NOT started and not approved
+  closed.** Then **opportunity clusters SHIPPED, LIVE and production-verified** (**PR E**,
+  delivered as PR #94, merge `4cfd87d`, 2026-09-13): deterministic pairwise relations between
+  existing findings, emitting `sequential_in_one_process` and `independent` in Phase 1, with
+  the other three declared relations intentionally unreachable until their canonical models
+  exist. **PR E is complete and closed.** Persistence, run identity, consent flow, outcome
+  measurement, Part XIII runtime, hypotheses and later phases NOT started and not approved
 - **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
   a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
   entry NOT started
