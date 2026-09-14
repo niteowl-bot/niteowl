@@ -42,9 +42,11 @@ import { prioritise } from "@/lib/freetools/scanPrioritisation";
 import { classifyImpact } from "@/lib/freetools/scanImpactClass";
 import { deriveEvidenceGaps } from "@/lib/freetools/scanEvidenceGaps";
 import { deriveClusters } from "@/lib/freetools/scanClusters";
+import { deriveHypotheses } from "@/lib/freetools/scanHypotheses";
 import {
   SCAN_CLUSTER_RULE_SET_VERSION,
   SCAN_CONDITION_ORDER,
+  SCAN_HYPOTHESIS_RULE_SET_VERSION,
   SCAN_PRIORITISATION_RULE_SET_VERSION,
   type ScanAnswers,
   type ScanConfidence,
@@ -257,6 +259,10 @@ export function buildScanReport(
       // opinion about it: the classifier reads the impact and nothing
       // else, and it changes no gate and no number (§106).
       impact_class: classifyImpact(impact),
+      // Strictly downstream of everything above: reads the condition and
+      // the answers, never the finding's confidence, the impact or the
+      // recommendation, and nothing reads it back (§103).
+      ...deriveHypotheses(finding.condition, answers),
     };
   });
 
@@ -289,5 +295,6 @@ export function buildScanReport(
     // and nothing reads clusters. Nothing above this line changes
     // because of what comes back (§102).
     clusters: deriveClusters(derived),
+    hypothesis_rule_set_version: SCAN_HYPOTHESIS_RULE_SET_VERSION,
   };
 }

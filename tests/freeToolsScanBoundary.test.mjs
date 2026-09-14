@@ -57,6 +57,7 @@ const SCAN_MODULES = [
   "src/lib/freetools/scanImpactClass.ts",
   "src/lib/freetools/scanEvidenceGaps.ts",
   "src/lib/freetools/scanClusters.ts",
+  "src/lib/freetools/scanHypotheses.ts",
 ];
 
 /** Import statements only — comments discussing Remy are fine. */
@@ -112,7 +113,7 @@ describe("the scan modules cannot reach Remy, a provider or a tenant", () => {
       for (const specifier of specifiers) {
         assert.match(
           specifier,
-          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations|Funnel|Dependencies|Prioritisation|ImpactClass|EvidenceGaps|Clusters)["']/,
+          /["']@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations|Funnel|Dependencies|Prioritisation|ImpactClass|EvidenceGaps|Clusters|Hypotheses)["']/,
           `${file} imports ${specifier}`
         );
       }
