@@ -221,6 +221,8 @@ The following features are complete and tested:
 - Partial-StructuredData Requested-Timing Recovery (PR #66, feature commit `837caa7`, merged `bd5853a` 2026-09-07 and deployed — the caller's requested day and time is recovered deterministically when a partial provider payload omits the field, so a caller who said when they wanted the visit no longer gets a request nobody can act on. **The SECOND partial-field recovery; `urgency` and `service` remain open**)
 - Urgency Representability Hardening (PR #68, feature commit `a2c483f`, merged `c390f53` 2026-09-07 and deployed — `urgent` is now `true` / `false` / `null`, so an untold urgency is no longer indistinguishable from a provider stating "not urgent". **REPRESENTATION ONLY and behaviour-neutral: NO transcript urgency recovery was implemented, and it remains V1.1/later**)
 - Returning-Customer Booking Isolation (PR #70, feature commit `72717f5`, merged `8833896` 2026-09-07 and deployed — a returning chat/widget customer booking again in a NEW conversation can no longer match their already-`booked` lead, so a second booking creates a separate lead instead of silently overwriting and rescheduling the appointment they already had. **Same-conversation rescheduling and voice are unchanged**)
+- Auth Fragment Session Consumption (PR #96, feature commit `406f5fc`, merged `eeed1f7` 2026-09-14, deployed and **SHA-verified** — an implicit-flow Supabase redirect, tokens in the URL fragment, is now consumed through the official `setSession()` into the existing SSR cookies and stripped from the address bar; previously no code path could consume it and every fragment-based recovery bounced to the "expired" page. **Password recovery and normal password sign-in manually verified on the preview**)
+- Cross-Device Password Recovery (PR #97, feature commit `515fabf`, merged `8ccddc6` 2026-09-14, deployed and **SHA-verified**; production Reset Password template switched to the `token_hash` link **after** the route was live; **cross-device recovery V1-VERIFIED in production 2026-09-14** — request in one browser context, reset in a fresh Incognito session, new password signs in. See the password-recovery rule below)
 
 Verified production checkpoints (PRs #27–#40). The shipped-feature list above and the
 standing rules below are the canonical record of *behaviour*; this list is the record of
@@ -298,6 +300,7 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 
 **OPEN — still deferred:**
 
+- **Magic-link production verification, V1.1/later, NOT a V1 blocker (classified 2026-09-14).** PR #96's fragment consumer is the only code path that can sign a magic link in, and it has been proven by tests and by the recovery flow's fragment forwarding, but a live magic-link sign-in has not been performed: the app issues none, and the dashboard's *Send magic link* can only target production. Check it opportunistically (dashboard action on the test user, fresh Incognito, expect fragment gone and `/dashboard`); **do not record it as verified without doing it.** Related tidy-ups, same classification: the temporary **preview entry in the Supabase Redirect URL allow-list** is no longer needed and its removal is **not yet confirmed**; the mail-scanner single-use exposure of `token_hash` links is unchanged from before and its click-to-confirm mitigation is V1.1.
 - **Two production observations are still outstanding, and neither justifies a deliberate call.**
   - **PR #51 (F4).** The verification call was a complete happy path, so it never exercised
     whether the model prefers **silence** over `"Not provided"` on a call with genuinely
@@ -401,6 +404,18 @@ Appointment times in emails render in the **business's** timezone. `formatAppoin
 Standing timezone rule (all three surfaces):
 
 Appointment instants are stored as **UTC instants**, always. A business-local timezone is used only to interpret or display a wall-clock time. **Email formatting must never reintroduce a hardcoded tenant timezone.**
+
+Password-recovery and auth-callback rule (closed by PR #96, merge `eeed1f7`, and PR #97, merge `8ccddc6`, both 2026-09-14; **cross-device recovery V1-verified in production 2026-09-14**):
+
+**A recovery link must work from ANY browser or device, and an auth redirect must be consumed by official Supabase APIs into the existing SSR cookies — never by a parallel session store.**
+
+- **`/auth/confirm-reset` accepts exactly three link shapes** (`src/lib/auth/recoveryLink.ts`, pure): `token_hash` + `type=recovery` → `verifyOtp({ type: 'recovery', token_hash })`; `code` alone → the original PKCE `exchangeCodeForSession`; nothing → forwarded to `/reset-password` so a fragment can be consumed client-side. **Everything else is refused before any Supabase call** — a hash without a type, a type without a hash, any other type, an empty / whitespace / over-length hash, both shapes at once. Success → 307 `/reset-password`; any failure → 307 `/forgot-password?error=link`
+- **`type` is a literal in code.** The URL's `type` only gates entry to the branch, so a magic-link, signup or invite token can never be relabelled into a recovery session
+- **The production Reset Password email template sends `{{ .SiteURL }}/auth/confirm-reset?token_hash={{ .TokenHash }}&type=recovery`** — a fixed route on the Site URL, no Supabase `/verify` redirect hop. This is what makes recovery cross-device: `verifyOtp` needs nothing from the requesting browser. **The PKCE `?code=` shape is same-browser-only by design** — the code verifier is a host-only cookie set only in the profile that called `resetPasswordForEmail`, and a failed exchange deletes it — which is why the first real production test failed even though PR #96 was working as designed. The `?code=` branch is kept for links already issued, not as the primary path. **Any future template change must keep the route deployed first and the template second**; the reverse breaks every reset email until the deploy lands
+- **Implicit-flow fragments (`#access_token=…`) are consumed once, client-side, through `setSession()`** (`src/lib/auth/hashSession.ts`, mounted once in the root layout by `AuthHashSessionHandler`): the fragment is stripped via `history.replaceState` **before** any network call, `setSession` verifies the token against Supabase before saving through the SSR cookie storage, a malformed / error / rejected fragment produces no session, and the destination is a **fixed literal** chosen from the fragment's `type` (`/reset-password` for recovery, else `/dashboard`). `@supabase/ssr` hard-codes PKCE and auth-js rejects an implicit fragment on a PKCE client, so **no page's browser client can consume one on its own** — this handler is the only consumer. `/reset-password` awaits that consumption before its `getUser()` gate, and the gate is unchanged: no session, no form
+- **No token in any log, redirect `Location`, error body or console**, and no localStorage / sessionStorage auth. Verified live with a synthetic value on every branch
+- **Magic-link authentication is deferred to V1.1/later and is NOT a V1 blocker.** The app has no magic-link sender; the dashboard's *Send magic link* necessarily targets the production Site URL; and the fragment consumer fails closed. Recorded as unverified rather than assumed
+- **Known, unchanged exposure:** a `token_hash` link is consumed by any GET, so a mail-scanner pre-visit burns it. The Supabase-hosted link had the same single-use exposure; a click-to-confirm mitigation is V1.1
 
 Cross-conversation lead matching rule (closed by PR #70, merge commit `8833896`, deployed 2026-09-07):
 
@@ -620,6 +635,20 @@ The safer future direction is a distinct upstream signal — conceptually `reque
 reconciliation across PROJECT_CONTEXT.md, CHECKLIST.md and docs/ARCHITECTURE.md found no
 remaining production-reachable V1 implementation blocker.
 
+**One V1 blocker WAS found after that reconciliation, and is now CLOSED (2026-09-14).**
+The final Google OAuth verification pass exposed that password recovery did not work in
+production at all — first because no code path could consume Supabase's implicit-flow
+fragment (**PR #96**, merge `eeed1f7`), then because the remaining PKCE `?code=` path only
+worked in the browser that requested the reset (**PR #97**, merge `8ccddc6`, plus the
+production Reset Password template switched to the `token_hash` link **after** the route was
+live). **Cross-device password recovery is V1-verified in production**: a fresh reset link
+opened in a fresh Incognito session in another browser context reached *Choose a new
+password*, the update succeeded, and a new session signed in with the new password. Normal
+password sign-in is unchanged. Magic-link sign-in is **deferred to V1.1/later and is not a V1
+blocker**. Full record in `CHANGELOG.md` under 2026-09-14 and in the password-recovery rule
+above. This was judged by the canonical rule — a customer locked out of their account cannot
+use Remy V1 — not by appetite.
+
 **The one remaining launch prerequisite is EXTERNAL and is not Remy work.**
 
 - **Google consent screen: PUBLISHED / In production (2026-09-07).** Audience is External;
@@ -650,7 +679,8 @@ PERIOD.** The correct state is waiting, not building.
   recovery, partial-`structuredData` service recovery, the appointment/customer/enquiry
   identity-model redesign, the `requiredMatches` matcher false positive, booking-confirmation
   test infrastructure, structured-data observability, `stemServiceWord` morphology, Rule 11 /
-  STT wording, the prompt budget and the dashboard-preview toast.
+  STT wording, the prompt budget, the dashboard-preview toast, **magic-link production
+  verification, and the click-to-confirm mitigation for `token_hash` link pre-fetching**.
 - **The timezone-selection UI stays conditional and deferred.** No code path writes
   `organisations.timezone`, so every organisation inherits `Europe/London`. That is correct
   for the current Ireland/UK-compatible launch scope and harmless there. **It becomes a V1
@@ -1355,6 +1385,8 @@ Shipped (previously listed as remaining or future):
 - cancellation/reschedule emails
 - Voice AI
 - Google Calendar
+- **cross-device password recovery** (PRs #96 and #97, V1-verified in production 2026-09-14;
+  magic-link sign-in deferred to V1.1/later)
 
 Free products (see *Free-Product Strategy* above — none of this is V1 work):
 
