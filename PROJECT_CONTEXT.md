@@ -1292,7 +1292,7 @@ never conflated · **a competitive or growth argument is never on its own a NOW*
 |---|---|---|
 | **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR #101, merge `fcd2e68`, production-verified 2026-09-14 (below) |
 | **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, using canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR #103, merge `adb30c7`, production-verified 2026-09-14 (below) |
-| **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire (the A-2 decision below) | **NOT STARTED** |
+| **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire (the A-2 decision below) | **SHIPPED** — PR #105, merge `31bbd45`, production-verified 2026-09-14 (below) |
 | **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
@@ -1386,7 +1386,8 @@ Kit, `sitemap.ts` and `robots.ts` all zero diff.
   metadata pattern
 - **No questionnaire change, no Scan contract or version change**: `SCAN_QUESTIONS.length ===
   9`, six required, `SCAN_QUESTION_SET_VERSION` and all four rule-set versions still `v1`
-  (pinned). **No Lost-Revenue entry page yet** — A-2b is not started
+  (pinned). **No Lost-Revenue entry page yet** — A-2b is not started *(true at PR #103; A-2b
+  has since shipped as **PR #105**, recorded below)*
 - The three routes were registered in the A-1 public-route registry (sitemap and robots consume
   it unchanged); the `/free-tools` hub gained a *"Common problems"* section with three internal
   links and no form or capture; `tests/organicProblemPages.test.mjs` (37) pins everything above,
@@ -1404,6 +1405,68 @@ substring check · local `main` = `origin/main` · feature branch deleted locall
 Automated: `organicProblemPages` 37 / 37, `organicDiscoverability` 34 / 34, all free-tools + Scan
 + A-1 + A-2a suites 614 / 614, full suite 2210 / 0 / 0, `tsc` clean, ESLint 0 problems on the ten
 files, build with the three routes static.
+
+**A-2b — SHIPPED (PR #105, approved head `771233e`, normal merge commit
+`31bbd45af3e1fbbd6914f4b72c42d4fb44cb3947` 2026-09-14T22:12:42Z, deployed to production — Ready,
+target production, branch `main`, build log `Cloning … (Commit: 31bbd45)` matching the merge
+commit, `niteowlhq.com` / `www` aliases attached — and verified).** Six files: three added, three
+modified, +581 / −3; `src/lib/freetools`, the Scan surface, the Setup Kit, `problemPages.ts`,
+`ProblemPageView.tsx`, the three A-2a pages, `sitemap.ts`, `robots.ts` and `structuredData.ts`
+all zero diff.
+
+- **Purpose.** A discoverable **Lost Revenue framing / entry page** at
+  **`/free-tools/lost-revenue`** for people searching around missed enquiries and lost revenue.
+  It explains what the existing nine-question Business Opportunity Scan **can and cannot size**;
+  it **performs no calculation itself**, **diagnoses nobody**, **carries no visitor state**, and
+  sends the visitor to the **unchanged** Scan, which remains the sole validator, sizing, finding,
+  recommendation and report path
+- **Implementation.** A static, server-rendered page (`src/app/free-tools/lost-revenue/page.tsx`)
+  over one content module (`src/lib/site/lostRevenuePage.ts`); the public-route registry
+  extended by one route, so the **exact sitemap public-route count becomes 10** with **no change
+  to `sitemap.ts` or `robots.ts` logic**; `WebPage` JSON-LD from the existing structured-data
+  builder with the brand-only publisher; the A-1 canonical / OpenGraph / Twitter metadata
+  pattern; the `/free-tools` hub gains **one internal Lost Revenue link** beneath *Common
+  problems* — not a fourth card
+- **Exactly one CTA**, *"Start the free Scan"*, whose `href` is the literal
+  `/free-tools/business-opportunity-scan` — **no query string, hash, prefill, mode, answer
+  transfer or state**. The page links only to approved internal destinations already verified in
+  production: the Scan, the canonical unanswered-enquiries problem page, and the hub
+- **Wording provenance.** The sized problem is named by
+  `SCAN_RECOMMENDATIONS["enquiry.unanswered"].headline` verbatim; the sizing ideas are restated
+  in plain prose **without importing or executing the engine** — missed enquiries assumed to
+  convert at about the same rate as answered ones (and that this is likely generous), the
+  visitor's own typical job value, a range worked out from those answers alone, the UNKNOWN gates
+  in their own terms, and *"An estimate, not a measurement"* — each idea pinned by test so the
+  prose cannot drift into a different economic claim. **No number appears on the page**
+- **Truthfulness preserved, all pinned:** the nine-question Scan contract unchanged
+  (`SCAN_QUESTIONS.length === 9`, the six required ids), `SCAN_QUESTION_SET_VERSION` and all four
+  rule-set versions still `v1`; **no duplicate sizing or calculation logic and no engine call**
+  from the page (a string-stripped arithmetic / threshold / answer-comparison detector, plus a
+  ban on naming any sizing module); **UNKNOWN stated as "a real answer, not a failure"**; the
+  estimate never represented as a measurement, comparison, promise or recovery; ban-lists refuse
+  statistics, benchmarks, averages, results, reviews, locations, urgency and recovery claims;
+  **no product pressure, no Remy mention**; no persistence, identity, cookies, storage,
+  analytics, tracking, provider coupling, contact capture or new dependency; `validateScanAnswers`
+  and `buildScanReport` still called only from `ScanClient.tsx`, which still reads no entry /
+  mode / prefill parameter
+
+**Verification:** `organicLostRevenueEntry` **23 / 23** · `organicDiscoverability` **34 / 34** (ten-URL
+sitemap) · `organicProblemPages` **37 / 37** (still exactly three problem directories) · organic /
+free-tools / Scan / anti-funnel combined **637 / 637** · full suite **2233 pass / 0 fail / 0
+skipped**, 393 suites · `tsc --noEmit` clean · ESLint **0 problems on the six changed files**,
+repository baseline unchanged at **11 (7 errors / 4 warnings)** · `next build` successful with
+`/free-tools/lost-revenue` static · `git diff --check` clean.
+
+**Production closeout (2026-09-14):** PR #105 merged by **normal merge commit**, not squash or
+rebase · production deployment **Ready**, **build commit matched the merge commit** · `/api/health`
+200 `database: ok`; `/`, `/free-tools`, `/free-tools/business-opportunity-scan`,
+`/free-tools/lost-revenue`, the three `/free-tools/problems/*` pages, `/sitemap.xml` and
+`/robots.txt` **all 200** · **sitemap contained exactly the 10 approved public URLs**, an exact match
+to the registry, zero `lastmod`, **no private / auth / admin / API route** by the segment-aware
+`isPrivatePath` check · **the live Lost Revenue page had exactly one Scan CTA anchor with no query
+or hash** (the document's one `?` is Next's `<link rel="icon">`, not a page link) and `WebPage`
+JSON-LD present · feature branch deleted locally and remotely · `main` = `origin/main` = the merge
+commit after cleanup · `supabase/.temp/cli-latest` remained untouched throughout.
 
 **The unresolved A-2 decision, preserved rather than assumed:** **do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
@@ -1652,8 +1715,11 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
   SHIPPED, LIVE and production-verified** (PR #103, merge `adb30c7`, 2026-09-14): three static
   pages mapped 1:1 to the canonical Scan condition classes, canonical wording, every CTA into
   the unchanged nine-question Scan, `enquiry.no_followup` keeping its null-product truth.
-  **A-2b (Lost-Revenue entry), B, C and D NOT started**; the Lost-Revenue questionnaire is not
-  to be shortened without a separately approved `SCAN_QUESTION_SET_VERSION` decision
+  Then **A-2b Lost-Revenue entry SHIPPED, LIVE and production-verified** (PR #105, merge
+  `31bbd45`, 2026-09-14): `/free-tools/lost-revenue`, a framing / entry page that calculates
+  nothing and sends the visitor to the unchanged Scan; sitemap now ten public URLs.
+  **B, C and D NOT started**; the Lost-Revenue questionnaire is not to be shortened without a
+  separately approved `SCAN_QUESTION_SET_VERSION` decision
 
 Future:
 
