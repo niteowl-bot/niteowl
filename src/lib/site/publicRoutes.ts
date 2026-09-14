@@ -50,6 +50,9 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
   { path: "/free-tools/problems/unanswered-enquiries", changeFrequency: "monthly", priority: 0.8 },
   { path: "/free-tools/problems/enquiries-that-do-not-book", changeFrequency: "monthly", priority: 0.8 },
   { path: "/free-tools/problems/booking-back-and-forth", changeFrequency: "monthly", priority: 0.8 },
+  // A-2b — the Lost Revenue framing / entry page into the same nine-question
+  // Scan (src/lib/site/lostRevenuePage.ts). Entry only; it sizes nothing.
+  { path: "/free-tools/lost-revenue", changeFrequency: "monthly", priority: 0.8 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
 ];
