@@ -129,7 +129,10 @@ const PUBLIC_PATHS = PUBLIC_ROUTES.map((r) => r.path);
 // ── 1. Sitemap ─────────────────────────────────────────────────────
 
 describe("the sitemap exposes only the intended public routes", () => {
-  test("exactly the six public pages, absolute, on the canonical origin", () => {
+  test("exactly the nine public pages, absolute, on the canonical origin", () => {
+    // A-1 shipped six. A-2a added the three problem-led pages — one per
+    // canonical Scan condition class — and nothing else. Extended, not
+    // loosened: the list stays exact.
     const entries = sitemap();
     assert.deepEqual(
       entries.map((e) => e.url),
@@ -138,6 +141,9 @@ describe("the sitemap exposes only the intended public routes", () => {
         "https://niteowlhq.com/free-tools",
         "https://niteowlhq.com/free-tools/business-opportunity-scan",
         "https://niteowlhq.com/free-tools/ai-receptionist-setup-kit",
+        "https://niteowlhq.com/free-tools/problems/unanswered-enquiries",
+        "https://niteowlhq.com/free-tools/problems/enquiries-that-do-not-book",
+        "https://niteowlhq.com/free-tools/problems/booking-back-and-forth",
         "https://niteowlhq.com/privacy",
         "https://niteowlhq.com/terms",
       ]

@@ -66,3 +66,16 @@ export function freeToolsHubJsonLd(tools: readonly FreeToolDescriptor[]) {
     })),
   } as const;
 }
+
+/** A plain public page: what it is and who publishes it, nothing more. */
+export function webPageJsonLd(page: { name: string; path: string; description: string }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: page.name,
+    url: publicUrl(page.path),
+    description: page.description,
+    isAccessibleForFree: true,
+    publisher: PUBLISHER,
+  } as const;
+}

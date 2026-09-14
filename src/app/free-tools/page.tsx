@@ -2,6 +2,11 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { freeToolsHubJsonLd } from "@/lib/site/structuredData";
 import { publicUrl } from "@/lib/site/publicRoutes";
+import {
+  PROBLEMS_SECTION_NOTE,
+  PROBLEMS_SECTION_TITLE,
+  PROBLEM_PAGE_LIST,
+} from "@/lib/site/problemPages";
 
 // ── The Free Tools hub ─────────────────────────────────────────────
 //
@@ -142,6 +147,32 @@ export default function FreeToolsPage() {
             )}
           </article>
         ))}
+      </section>
+
+      {/* A-2a — plain explanations of the three problems the Scan can detect,
+          one page per canonical condition class. Internal links only: no
+          form, no capture, no state. */}
+      <section className="mt-14 border-t border-slate-800 pt-8" data-common-problems>
+        <h2 className="text-white font-semibold mb-2">{PROBLEMS_SECTION_TITLE}</h2>
+        <p className="text-slate-400 text-sm leading-relaxed max-w-2xl">
+          {PROBLEMS_SECTION_NOTE}
+        </p>
+        <ul className="mt-5 grid gap-3 sm:grid-cols-3">
+          {PROBLEM_PAGE_LIST.map((problem) => (
+            <li key={problem.condition}>
+              <Link
+                href={problem.path}
+                className="block h-full rounded-xl border border-slate-800 bg-slate-900/40 p-4 hover:border-slate-700 transition-colors"
+                data-problem-link={problem.condition}
+              >
+                <span className="block text-white font-medium leading-snug">
+                  {problem.headline}
+                </span>
+                <span className="block text-indigo-400 text-sm mt-2">Read more →</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="mt-14 border-t border-slate-800 pt-8 max-w-2xl">

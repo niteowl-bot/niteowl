@@ -45,6 +45,11 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
   { path: "/free-tools", changeFrequency: "monthly", priority: 0.9 },
   { path: "/free-tools/business-opportunity-scan", changeFrequency: "monthly", priority: 0.9 },
   { path: "/free-tools/ai-receptionist-setup-kit", changeFrequency: "monthly", priority: 0.9 },
+  // A-2a — problem-led discovery pages, one per canonical Scan condition
+  // class (src/lib/site/problemPages.ts). Three, and only three.
+  { path: "/free-tools/problems/unanswered-enquiries", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/free-tools/problems/enquiries-that-do-not-book", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/free-tools/problems/booking-back-and-forth", changeFrequency: "monthly", priority: 0.8 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
 ];
