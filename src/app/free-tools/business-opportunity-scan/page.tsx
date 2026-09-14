@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import ScanClient from "./ScanClient";
+import { freeToolApplicationJsonLd } from "@/lib/site/structuredData";
+import { publicUrl } from "@/lib/site/publicRoutes";
 
 // ── NiteOwl Business Opportunity Scan ──────────────────────────────
 //
@@ -19,14 +21,49 @@ import ScanClient from "./ScanClient";
 // NO REMY, NO PROVIDER. Nothing imports leadCapture, lib/voice,
 // availability, calendarSync, integrations, Supabase or a model SDK,
 // and nothing may.
+//
+// DISCOVERABILITY (A-1) is metadata only: a canonical URL, OpenGraph
+// and a truthful WebApplication JSON-LD. It says what the tool is and
+// that it is free; it makes no claim about any business.
+
+const PATH = "/free-tools/business-opportunity-scan";
+const TITLE = "Business Opportunity Scan — Free Tool | NiteOwl AI";
+const DESCRIPTION =
+  "Answer nine short questions about how enquiries reach your business and what happens to them, and get a clear, honest report on where you may be missing work. Free, nothing stored, no account needed.";
 
 export const metadata: Metadata = {
-  title: "Business Opportunity Scan — Free Tool | NiteOwl AI",
-  description:
-    "Answer nine short questions about how enquiries reach your business and what happens to them, and get a clear, honest report on where you may be missing work. Free, nothing stored, no account needed.",
-  alternates: { canonical: "/free-tools/business-opportunity-scan" },
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: PATH },
+  openGraph: {
+    type: "website",
+    url: publicUrl(PATH),
+    siteName: "NiteOwl HQ",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
+const structuredData = freeToolApplicationJsonLd({
+  name: "Business Opportunity Scan",
+  path: PATH,
+  description: DESCRIPTION,
+});
+
 export default function BusinessOpportunityScanPage() {
-  return <ScanClient />;
+  return (
+    <>
+      {/* JSON-LD as a string child: React renders script text verbatim, and
+          "<" is written as \u003c so the constant can never close the tag. */}
+      <script type="application/ld+json">
+        {JSON.stringify(structuredData).replace(/</g, "\\u003c")}
+      </script>
+      <ScanClient />
+    </>
+  );
 }

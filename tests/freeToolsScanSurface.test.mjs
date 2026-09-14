@@ -622,6 +622,11 @@ describe("the surface cannot persist, fetch, reach a provider, inject HTML or ro
   });
 
   test("the only non-framework imports are the scan modules and the surface's own files", () => {
+    // A-1 (organic discoverability) added the two pure site modules — the
+    // public-route inventory and the truthful JSON-LD builder — which
+    // tests/organicDiscoverability.test.mjs proves import nothing but
+    // `next` types and each other. Extended, not loosened: every other
+    // specifier is still refused.
     for (const file of SURFACE_FILES) {
       const specifiers = (read(file).match(/from\s+["']([^"']+)["']/g) ?? []).map((s) =>
         s.replace(/from\s+["']|["']/g, "")
@@ -629,7 +634,7 @@ describe("the surface cannot persist, fetch, reach a provider, inject HTML or ro
       for (const s of specifiers) {
         assert.match(
           s,
-          /^(react|next\/link|next|@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)|\.\/ScanClient|@\/app\/free-tools\/business-opportunity-scan\/scanPresentation)$/,
+          /^(react|next\/link|next|@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)|\.\/ScanClient|@\/app\/free-tools\/business-opportunity-scan\/scanPresentation|@\/lib\/site\/(publicRoutes|structuredData))$/,
           `${file} imports ${s}`
         );
       }
