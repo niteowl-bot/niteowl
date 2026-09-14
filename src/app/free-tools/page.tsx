@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { freeToolsHubJsonLd } from "@/lib/site/structuredData";
+import { publicUrl } from "@/lib/site/publicRoutes";
 
 // ── The Free Tools hub ─────────────────────────────────────────────
 //
@@ -20,11 +22,30 @@ import type { Metadata } from "next";
 // explicit, recorded, consented import step (docs/ARCHITECTURE.md §26),
 // never as a side effect of somebody using a tool.
 
+const PATH = "/free-tools";
+const TITLE = "Free Business Tools — NiteOwl AI";
+const DESCRIPTION =
+  "Free, practical tools for small businesses from NiteOwl AI. Get something useful in minutes — no account needed.";
+
+// DISCOVERABILITY (A-1) is metadata only: a canonical URL, OpenGraph and
+// a truthful CollectionPage JSON-LD listing the tools this page already
+// links to. It makes no claim about any business.
 export const metadata: Metadata = {
-  title: "Free Business Tools — NiteOwl AI",
-  description:
-    "Free, practical tools for small businesses from NiteOwl AI. Get something useful in minutes — no account needed.",
-  alternates: { canonical: "/free-tools" },
+  title: TITLE,
+  description: DESCRIPTION,
+  alternates: { canonical: PATH },
+  openGraph: {
+    type: "website",
+    url: publicUrl(PATH),
+    siteName: "NiteOwl HQ",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 /**
@@ -57,9 +78,24 @@ const TOOLS = [
   },
 ] as const;
 
+// Derived from TOOLS, so the structured data can only ever name a tool
+// the page actually links to.
+const structuredData = freeToolsHubJsonLd(
+  TOOLS.filter((tool) => tool.href).map((tool) => ({
+    name: tool.name,
+    path: tool.href,
+    description: tool.summary,
+  }))
+);
+
 export default function FreeToolsPage() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-16 sm:py-20">
+      {/* JSON-LD as a string child: React renders script text verbatim, and
+          "<" is written as \u003c so the constant can never close the tag. */}
+      <script type="application/ld+json">
+        {JSON.stringify(structuredData).replace(/</g, "\\u003c")}
+      </script>
       <header className="max-w-2xl">
         <p className="text-indigo-400 text-sm font-medium mb-3">
           Free tools
