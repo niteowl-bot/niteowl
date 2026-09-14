@@ -1031,7 +1031,84 @@ linkage and the consent and promotion flow (Part XII §89) · outcome or impact 
 Part XIII provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit
 pre-fill · the standalone Lost Revenue entry · a second business process · a fourth condition
 code · and every later Scan phase. **PR E is complete and closed**, and the next milestone is
-still Google's verification review.
+still Google's verification review. *(Hypotheses have since shipped as **PR #99**; see below.
+The rest of this list stands.)*
+
+**DIAGNOSTIC HYPOTHESES SHIPPED — PR F IS COMPLETE AND CLOSED (PR #99, approved head
+`2a3baf8`, normal merge commit `33171f015bdddec0c28a67058dfc16d23c226ff1` 2026-09-14, deployed
+to production — Ready on `niteowlhq.com` / `www`, **SHA-verified** from the build log's
+`Cloning … (Commit: 33171f0)` — and verified: `/api/health` HTTP 200 `database: ok`, homepage
+200, `/free-tools` 200, `/free-tools/business-opportunity-scan` 200, and the string *"What might
+be behind this"* located in the live client bundle).** The build against Part XIV **§103**, the
+last of the six Part XIV contracts, and the only remaining gap in the loop's **Explain** stage.
+Nine files: two added, seven modified, **+1060 / −5**. `docs/ARCHITECTURE.md` is unchanged.
+
+- **A hypothesis is a candidate explanation, and that is its ceiling.** One new pure module,
+  `src/lib/freetools/scanHypotheses.ts` (imports `scanTypes` only), held to the same boundary
+  suite, which now covers **thirteen modules**. Each finding now carries
+  `hypotheses: ScanHypothesis[]` — ranked, **no winner** (no `is_primary`, `winner` or
+  `selected` exists, and a one-item list is still ranked and reason-coded) — plus
+  `hypotheses_empty_reason: "no_rule_matched" | null`. **`claim_class` is the literal
+  `"hypothesis"`**: `asserted_cause` and `observation` are unrepresentable in the type, the
+  §101 `observed` pattern applied to §103 and **P50** designed out at the type rather than at
+  promotion
+- **Every emitted hypothesis names the evidence it rests on** — at least one owner answer,
+  quoted verbatim as `business_provided` — and `source_type` is `derived_deterministic`. A
+  **closed rule table** keyed by condition and answers: four rules for `enquiry.unanswered`
+  (Q2 working hours / varies, Q1 three or more channels, Q5 no / sometimes) and two for
+  `booking.friction` (Q1 message-based channels, Q2 working hours / varies). **Q1 and Q2 are
+  read only as evidence for an explanation; Q1/Q2-aware routing (§87.2) remains deferred**
+- **`enquiry.no_followup` has no rules, deliberately.** Q6 *is* the practice, and nothing
+  else the owner said explains why it is what it is, so its list is **empty with a stated
+  reason** and nothing is invented to fill it. The empty case renders *"Your answers don't
+  point to a particular reason."* — a real answer, not a gap
+- **Hypothesis confidence is its own and inherits nothing.** Fixed per rule; the entry point
+  takes the **condition, not the finding**, so the finding's confidence and cap are
+  structurally unreadable. Pinned in both directions: a low-confidence finding carries a
+  medium hypothesis, a high-confidence finding carries a low one
+- **The wording stays tentative** — *may / could / suggests* — and a test refuses
+  *because / caused / cause of / root cause / is why* in every display text and in the
+  rendered section. **This is an explanatory layer, not proof of causation**, and the Atlas
+  boundary (§100.3) is untouched: the Scan still asserts no cause and reasons across no domain
+- **`SCAN_HYPOTHESIS_RULE_SET_VERSION`** is its own constant feeding its own report field,
+  present on every report; the finding, ordering and relation versions did not move
+- **No new report section.** One *"What might be behind this"* block inside each existing
+  finding card, after *How confident we are*; the footer gains only *explanation rules v1*.
+  No CTA, link, product, handoff or storage
+- **Strictly downstream, and structurally so.** Only the assembler imports the module;
+  `deriveFindings`, sizing, prioritisation, dependencies, evidence gaps, recommendations and
+  **clusters** neither import it nor take hypotheses. **`shared_cause_candidate` is NOT
+  activated** — the cluster layer still cannot read hypotheses, and a test pins that the
+  relation never fires even where two findings' hypotheses overlap on the same answer
+- **Provider-independent, model-independent, zero-persistence.** No clock, randomness,
+  identifier generation, network, storage, tenant, provider or model is reachable
+
+**Upstream non-interference was proven, not assumed:** across fourteen scenarios (including a
+suppressed Q4 > Q3 finding and a Q3 *not sure*) every pre-existing report field was
+recomputed from the shipped modules and **deep-compared** against the report; a key-set pin
+shows the only new keys are the two per-finding fields and the report version; finding order
+stays **`SCAN_CONDITION_ORDER`** and the count is unchanged. All five deleted lines were
+audited: each is an in-place widening (footer clause, import allow-list, destructuring), and
+**no pre-existing assertion was weakened.**
+
+**Verification:** hypotheses suite **41 pass / 0 fail**; all Scan suites **492 / 0**; full
+repository **2139 pass / 0 fail / 0 skipped**; `tsc` clean; ESLint **0 problems in the nine
+changed files** with the repository baseline unchanged at **11 (7 errors, 4 warnings)**; build
+successful with the Scan route still **static**; `git diff --check` clean. **Six mutation
+checks, each verified to have landed and then fully restored:** no evidence ref fails 10,
+`claim_class` changed fails 2, *because* introduced fails 2, confidence inherited from the
+finding fails 4, findings reordered fails 3, a hypothesis invented for the empty state fails 4.
+The feature branch was deleted locally and on origin after production verification.
+
+**What PR #99 did NOT do, and what its merge does not approve:** `shared_cause_candidate`
+activation (the natural follow-on, its own decision) · scenario output (**L35**) ·
+`evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token linkage and the
+consent and promotion flow (Part XII §89) · outcome or impact measurement · any Part XIII
+provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit pre-fill · the
+standalone Lost Revenue entry · a second business process · a fourth condition code · any
+model call or prompt · and every later Scan phase. **PR F is complete and closed.** All six
+Part XIV contracts are now built; the next Scan increment, whatever it is, needs its own
+approval.
 
 **Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
 (confidence levels and cap policy that the implementation chose and canon does not yet
@@ -1402,8 +1479,14 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
   delivered as PR #94, merge `4cfd87d`, 2026-09-13): deterministic pairwise relations between
   existing findings, emitting `sequential_in_one_process` and `independent` in Phase 1, with
   the other three declared relations intentionally unreachable until their canonical models
-  exist. **PR E is complete and closed.** Persistence, run identity, consent flow, outcome
-  measurement, Part XIII runtime, hypotheses and later phases NOT started and not approved
+  exist. **PR E is complete and closed.** Then **deterministic diagnostic hypotheses SHIPPED,
+  LIVE and production-verified** (**PR F**, delivered as PR #99, merge `33171f0`, 2026-09-14):
+  each finding can now say *"What might be behind this"* — evidence-referenced candidate
+  explanations from a closed rule table, ranked with no winner, their own confidence, an
+  explicit `no_rule_matched` empty state, tentative wording only. An explanatory layer, never
+  proof of causation; `shared_cause_candidate` NOT activated. **PR F is complete and closed.**
+  Persistence, run identity, consent flow, outcome measurement, Part XIII runtime and later
+  phases NOT started and not approved
 - **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
   a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
   entry NOT started
