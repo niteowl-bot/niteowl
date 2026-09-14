@@ -52,6 +52,16 @@ export const NextResponse = {
       headers: { "content-type": "application/json", ...(init.headers ?? {}) },
     });
   },
+  // The auth landing routes (src/app/auth/*/route.ts) answer with a
+  // redirect. Next's own implementation is a 307 with a Location header,
+  // which the standard Response already expresses. Additive: nothing
+  // that used this stub before calls it.
+  redirect(url, status = 307) {
+    return new Response(null, {
+      status,
+      headers: { location: url.toString() },
+    });
+  },
 };
 
 // A type-only import at runtime; the handler is called with a plain
