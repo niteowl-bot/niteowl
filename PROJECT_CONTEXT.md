@@ -1291,7 +1291,8 @@ never conflated · **a competitive or growth argument is never on its own a NOW*
 | Phase | Scope | Status |
 |---|---|---|
 | **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR #101, merge `fcd2e68`, production-verified 2026-09-14 (below) |
-| **A-2 — Problem-led discovery / Lost-Revenue framing** | indexable problem pages per canonical condition class using canonical wording only; a Lost-Revenue *entry* into the same nine-question Scan | **NOT STARTED** — needs the public-content rule and the A-2 decision below recorded first |
+| **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, using canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR #103, merge `adb30c7`, production-verified 2026-09-14 (below) |
+| **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire (the A-2 decision below) | **NOT STARTED** |
 | **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
@@ -1338,6 +1339,71 @@ elements** · `/robots.txt` **200** with all fifteen private families disallowed
 `Sitemap: https://niteowlhq.com/sitemap.xml`. Automated: `organicDiscoverability` 34 / 34,
 all free-tools + Scan suites 577 / 577, full suite 2173 / 0 / 0, `tsc` clean, ESLint 0
 problems on the nine files, build with `/sitemap.xml` and `/robots.txt` static.
+
+**A-2a — SHIPPED (PR #103, approved head `83d8906`, normal merge commit
+`adb30c7488ef18c343bb90c111a87b33df35cca2` 2026-09-14T18:18:08Z, deployed to production — Ready,
+target production, branch `main`, build log `Cloning … (Commit: adb30c7)` matching the merge
+commit — and verified).** Ten files, +854 / −1; `src/lib/freetools`, the Scan surface, the Setup
+Kit, `sitemap.ts` and `robots.ts` all zero diff.
+
+- **Exactly three public problem-led pages, mapped 1:1 to the three canonical Scan condition
+  classes** and keyed by `ScanConditionCode`, so a fourth page needs a fourth code (a Part XI
+  boundary change) and cannot be added by editing prose:
+  `/free-tools/problems/unanswered-enquiries` → `enquiry.unanswered` ·
+  `/free-tools/problems/enquiries-that-do-not-book` → `enquiry.no_followup` ·
+  `/free-tools/problems/booking-back-and-forth` → `booking.friction`
+- **Canonical wording provenance.** `src/lib/site/problemPages.ts` is a static content map:
+  each page's headline and "One thing you can do" are
+  `SCAN_RECOMMENDATIONS[condition].headline` / `.next_step` **verbatim** (pinned by deep-equal),
+  so the pages and the report cannot drift apart. **`why_it_matters` is excluded** — it begins
+  *"You told us that…"* and would diagnose a stranger — and **no hypothesis `display_text` is
+  echoed**; both absences are pinned
+- **Static educational mechanism prose only.** "How this tends to happen" explains how a
+  problem tends to arise in general; every paragraph carries a hedge (*may / can / often /
+  tends / might / could*, pinned) and no digit appears on any page (pinned). **No diagnosis from
+  page content**: ban-lists over rendered text, metadata and JSON-LD refuse statistics,
+  benchmarks, currency claims, *"businesses like yours"*, customer counts, reviews, ratings,
+  testimonials, locations, *"you are losing"*, *"your business is"*, *"because your"*, *"root
+  cause"*, and funnel pressure (sign up, log in, pricing, trial, urgency)
+- **No thresholds, no answer comparisons, no duplicated Scan engine logic.** The map holds no
+  `applies`, reads no answer and compares nothing; no page calls or imports a Scan engine
+  module; `validateScanAnswers` and `buildScanReport` remain called from `ScanClient.tsx`
+  only (all pinned). The Scan is the only place a statement about *a* business is made
+- **CTA routes to the unchanged Business Opportunity Scan** — the literal
+  `/free-tools/business-opportunity-scan`, **no query-string mode, no prefill, no fragment, no
+  state carried**; every `href` on a page ∈ {Scan, hub, Setup Kit}. `ScanClient` reads no
+  entry/mode parameter (pinned)
+- **Honest routing preserved per class.** `booking.friction` additionally shows the canonical
+  `SETUP_KIT_HANDOFF` verbatim, once; **`enquiry.no_followup` keeps the canonical
+  `recommended_product: null` truth visible** — *"There is nothing to buy for this…"*, no
+  product, no handoff; Remy is named at most once per page, as attribution **after** the advice
+  and the CTA, never *"Remy fixes this"*; metadata titles and descriptions name no product.
+  **No Remy pressure**
+- **Zero persistence, identity, cookies, storage, analytics, tracking, provider, dependency,
+  form or contact capture.** Server components only — no client directive, hook, request API,
+  fetch, database, external host or `<script src>` in any A-2a file (pinned). `WebPage` JSON-LD
+  with the brand-only publisher via the A-1 builder; A-1's canonical / OpenGraph / Twitter
+  metadata pattern
+- **No questionnaire change, no Scan contract or version change**: `SCAN_QUESTIONS.length ===
+  9`, six required, `SCAN_QUESTION_SET_VERSION` and all four rule-set versions still `v1`
+  (pinned). **No Lost-Revenue entry page yet** — A-2b is not started
+- The three routes were registered in the A-1 public-route registry (sitemap and robots consume
+  it unchanged); the `/free-tools` hub gained a *"Common problems"* section with three internal
+  links and no form or capture; `tests/organicProblemPages.test.mjs` (37) pins everything above,
+  and `organicDiscoverability`'s exact sitemap list was extended from six to nine URLs
+
+**Production verification (2026-09-14):** PR #103 merged normally · production deployment
+**Ready**, target production, **commit matched the merge commit** · the three new routes
+**HTTP 200** (with `/`, `/free-tools`, both tools also 200; `/api/health` 200 `database: ok`) ·
+`/sitemap.xml` **200 containing the nine approved public URLs** (A-1's six plus the three
+problem-led routes), zero `lastmod` · `/robots.txt` **200** · **the private-route partition
+remained intact** — a quick shell grep first reported one "private" hit, which was the substring
+`/booking` inside `…/problems/booking-back-and-forth`; it was **disproved with the canonical
+segment-aware `isPrivatePath` check (0 private paths)**, and is recorded so nobody repeats the
+substring check · local `main` = `origin/main` · feature branch deleted locally and remotely.
+Automated: `organicProblemPages` 37 / 37, `organicDiscoverability` 34 / 34, all free-tools + Scan
++ A-1 + A-2a suites 614 / 614, full suite 2210 / 0 / 0, `tsc` clean, ESLint 0 problems on the ten
+files, build with the three routes static.
 
 **The unresolved A-2 decision, preserved rather than assumed:** **do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
@@ -1582,9 +1648,12 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
 - **Organic Acquisition Engine** (see *Free-Product Strategy* §7) — **A-1 Discoverability
   Foundation SHIPPED, LIVE and production-verified** (PR #101, merge `fcd2e68`, 2026-09-14):
   public-route inventory, `sitemap.xml`, `robots.txt`, free-tool metadata and truthful
-  JSON-LD, zero persistence / identity / tracking. **A-2 (problem-led pages, Lost-Revenue
-  framing), B, C and D NOT started**; the Lost-Revenue questionnaire is not to be shortened
-  without a separately approved `SCAN_QUESTION_SET_VERSION` decision
+  JSON-LD, zero persistence / identity / tracking. Then **A-2a Problem-Led Discovery Pages
+  SHIPPED, LIVE and production-verified** (PR #103, merge `adb30c7`, 2026-09-14): three static
+  pages mapped 1:1 to the canonical Scan condition classes, canonical wording, every CTA into
+  the unchanged nine-question Scan, `enquiry.no_followup` keeping its null-product truth.
+  **A-2b (Lost-Revenue entry), B, C and D NOT started**; the Lost-Revenue questionnaire is not
+  to be shortened without a separately approved `SCAN_QUESTION_SET_VERSION` decision
 
 Future:
 
