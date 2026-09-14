@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { freeToolsHubJsonLd } from "@/lib/site/structuredData";
 import { publicUrl } from "@/lib/site/publicRoutes";
+import { LOST_REVENUE_HUB_LINK_LABEL, LOST_REVENUE_PATH } from "@/lib/site/lostRevenuePage";
 import {
   PROBLEMS_SECTION_NOTE,
   PROBLEMS_SECTION_TITLE,
@@ -173,6 +174,17 @@ export default function FreeToolsPage() {
             </li>
           ))}
         </ul>
+        {/* A-2b — one internal link to the Lost Revenue entry page. Not a
+            fourth card: it is an entry into the same Scan, not a tool. */}
+        <p className="mt-5 text-sm">
+          <Link
+            href={LOST_REVENUE_PATH}
+            className="text-indigo-400 hover:text-indigo-300 font-medium"
+            data-lost-revenue-link
+          >
+            {LOST_REVENUE_HUB_LINK_LABEL} →
+          </Link>
+        </p>
       </section>
 
       <section className="mt-14 border-t border-slate-800 pt-8 max-w-2xl">
