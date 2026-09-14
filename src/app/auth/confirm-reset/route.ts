@@ -37,8 +37,18 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(new URL('/reset-password', origin))
     }
+
+    // Expired or already-used link — send back to request a fresh one.
+    return NextResponse.redirect(new URL('/forgot-password?error=link', origin))
   }
 
-  // Expired or already-used link — send back to request a fresh one.
-  return NextResponse.redirect(new URL('/forgot-password?error=link', origin))
+  // No code at all. Supabase's implicit flow delivers the recovery
+  // session in the URL FRAGMENT, which never reaches a server handler —
+  // so "no code" is not "no link", and treating it as expired sent every
+  // fragment-based recovery straight to the error page. Browsers keep the
+  // fragment across a redirect, so forward it to the reset page, where
+  // the client consumes it (src/lib/auth/hashSession.ts) and then still
+  // insists on a real session before showing the form. A genuinely empty
+  // visit lands on that page's "link expired or invalid" state.
+  return NextResponse.redirect(new URL('/reset-password', origin))
 }

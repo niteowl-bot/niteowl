@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { consumeAuthHashSession } from '@/lib/auth/hashSession'
 
 type Stage = 'checking' | 'form' | 'done' | 'invalid'
 
@@ -16,16 +17,22 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // /auth/confirm-reset already exchanged the emailed link's code for a
-  // session before redirecting here — this only confirms that session
-  // actually exists, so someone can't land on this form (and change a
-  // password) without a valid, single-use recovery link.
+  // /auth/confirm-reset either exchanged the emailed link's `?code=` for a
+  // session before redirecting here, or — when Supabase answered with an
+  // implicit-flow fragment instead — forwarded the fragment here for the
+  // client to consume. Consumption is awaited first so this check cannot
+  // race it; it then only confirms a session actually exists, so someone
+  // can't land on this form (and change a password) without a valid,
+  // single-use recovery link. A rejected fragment leaves no session and
+  // lands on 'invalid' exactly as a missing one does.
   useEffect(() => {
     let cancelled = false
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled) return
-      setStage(data.user ? 'form' : 'invalid')
-    })
+    consumeAuthHashSession(() => supabase, window)
+      .then(() => supabase.auth.getUser())
+      .then(({ data }) => {
+        if (cancelled) return
+        setStage(data.user ? 'form' : 'invalid')
+      })
     return () => {
       cancelled = true
     }
