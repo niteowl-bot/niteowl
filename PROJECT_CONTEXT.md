@@ -1263,6 +1263,93 @@ visitors reported (`AGENT_ACCESS_LAYER.md` §25.2); and **sharing a named custom
 governed disclosure**, with per-claim consent and evidence frozen as of publication, that is an
 **output of the learning loop and never an input to it** (Part X **N3 / P40**).
 
+## 7. Organic Acquisition Engine
+
+**Canonical as of 2026-09-14. An extension of the existing architecture, not a second one.**
+The engine is the distribution/acquisition layer on top of §1–§6 above and the architecture
+they already rest on — `docs/ARCHITECTURE.md` §26 (value before any account, no inferred
+identity, own namespace, explicit promotion), `docs/AGENT_ACCESS_LAYER.md` §25 (free products as
+distribution; repeat usage linked only by a token the visitor holds; the §25.2 provenance floor
+on cross-visitor learning), §84.3 (honest routing, and away from Remy), §76/§77 (an estimate is
+never a measured outcome; a named result is a governed disclosure) and §72.2 S3 (a dependency is
+classified at adoption). A read-only reconciliation of the proposal against canon found **no
+conflict**: every component was already present, a compatible extension, or deferred by an
+existing rule, and the three items needing decisions are recorded below rather than assumed.
+
+**Binding rules for every phase:** free value is delivered before any commercial ask, and never
+crippled to force one · no visitor identity is ever inferred (no fingerprint, IP, domain or
+behavioural matching) · acquisition surfaces reuse the canonical Scan findings, hypotheses,
+recommendations and routing — **no parallel SEO diagnosis or recommendation engine** · no
+invented statistics, benchmarks, reviews, ratings, customer results or location pages · a free
+Scan estimate never becomes a measured outcome · every external SEO / analytics / email provider
+is registered under S3 / P37 before it is depended on · **aggregate acquisition measurement,
+visitor journey tracking and measured business outcomes are three different things** and are
+never conflated · **a competitive or growth argument is never on its own a NOW** (§78).
+
+**The phase ladder:**
+
+| Phase | Scope | Status |
+|---|---|---|
+| **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR #101, merge `fcd2e68`, production-verified 2026-09-14 (below) |
+| **A-2 — Problem-led discovery / Lost-Revenue framing** | indexable problem pages per canonical condition class using canonical wording only; a Lost-Revenue *entry* into the same nine-question Scan | **NOT STARTED** — needs the public-content rule and the A-2 decision below recorded first |
+| **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
+| **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
+| **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
+
+**A-1 — SHIPPED (PR #101, approved head `840657e`, normal merge commit
+`fcd2e68234479a4d5f0e88dbb1a0df3583cfa7d8` 2026-09-14T17:40:02Z, deployed to production —
+Ready, target production, branch `main`, build log `Cloning … (Commit: fcd2e68)` matching the
+merge commit, `niteowlhq.com` / `www` aliases attached — and verified).** Nine files, +759 / −15:
+
+- `src/lib/site/publicRoutes.ts` — the **canonical public-route inventory**: six indexable
+  pages (`/`, `/free-tools`, the two tools, `/privacy`, `/terms`) and fifteen private route
+  families (`/dashboard /chat /leads /calendar /knowledge /settings /onboarding /admin /api
+  /auth /login /signup /reset-password /forgot-password /booking` — the manage-booking link is
+  token-gated, so private). One list read by the sitemap, robots and the tests; a test pins
+  that the two lists **partition the real `src/app` inventory**, so an unclassified new page
+  fails before a crawler can find it
+- `src/app/sitemap.ts` and `src/app/robots.ts` — the Next file conventions. **The sitemap
+  carries no `lastModified`**: no reliable per-route date exists and none is invented (no
+  clock, no file mtime, no hand-typed stamp), so the output is byte-identical for every call
+- per-free-tool **canonical / OpenGraph / Twitter metadata** (titles and descriptions
+  unchanged; the tool pages previously inherited Remy's OpenGraph from the root layout)
+- `src/lib/site/structuredData.ts` — **truthful JSON-LD** for the hub (`CollectionPage`
+  listing the tools by reference) and both tools (`WebApplication`, free offer,
+  `isAccessibleForFree: true`). **Publisher is the brand, `NiteOwl AI`, not a legal entity**
+  — the smallest truthful representation; company/legal identity lives in Privacy and Terms
+  and is not restated. The shape has no field for a rating, review, count, saving, benchmark
+  or location, and the only numeral is the zero price. Rendered as a script string child with
+  `<` written as `<` — no `dangerouslySetInnerHTML`
+- **internal linking verified, not changed**: hub → tools, layout nav → hub and home, footer →
+  privacy and terms
+- **zero persistence, zero identity, zero tracking/analytics, zero provider dependency** — no
+  cookie, storage, request API, fetch, database, analytics name, external host or new package
+  in any A-1 file, pinned by test · **no change to Scan intelligence** (`src/lib/freetools`
+  zero diff), **no change to Remy**, **no change to routing or recommendations** · **no
+  Lost-Revenue entry page yet** · one reviewed test extension: the Scan surface's import
+  allow-list gains the single alternative `@/lib/site/(publicRoutes|structuredData)` so the
+  Scan page can use the shared JSON-LD builder rather than duplicating its shape
+
+**Production verification (2026-09-14):** `/api/health` **200** `{"status":"ok","database":"ok"}`
+· `/` **200** · `/free-tools` **200** · `/free-tools/business-opportunity-scan` **200** ·
+`/free-tools/ai-receptionist-setup-kit` **200** · `/sitemap.xml` **200 with exactly the six
+approved public URLs**, all on `https://niteowlhq.com`, zero private routes, **zero `lastmod`
+elements** · `/robots.txt` **200** with all fifteen private families disallowed and
+`Sitemap: https://niteowlhq.com/sitemap.xml`. Automated: `organicDiscoverability` 34 / 34,
+all free-tools + Scan suites 577 / 577, full suite 2173 / 0 / 0, `tsc` clean, ESLint 0
+problems on the nine files, build with `/sitemap.xml` and `/robots.txt` static.
+
+**The unresolved A-2 decision, preserved rather than assumed:** **do NOT create a shorter
+Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
+required (§87.2), with `validateScanAnswers` the sole refusal authority and one
+`SCAN_QUESTION_SET_VERSION`. **A Lost-Revenue surface remains framing / entry only** — a
+different landing and emphasis into the same nine questions and the same `buildScanReport` —
+**unless a separately approved decision creates a new `SCAN_QUESTION_SET_VERSION`** and states
+its §107.3 comparability consequences. Before A-2 is built, a **public-content rule** is also
+to be recorded here: problem pages take their business wording from canonical constants, may
+explain general mechanisms, and may not assert a cause for a specific business, a statistic, a
+benchmark, a customer result or a location; no page exists without genuine content.
+
 ---
 # Architecture Rule
 
@@ -1492,6 +1579,12 @@ Free products (see *Free-Product Strategy* above — none of this is V1 work):
   entry NOT started
 - **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
   NOT started
+- **Organic Acquisition Engine** (see *Free-Product Strategy* §7) — **A-1 Discoverability
+  Foundation SHIPPED, LIVE and production-verified** (PR #101, merge `fcd2e68`, 2026-09-14):
+  public-route inventory, `sitemap.xml`, `robots.txt`, free-tool metadata and truthful
+  JSON-LD, zero persistence / identity / tracking. **A-2 (problem-led pages, Lost-Revenue
+  framing), B, C and D NOT started**; the Lost-Revenue questionnaire is not to be shortened
+  without a separately approved `SCAN_QUESTION_SET_VERSION` decision
 
 Future:
 
