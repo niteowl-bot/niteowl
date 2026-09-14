@@ -127,6 +127,10 @@ describe("a report with no findings stays complete and stays empty of pressure",
     assert.equal(count(html, /data-handoff/g), 0);
     assert.equal(count(html, /data-next-step/g), 0);
     assert.equal(count(html, /data-condition=/g), 0);
+    // PR F: no finding, no hypotheses section, no hypothesis, no empty-state line.
+    assert.equal(count(html, /data-hypotheses/g), 0);
+    assert.equal(count(html, /data-hypothesis=/g), 0);
+    assert.equal(count(html, /data-hypotheses-none/g), 0);
   });
 
   test("the funnel IS still shown, and says what looks like it is working", () => {
@@ -154,6 +158,10 @@ describe("a report with no findings stays complete and stays empty of pressure",
       assert.deepEqual(report.prioritisation, []);
       assert.deepEqual(report.dependencies, []);
       assert.equal(report.earliest_leak, null);
+      // PR F: a zero-findings report carries no hypotheses anywhere, and
+      // still carries the explanation rule-set version.
+      assert.deepEqual(report.findings.flatMap((f) => f.hypotheses), []);
+      assert.equal(typeof report.hypothesis_rule_set_version, "string");
     }
     assert.ok(empties > 20, `only ${empties} zero-finding runs were reached`);
   });

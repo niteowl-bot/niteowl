@@ -46,6 +46,7 @@ import type {
   ScanStageState,
   ScanClusterRelation,
   ScanClusterRuleCode,
+  ScanHypothesisRankReason,
 } from "@/lib/freetools/scanTypes";
 import type { ScanValidationErrorCode } from "@/lib/freetools/scanValidation";
 import { SCAN_QUESTIONS } from "@/lib/freetools/scanQuestions";
@@ -592,3 +593,26 @@ export const CLUSTER_RULE_LABELS: Readonly<Record<ScanClusterRuleCode, string>> 
  */
 export const CLUSTERS_NONE_ESTABLISHED_WORDING =
   "No link has been established between the other findings. Our rules did not relate them, which is not the same as knowing they are separate — where nothing has been established, we say so rather than filling the gap.";
+
+// ── PR F: labels for hypotheses ───────────────────────────────────
+//
+// STILL PRESENTATION ONLY. Which candidate explanations a finding's
+// answers support, and how confident we are in each, were decided by a
+// pure module. This file names the section and adds no rule of its own.
+//
+// THE WORDING STAYS TENTATIVE. A hypothesis is the Scan's ceiling
+// (§103): it may say "may", "could" and "suggests", and it may never say
+// "because". The empty case is a real answer, not a gap — nothing is
+// invented to fill it.
+
+export const HYPOTHESES_SECTION_TITLE = "What might be behind this";
+export const HYPOTHESES_SECTION_NOTE =
+  "Possible explanations your own answers support. These are candidates to look into, ranked, not a diagnosis — none of them is presented as the reason.";
+export const HYPOTHESES_NONE_WORDING =
+  "Your answers don't point to a particular reason.";
+export const HYPOTHESIS_RANK_REASON_LABELS: Readonly<
+  Record<ScanHypothesisRankReason, string>
+> = {
+  more_evidence: "more of your answers support this",
+  rule_table_order: "listed in the order our rules consider them",
+};

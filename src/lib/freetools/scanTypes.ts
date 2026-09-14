@@ -392,6 +392,14 @@ export interface ScanReportFinding {
    * and nothing else, and it changes no arithmetic.
    */
   readonly impact_class: ScanImpactClassification;
+  /**
+   * Candidate explanations, ranked, no winner (§103). Strictly
+   * downstream: nothing above this field reads it. Empty is a valid,
+   * deliberate result, and is never null.
+   */
+  readonly hypotheses: readonly ScanHypothesis[];
+  /** Stated when — and only when — `hypotheses` is empty. */
+  readonly hypotheses_empty_reason: ScanHypothesesEmptyReason | null;
 }
 
 /**
@@ -445,6 +453,11 @@ export interface ScanReport {
    * above and change none of them.
    */
   readonly clusters: readonly ScanCluster[];
+  /**
+   * §107.3 — the hypothesis rules carry their own version, present on
+   * every report, the finding-less one included.
+   */
+  readonly hypothesis_rule_set_version: string;
 }
 
 /**
@@ -1031,3 +1044,114 @@ export interface ScanCluster {
  * as exactly that, and not hidden inside either of the others.
  */
 export const SCAN_CLUSTER_RULE_SET_VERSION = "v1";
+
+// ── Hypotheses — PR F (Part XIV §103) ─────────────────────────────
+//
+// A HYPOTHESIS IS A CANDIDATE EXPLANATION, AND THAT IS ITS CEILING. §103
+// names four claim classes — observation, business_state, hypothesis,
+// asserted_cause — and gives the Scan exactly one of them to populate.
+// The type below can express only that one: `claim_class` is a literal,
+// so an asserted cause is unrepresentable here in the same way an
+// `observed` stage is unrepresentable in the funnel (§101). P50's
+// flattening — a candidate that lost its class and became a fact nobody
+// asserted — cannot happen to a value that never had another class to
+// lose.
+//
+// A HYPOTHESIS REQUIRES EVIDENCE THE OWNER SUPPLIED, AND NAMES IT (§103).
+// One with no evidence reference is a guess and must not exist, so the
+// evidence array is the owner's own quoted answers — the same
+// `business_provided` refs a finding carries — and a test proves every
+// emitted hypothesis holds at least one.
+//
+// A RANKED LIST WITH NO WINNER (§42.2, §103). There is no `is_primary`,
+// no `selected` and no `winner`, and the type has no place to put one.
+// `rank` is a position produced by an enumerated rule, and a
+// single-element list is still a ranked list rather than a conclusion.
+//
+// ITS OWN CONFIDENCE, INHERITED FROM NOTHING (§92). A hypothesis can be
+// weaker than the finding it explains and can be stronger than it; the
+// field is named `hypothesis_confidence` so it cannot be confused with
+// the finding's, and a test pins both directions.
+//
+// DERIVED, NEVER INFERRED. Every hypothesis here is a stated rule over
+// stated answers, so `source_type` is `derived_deterministic` — and
+// §103 forbids labelling that as inference just as firmly as it forbids
+// labelling a model's guess as a rule. No model is in this path.
+
+/**
+ * §103's closed set of hypothesis codes, Phase 1.
+ *
+ * Each is a candidate explanation a deterministic rule can support from
+ * the nine answers alone. The set is closed and the rule table in
+ * `scanHypotheses.ts` is its only reader; adding a code means adding a
+ * rule with evidence behind it, never a sentence.
+ */
+export type ScanHypothesisCode =
+  | "reachability_window_limited"
+  | "reachability_inconsistent"
+  | "channels_spread"
+  | "misses_go_unnoticed"
+  | "async_channel_back_and_forth"
+  | "replies_wait_for_availability";
+
+/**
+ * The enumerated rule that placed a hypothesis where it sits.
+ *
+ * Deterministic ordering, reason-coded like prioritisation (§100.2):
+ * more evidence first, then the rule table's own order. A position
+ * with no rule behind it would be a score wearing a rank's clothing.
+ */
+export type ScanHypothesisRankReason = "more_evidence" | "rule_table_order";
+
+/**
+ * Why a finding's hypothesis list is empty.
+ *
+ * AN EMPTY LIST IS A CLAIM AND MUST BE MADE DELIBERATELY (§103). A
+ * finding whose answers point to no particular explanation says so
+ * through this field; the list itself is never null, and nothing is
+ * invented to fill it.
+ */
+export type ScanHypothesesEmptyReason = "no_rule_matched";
+
+/** One candidate explanation for one finding. */
+export interface ScanHypothesis {
+  /**
+   * Deterministic: the condition and the code, joined. Never an array
+   * index, never generated, never random, stable across identical runs.
+   */
+  readonly hypothesis_id: string;
+  /** The only class the Scan may populate. Fixed by the type (§103). */
+  readonly claim_class: "hypothesis";
+  readonly code: ScanHypothesisCode;
+  /** At least one, always: the owner's own answers, quoted. */
+  readonly evidence: readonly ScanEvidenceRef[];
+  /**
+   * Populated only where a rule explicitly defines it; otherwise empty.
+   * No Phase 1 rule defines one, and the field exists so that the
+   * absence is a stated empty rather than a missing slot (§42.2).
+   */
+  readonly contradicting_evidence: readonly ScanEvidenceRef[];
+  /** A stated rule over stated answers. Never inferred, never observed. */
+  readonly source_type: "derived_deterministic";
+  /**
+   * CONFIDENCE IN THE CANDIDATE EXPLANATION, NEVER IN THE FINDING.
+   * Fixed by the rule that emitted it; the finding's confidence is not
+   * readable from where this is decided.
+   */
+  readonly hypothesis_confidence: ScanConfidence;
+  /** 1-based position in the finding's list. */
+  readonly rank: number;
+  readonly rank_reason: ScanHypothesisRankReason;
+  /** Fixed, tentative, owner-facing wording. Pinned verbatim by test. */
+  readonly display_text: string;
+}
+
+/**
+ * The hypothesis rule set's own version.
+ *
+ * Its own constant for the same reason the cluster rules have theirs
+ * (§107.3): a change to which explanations a set of answers can support
+ * must be visible as exactly that, and not hidden inside the finding,
+ * ordering or relation versions.
+ */
+export const SCAN_HYPOTHESIS_RULE_SET_VERSION = "v1";

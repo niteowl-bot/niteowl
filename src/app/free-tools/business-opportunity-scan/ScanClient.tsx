@@ -65,6 +65,10 @@ import {
   GAPS_SECTION_TITLE,
   GAP_BLOCKS_LABELS,
   GAP_EFFORT_LABELS,
+  HYPOTHESES_NONE_WORDING,
+  HYPOTHESES_SECTION_NOTE,
+  HYPOTHESES_SECTION_TITLE,
+  HYPOTHESIS_RANK_REASON_LABELS,
   IMPACT_CLASS_LABELS,
   INFORMATION_GAIN_LABELS,
   NO_FINDINGS_WORDING,
@@ -339,7 +343,7 @@ function FindingCard({
   priority: number | null;
   ofTotal: number;
 }) {
-  const { finding, impact, recommendation, impact_class } = entry;
+  const { finding, impact, recommendation, impact_class, hypotheses, hypotheses_empty_reason } = entry;
   const capReason = finding.confidence_cap_reason;
   return (
     <article
@@ -380,6 +384,50 @@ function FindingCard({
         In the finding: {CONFIDENCE_LABELS[finding.finding_confidence]}.
         {capReason && <> {CAP_REASON_LABELS[capReason]}</>}
       </p>
+
+      {/* PR F — candidate explanations, read from the report, ranked, no winner. */}
+      <h3 className="text-slate-200 font-medium mt-6 mb-2">{HYPOTHESES_SECTION_TITLE}</h3>
+      {hypotheses.length > 0 ? (
+        <>
+          <p className="text-slate-400 text-sm leading-relaxed mb-2" data-hypotheses-note>
+            {HYPOTHESES_SECTION_NOTE}
+          </p>
+          <ol className="space-y-3" data-hypotheses={hypotheses.length}>
+            {hypotheses.map((h) => (
+              <li
+                key={h.hypothesis_id}
+                data-hypothesis={h.code}
+                data-hypothesis-rank={h.rank}
+                data-hypothesis-confidence={h.hypothesis_confidence}
+              >
+                <p className="text-slate-300 text-[15px] leading-relaxed">
+                  {h.rank}. {h.display_text}
+                </p>
+                <p className="text-slate-500 text-sm leading-relaxed mt-1">
+                  Based on your answer
+                  {h.evidence.map((ref) => (
+                    <span key={ref.question_id}>
+                      {" "}
+                      <span data-hypothesis-evidence={ref.question_id}>
+                        {answerLabel(ref.raw_answer)}
+                      </span>
+                    </span>
+                  ))}
+                  . Confidence in this explanation: {CONFIDENCE_LABELS[h.hypothesis_confidence]};{" "}
+                  {HYPOTHESIS_RANK_REASON_LABELS[h.rank_reason]}.
+                </p>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : (
+        <p
+          className="text-slate-300 text-[15px] leading-relaxed"
+          data-hypotheses-none={hypotheses_empty_reason ?? undefined}
+        >
+          {HYPOTHESES_NONE_WORDING}
+        </p>
+      )}
 
       <h3 className="text-slate-200 font-medium mt-6 mb-2">What it may be worth</h3>
       <p className="text-slate-400 text-sm leading-relaxed mb-2" data-impact-class={impact_class.impact_class}>
@@ -556,7 +604,8 @@ export function ScanReportDocument({
             Your own answers, exactly as given. Question set {report.question_set_version}, rules{" "}
             {report.rule_set_version}, ordering rules{" "}
             {report.prioritisation_rule_set_version}, relation rules{" "}
-            {report.cluster_rule_set_version}.
+            {report.cluster_rule_set_version}, explanation rules{" "}
+            {report.hypothesis_rule_set_version}.
           </p>
         </section>
       </div>

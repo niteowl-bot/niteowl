@@ -953,14 +953,15 @@ describe("dependencies and evidence gaps render what the engine produced", () =>
   });
 
   test("the footer names every rule-set version, each from its own field", () => {
-    // PR E added the relation rules alongside the other three. The
+    // PR E added the relation rules alongside the other three, and PR F
+    // the explanation rules beside those. The
     // assertion stays an EXACT match on the whole line and is extended
     // rather than loosened: each version is read from its own report
     // field, so one sharing another's constant would still fail.
     const { report, html } = renderReport(ALL_THREE_SIZED);
     assert.ok(
       unescape(html).includes(
-        `Question set ${report.question_set_version}, rules ${report.rule_set_version}, ordering rules ${report.prioritisation_rule_set_version}, relation rules ${report.cluster_rule_set_version}.`
+        `Question set ${report.question_set_version}, rules ${report.rule_set_version}, ordering rules ${report.prioritisation_rule_set_version}, relation rules ${report.cluster_rule_set_version}, explanation rules ${report.hypothesis_rule_set_version}.`
       )
     );
   });
