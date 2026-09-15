@@ -232,7 +232,7 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 | **Partial-`structuredData` EMAIL recovery** (1st field) | PR #62 `c2d48b7`, deployed 2026-09-04 | Caller-email evidence rule |
 | **Partial-`structuredData` REQUESTED-TIMING recovery** (2nd field) | PR #66 `bd5853a`, deployed 2026-09-07 | Caller-timing evidence rule |
 | **Urgency REPRESENTABILITY** (`true` / `false` / `null`) | PR #68 `c390f53`, deployed 2026-09-07 | Callback urgency rule. **Representation only — urgency RECOVERY is NOT closed and stays V1.1/later** |
-| **Returning-customer booking overwrite** (chat/widget; voice never affected) | PR #70 `8833896`, deployed 2026-09-07 | Cross-conversation lead matching rule. `CHECKLIST.md` and `docs/ARCHITECTURE.md` C3 still describe it as open — **this record is current** |
+| **Returning-customer booking overwrite** (chat/widget; voice never affected) | PR #70 `8833896`, deployed 2026-09-07 | Cross-conversation lead matching rule. Documentation is now consistent: `docs/ARCHITECTURE.md` C3 records it **CLOSED by PR #70**, and `CHECKLIST.md` records it resolved — **no discrepancy remains for this finding** |
 
 **Facts from those closures that are still live and must not be lost:**
 
