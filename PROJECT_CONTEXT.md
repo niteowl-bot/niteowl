@@ -13,7 +13,7 @@ GitHub should always reflect the latest working state.
 **Canonical architecture set.** Architecture lives in exactly two documents, and every
 review extends them rather than adding a third:
 
-- `docs/ARCHITECTURE.md` — **Parts I–XIV.** Part I future-compatibility guardrail, Part II
+- `docs/ARCHITECTURE.md` — **Parts I–XV.** Part I future-compatibility guardrail, Part II
   provider independence and resilience, Part III compounding moat and outcome intelligence,
   Part IV outcome intelligence / governed agents / resource control, Part V operational
   sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
@@ -24,8 +24,9 @@ review extends them rather than adding a third:
   product surface, persistence and consent flow it describes have not), Part XII the
   Scan's three Phase 1 contract decisions, Part XIII the Decision, Outcome and Impact
   Provenance contracts and the canonical provenance chain, Part XIV the Business Opportunity
-  Scan's intelligence contracts. **§21 is the single canonical
-  architecture diagram**, and Parts VII–XIV do not redraw it.
+  Scan's intelligence contracts, Part XV the Outcome Learning and Cross-Product Decision
+  Intelligence closeout. **§21 is the single canonical
+  architecture diagram**, and Parts VII–XV do not redraw it.
 - `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
   autonomy ladder and free-product distribution architecture.
 
@@ -171,6 +172,58 @@ findings only**. **NOW: none** — five PREPARE items (P47–P51), one LATER (L3
 migration, flag, prompt, provider, route, UI, test or configuration change, no store, no
 service, no table, no layer, no runtime, **no product started, no live Scan behaviour changed
 and no V1 work created. PR D is NOT started and is not authorised by this part.**
+
+Part XV (added 2026-09-15, **PR #107**, normal merge commit
+`3f292c1f7161dea5f9a01e8b0d5f77c9584c8ce9`, production-verified — the build log's
+`Cloning … (Branch: main, Commit: 3f292c1)` matches the merge commit) is the **closeout of the
+Outcome Learning and Cross-Product Decision Intelligence review**, and it is the emptiest of the
+fifteen by a wide margin. **Documentation only: `docs/ARCHITECTURE.md` §§109–115, one appended
+hunk, +476 / −0, the sole file in the PR**; no existing architecture text was altered and §21 is
+not redrawn. The review found the requested architecture **overwhelmingly already canonical** —
+Part III built the records, Parts IV and V made them honest, **Part VII was written against a
+near-identical brief and answered sixteen of its twenty-four sections with "already exists"**,
+Part IX made the ownership invariants binding, and Part XIII closed the provenance half. The
+canonical statement is therefore a refusal as much as a definition: **"NiteOwl Decision
+Intelligence" is a name for the coordinated operation of existing layers 4, 5, 6 and 9 — the
+Outcome Spine, Decision & Outcome Memory, Provenance and the Learning Layer — and is NOT a new
+service, component, runtime, layer, store, database, table or second system of record.** §109.2
+records all twelve refusals explicitly, and the **canonical `DecisionRecord` (§20.7), Decision
+Provenance (§93) and Outcome Provenance (§94, §95) are unchanged**, as is §24's Cross-Product
+Learning Contract.
+
+Three gaps were genuine and are recorded as contracts. **M20 (§110)** — a learned generalisation
+had no carrier, because §23's tiers are per-**link**, §57.2's levels are per-**scope** and
+§42.2's Finding is per-**tenant-window** — so the Learned Pattern is defined as a **fifth profile
+of the existing §58.1 derived artefact**, inheriting recipe, corpus boundary, `evidence_scope`,
+consents and rebuild-without, and adding `maturity` (`observation` → `repeated_correlation` →
+`weak_pattern` → `supported_pattern` → `validated_rule`) with **no automatic promotion** and
+`validated_rule` only on one of §23's admissible causal bases, denominator discipline, retained
+`contradicting_evidence[]`, **decay by re-measurement rather than an arithmetic half-life** (an
+expired pattern is stale, never false), retained supersession, and a **self-citation
+prohibition**. **M21 (§111)** — `support_independence` (`independent` / `mixed` /
+`niteowl_influenced`), **derived from the provenance of the supporting population, never
+asserted and never a flag**, with a `validated_rule` **ceiling** where the support is wholly
+NiteOwl-influenced: the one bias no existing safeguard reached, because every other safeguard
+governs how a case is *recorded* and this one governs which cases *exist*. **M22 (§112)** —
+**retention is declared with the record class before the first row**, never per row afterwards,
+across observations, decisions, actions, outcomes, measured impact, learned patterns and
+superseded learning; **no regulatory period is invented**, and erasure-by-reference, provenance
+continuity and existing consent boundaries are preserved. §113 adds the single continuous
+end-to-end trace that previously existed only in fragments.
+
+**The staged implementation sequence (§114) is DOCUMENTED AND NOT STARTED.** Stage 1 — the
+smallest real write, one append-only tenant-scoped `business_events` mechanism beginning with
+`appointment.booked` at the existing booking choke point — is **not begun and not approved**, and
+its trigger is unchanged and qualitative: the first paying business and sufficient live use, a
+reliable production booking path, and enough real resolved outcomes for an evaluation to mean
+anything. **No numeric threshold is invented.** **NOW: none** — three PREPARE items (P52–P54),
+one LATER (L36), no code, schema, migration, flag, prompt, provider, route, UI, test or
+configuration change, no store, no service, no table, no layer, no runtime. **Phase B remains NOT
+STARTED. Remy V1 is unchanged** — no new Remy event, storage, flag, provider integration,
+booking or voice behaviour, and **attendance / no-show learning and caller sentiment remain
+explicitly not introduced and not recommended** (§115.3). §115.1 records the risk that now
+dominates: **the architecture is sufficiently mature that premature implementation is a larger
+risk than missing architecture.**
 
 ---
 
