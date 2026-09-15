@@ -391,6 +391,10 @@ PERIOD.** The correct state is waiting, not building.
   for the current Ireland/UK-compatible launch scope and harmless there. **It becomes a V1
   blocker the moment a business outside that offset is onboarded**, and must ship before any
   such expansion.
+- **Booking buffer — V1.1/later candidate, NOT implemented and NOT approved**: configurable
+  minimum gap between a new appointment and an existing calendar event. If approved later,
+  design it fresh against the current provider-independent booking/integration architecture;
+  do not reuse the superseded PR #1 implementation.
 - **Newly discovered work is judged by the canonical rule, not by appetite.** If it stops a
   normal paying customer from reliably using Remy V1 **and is reachable in production code**,
   investigate it as a possible V1 blocker. If it does not, it belongs in V1.1/later — a nicer
