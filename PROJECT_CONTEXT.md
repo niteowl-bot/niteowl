@@ -10,289 +10,205 @@ This repository is the source of truth.
 
 GitHub should always reflect the latest working state.
 
-**Canonical architecture set.** Architecture lives in exactly two documents, and every
-review extends them rather than adding a third:
+## How to use this file, and where everything else lives
 
-- `docs/ARCHITECTURE.md` — **Parts I–XV.** Part I future-compatibility guardrail, Part II
-  provider independence and resilience, Part III compounding moat and outcome intelligence,
-  Part IV outcome intelligence / governed agents / resource control, Part V operational
-  sovereignty and diagnostic intelligence, Part VI the Business Problem Case, Part VII
-  cross-product outcome learning and decision intelligence, Part VIII sovereignty and
-  provider escape routes, Part IX the Intelligence Ownership Layer, Part X compounding
-  advantage and category leadership, Part XI the Business Opportunity Scan MVP contract
-  (**a contract, not a plan** — its Phase 1 pure logic has since shipped as PR #84; the
-  product surface, persistence and consent flow it describes have not), Part XII the
-  Scan's three Phase 1 contract decisions, Part XIII the Decision, Outcome and Impact
-  Provenance contracts and the canonical provenance chain, Part XIV the Business Opportunity
-  Scan's intelligence contracts, Part XV the Outcome Learning and Cross-Product Decision
-  Intelligence closeout. **§21 is the single canonical
-  architecture diagram**, and Parts VII–XV do not redraw it.
-- `docs/AGENT_ACCESS_LAYER.md` — the governed Agent Access Layer, capability registry,
-  autonomy ladder and free-product distribution architecture.
+**PROJECT_CONTEXT.md carries current state once, and points at the canonical record of
+everything else. A fact whose home is `docs/ARCHITECTURE.md`, `CHANGELOG.md` or
+`docs/REMY_BEHAVIOUR_RULES.md` is referenced here, never restated here.**
 
+This file is loaded into every session through `CLAUDE.md`. It is deliberately kept small
+enough to load whole. Nothing has been deleted to achieve that — the material that left this
+file on 2026-09-15 moved, verbatim, to the document that canonically owns it, and every
+pointer below resolves.
+
+| Document | Owns | Read it when |
+|---|---|---|
+| **`PROJECT_CONTEXT.md`** (this file) | Current state · shipped / NOT STARTED status · active roadmap · unresolved decisions · hard operating rules · invariants · the canonical-document index | Always — it is auto-loaded |
+| **`docs/REMY_BEHAVIOUR_RULES.md`** | The **standing behaviour rules** that keep shipped Remy behaviour from regressing, each with its PR, merge SHA and verification status; the deferred service-matching investigation and its rejected approaches; the PRs #27–#40 live-production verification record | **Before touching voice, booking, timezone, calendar, lead-capture or auth code.** Indexed section by section below |
+| **`docs/ARCHITECTURE.md`** | **The sole architecture canon, Parts I–XV.** §21 is the single canonical architecture diagram; the canonical `DecisionRecord` is defined once, at §20.7 | Before any architecture discussion, and before any work that touches a contract |
+| **`docs/AGENT_ACCESS_LAYER.md`** | The governed Agent Access Layer, capability registry, autonomy ladder and free-product distribution architecture | Agent authority, capability or free-product distribution questions |
+| **`CHANGELOG.md`** | The chronological shipped / PR / verification history — dated entries with SHAs, test totals and production verification | To find out what a given PR did and how it was proved |
+| **`CHECKLIST.md`** | Alpha-launch readiness items | Launch-readiness questions |
+
+**Architecture lives in exactly two documents** — `docs/ARCHITECTURE.md` and
+`docs/AGENT_ACCESS_LAYER.md` — **and every review extends them rather than adding a third.**
 All of it is **documentation only**; nothing in either document has been implemented, and
-neither asks for implementation now. The canonical `DecisionRecord` is defined once, at
-`docs/ARCHITECTURE.md` §20.7.
+neither asks for implementation now.
 
-Part VII (added 2026-09-03) found sixteen of its twenty-four requirements already answered and
-added five findings, **M15–M19** — as-of evidence references so a decision can be re-judged on
-what was known at the time; an evaluation denominator that keeps rejected and unmeasured
-recommendations in the count; `action_status: withheld` so a comparison group can ever exist;
-`evidence_scope` so a claim says whose experience supports it; and rebuild-without deletion so
-the erasure promise over derived artefacts is keepable. All seven of its items are **PREPARE**
-(P26–P32). **NOW: none** — no code, schema, flag, prompt or provider change.
+### The architecture parts, and what each settled
 
-Part VIII (added 2026-09-04) is the sovereignty and provider-escape-route pass. Like Part VII,
-most of what it was asked for already existed — §41 wrote the sovereignty principle, §28 the
-ownership line, Part II the whole provider-independence assessment — so its new work is narrow:
-it **registers the three providers that appeared in no previous table** (GitHub, the telephony
-carrier and the phone number, and STT/TTS, all missed because none is a runtime import), adds
-the **A/B/C ownership classification** and the **recoverability set** §41.3 had deferred, and
-answers the exit test per provider. **NOW: none** — no provider replaced, no vendor added, no
-self-hosting adopted, no code, schema, flag, prompt or provider change. Its canonical rule is
-the **NiteOwl Sovereignty Principle** (§63): *rent commodity capability, own strategic state,
-intelligence and control.*
+Each is a pointer. **Do not restate a Part here** — read it in `docs/ARCHITECTURE.md`.
 
-**Every band-A asset is NiteOwl-resident today**, so a provider loss cannot reach the moat. Two
-qualifications are recorded rather than softened, and both are cheap: the Supabase **restore has
-never been tested** and depends on an encryption keyring whose separate custody is **unverified**
-(B6 plus §11, both pre-existing); and the **phone number's account of record appears to be
-Vapi's**, which is the one identified loss no backup restores. Neither is a reason to migrate
-anything — see §68.1's HARDEN SOON list. Part VIII also corrected two stale facts in place:
-§12's *"no `vercel.json`"* (one now exists, with a single cron) and the OpenAI call-site count
-(**11 sites across 9 files**, not 9).
+| Part | Subject | Standing |
+|---|---|---|
+| **I** | Future-compatibility guardrail; current shape, tenancy, calendar | — |
+| **II** | Provider independence and resilience | — |
+| **III** | Compounding moat and outcome intelligence; **§20.5 Outcome Spine, §20.6 provenance, §20.7 the canonical `DecisionRecord`, §21 the single diagram, §23 the five link tiers, §24 the Cross-Product Learning Contract, §26 free products, §27 the five privacy gates** | Foundational |
+| **IV** | Outcome intelligence, governed agents, resource control (M7–M9) | — |
+| **V** | Operational sovereignty and diagnostic intelligence; **§42 the Finding, §43 the Recommendation** (M10–M12) | — |
+| **VI** | The Business Problem Case (M13, M14) | — |
+| **VII** | Cross-product outcome learning and decision intelligence — **M15–M19, P26–P32.** NOW: none | — |
+| **VIII** | Sovereignty and provider escape routes; **§63 the NiteOwl Sovereignty Principle** — *rent commodity capability, own strategic state, intelligence and control*. NOW: none | Two deferred qualifications stand at §68.1: the **Supabase restore has never been tested** and its keyring custody is unverified, and the **phone number's account of record appears to be Vapi's** |
+| **IX** | The Intelligence Ownership Layer — **§70's three invariants** (derived never primary; dependencies downward only; rent the computation, own the corpus, recipe and evaluation); S1–S4, P33–P37. NOW: none | — |
+| **X** | Compounding advantage and category leadership — **N1–N4** (a customer-owned external system may never become load-bearing; **P39: a free-scan estimate never becomes a measured outcome or a baseline**; a published case study is a governed disclosure; a competitive development is never on its own a NOW). NOW: none | — |
+| **XI** | The Business Opportunity Scan MVP contract — **a contract, not a plan** | Phase 1 logic has shipped; the persistence and consent flow it describes have not |
+| **XII** | The Scan's three Phase 1 contract decisions | — |
+| **XIII** | Decision, Outcome and Impact Provenance; the canonical ten-stage provenance chain — **T1–T3, P44–P46.** NOW: none | — |
+| **XIV** | The Scan's intelligence contracts — the funnel, clusters, hypotheses, dependencies, evidence gaps, impact classification. NOW: none | All six contracts are now built (PRs #92, #94, #99) |
+| **XV** | **Outcome Learning and Cross-Product Decision Intelligence closeout** (PR #107, merge `3f292c1`, production-verified 2026-09-15; closed out by PR #108, merge `e4c53c7`) — §§109–115. NOW: none | See the standing entry below |
 
-Part IX (added 2026-09-04) treats Part VIII as canonical and extends it, making **cross-product
-measured-outcome learning and proprietary Decision Intelligence** binding as the layer above
-Business Memory and orchestration. Three invariants: the layer is **derived, never primary**
-(rebuildable from Spine + Memory, which is what makes it erasable, provider-loss-proof, portable
-and — the part nobody expects — retirable by NiteOwl itself); dependency points **downward
-only**, so removing the layer may make an outcome *worse* but never *wrong* and never
-*impossible*; and NiteOwl **rents the computation while owning the corpus, the recipe and the
-evaluation**. §70.4 states the payoff: the intelligence layer sitting on top is the mechanism
-that keeps every layer beneath it swappable, because evaluation datasets are what let NiteOwl
-tell whether a replacement provider is worse.
+**Parts VII–XV do not redraw §21**, and no Part has created a second `DecisionRecord`.
 
-**The one genuinely new finding is S1 (§71): a provider substitution can preserve every row and
-still reset the learning.** Part VIII proved the data survives; it never asked whether the corpus
-stays *comparable* across a swap. If a provider is a **dimension** of a canonical concept rather
-than an **attribute** of a record, the corpus silently splits into before/after and the
-comparison that would have justified the substitution is the one it destroyed. Today's code
-already complies — `"vapi"` never reaches `leads.source`, which records the **channel** — so
-**P33 is a rule to keep, not a defect to fix.** Also new: S2/S4, that a provider-resident
-artefact must never stand in for a NiteOwl-owned one on a production path (the **2026-07-10
-dashboard-assistant incident**, re-read as a sovereignty event — a call that "worked" while
-bypassing the Knowledge Base, lead capture and every record), and S3, classify a dependency at
-**adoption** rather than at review, which would have caught all three providers Part VIII found
-unregistered. **NOW: none** — five PREPARE items (P33–P37), one LATER (L30), no code, schema,
-flag, prompt, provider or configuration change. Part VIII's two HARDEN SOON qualifications
-(untested Supabase restore, phone-number account of record) stand exactly as §68.1 left them and
-are **deliberately deferred**.
+### Part XV — the standing summary that must not be lost
 
-Part X (added 2026-09-09) is the compounding-advantage and category-leadership pass, and it is
-the emptiest of the ten by design: the six-layer hierarchy, the learning loop, the recommendation
-contract, the copy test, the free-product distribution loop and the cross-product contract were
-**all already written**, several more precisely than the directive that asked for them. Its four
-findings are all places where the *commercial* side of category leadership could corrupt the
-*analytical* side. **N1 (§75)** is the one it exists for: a customer's own CRM, accounting or
-field-service system is a **fourth class of dependency** — NiteOwl has no contract with it, no
-substitution path, and it can leave NiteOwl rather than the reverse — so an external system of
-record may be read, referenced and written to but **may never become load-bearing for NiteOwl's
-own history**; the test is whether the history stays readable and comparable after the customer
-disconnects it. **N2 (§76)** forbids a free-scan estimate ever entering the Spine as a measured
-outcome or becoming the baseline a later paid outcome is graded against — M11's
-recommendation-grading-itself failure moved earlier in time so nobody recognises it. **N3 (§77)**
-makes a published case study a governed disclosure (per-claim consent, evidence frozen as-of
-publication, the metric named in advance, honest revocation limits) that is an **output of the
-learning loop and never an input to it**. **N4 (§78)** writes down the competitive-evaluation
-procedure that had been executed nine times and recorded zero times, and binds its output to the
-existing bands: **a competitive development is never on its own a NOW.** **NOW: none** — three
-PREPARE items (P38–P40), one LATER (L31), no code, schema, flag, prompt, provider or
-configuration change, **no product started, no integration proposed and no V1 work created.**
+**"NiteOwl Decision Intelligence" is a name for the coordinated operation of existing
+architecture layers 4, 5, 6 and 9** — the Outcome Spine, Decision & Outcome Memory,
+Provenance and the Learning Layer — **and is NOT a new service, component, runtime, layer,
+store, database, table or second system of record.** The canonical **`DecisionRecord`
+(§20.7), Decision Provenance (§93) and Outcome Provenance (§94, §95) are unchanged**, as is
+§24's Cross-Product Learning Contract.
 
-Part XIII (added 2026-09-11) makes **Decision Provenance, Outcome Provenance and Impact
-Provenance** explicit, provider-neutral, cross-product contracts, and states the **canonical
-ten-stage provenance chain** once — observation → business state → diagnosis →
-recommendation/decision → evidence → authority → action → outcome → impact → learning — with
-each stage mapped to the carrier it already has. Twelve of the fifteen things it was asked to
-define already existed and are consolidated rather than rewritten; three were real: **T1 (§95)**,
-the architecture had an outcome and no **impact** — *"£640 of revenue"* and `appointment.booked`
-are different assertions with different evidential standards, and the first had nowhere to live
-except an estimate P39 forbids from ever becoming measured — so the **Impact assertion** is
-defined as §23's attribution row given its full shape (category, quantity, unit, window,
-`measurement_basis`, assumptions, confidence, tier, `evidence_scope`), never an event, never an
-outcome, never a baseline, opposing impacts kept and never netted, no cross-product currency;
-**T2 (§94)**, the Outcome group could not say *partial*, *contested*, *reversed* or *not yet due*,
-so `outcome_resolution` and `outcome_contradicting_evidence` are added, with learnability still
-derived and never a flag; **T3 (§93.2)**, `evidence_refs[].role` (what was relied on vs merely
-available), `approval_status` (including `expired` and `overridden`, an override being a new
-human decision with its own outcome slot) and `supersedes`. Its governing principle: **every
-stage carries its own provenance, confidence and timestamp, and none inherits any of the three
-from the stage before it**; hidden model chain-of-thought is never stored on any stage. §20.7
-gains rule 9 (an outcome is not an impact) and the new fields in place; §23's attribution row
-points at §95.2. **NOW: none** — three PREPARE items (P44–P46), one LATER (L34), no code, schema,
-flag, prompt, provider or configuration change, no store, no service, no table, no layer, no
-chain table, no product started, no boundary moved, **and no V1 work created.**
+Three contracts were added, and all three are **documentation only**:
 
-Part XIV (added 2026-09-12) is the **architecture strengthening the Business Opportunity Scan
-intelligence review required before PR D could start**, and it is deliberately the narrowest of
-the fourteen. The review found the largest available improvement to the Scan's report needs no
-new question, no persistence, no model and no provider — only that the report say which finding
-matters most, how the findings relate, and what NiteOwl is *not* claiming. Two boundaries stood
-in the way and both were real. **First, §86.1 excluded *"a scoring model, ranking model or
-learned prioritisation"* as one undifferentiated item**, which would also have excluded a
-deterministic, explainable, versioned, product-scoped ordering over rules the architecture
-already holds — something §43.3 has always permitted every product. That sentence is **narrowed
-to what it always meant** (no opaque score, no learned or probabilistic ranking, no hidden
-weights), and §43.3 gains the matching statement plus the rule that **an ordering is versioned
-separately from the rules it orders**. **Second, the Atlas boundary had never been written
-down.** §100.3 writes it in both directions: the Scan may reason about **order and adjacency
-within the one process it questioned directly**, name the earliest stage where work appears to
-be lost, express hypotheses, identify dependencies and say what is *not* the immediate problem;
-it may **never assert a cause, never reason across domains and never become a general causal
-analysis engine**. Atlas's charter is untouched, and a Scan finding may be **one input** to an
-Atlas synthesis but never the synthesis.
+- **M20 (§110) — the Learned Pattern contract.** A fifth profile of the existing §58.1
+  derived artefact — **no table, no store, no record type** — with `maturity`
+  (`observation` → `repeated_correlation` → `weak_pattern` → `supported_pattern` →
+  `validated_rule`), **no automatic promotion between levels** and `validated_rule` only on
+  one of §23's admissible causal bases; denominator discipline; retained
+  `contradicting_evidence[]`; **decay by re-measurement, never an arithmetic half-life** — an
+  expired pattern is stale, never false; retained supersession; and a **self-citation
+  prohibition**. It proposes and never writes facts.
+- **M21 (§111) — `support_independence`** (`independent` / `mixed` / `niteowl_influenced`),
+  **derived from the provenance of the supporting population, never asserted and never a
+  flag**, with a **`validated_rule` ceiling** where the support is wholly NiteOwl-influenced.
+  It stops NiteOwl's own recommendations reappearing as independent evidence.
+- **M22 (§112) — retention is declared with the record class before the first row** of that
+  class is written, never as a per-row judgement afterwards; **no regulatory period is
+  invented**; erasure-by-reference and the existing consent boundaries are preserved.
 
-Six contracts are defined — the enquiry funnel and its four stage states (§101), opportunity
-clusters (§102), the narrowed hypothesis form (§103), dependencies (§104), evidence gaps (§105)
-and the four-state impact classification (§106). **Four of the six are narrowings of things
-Parts XI–XIII already held** — §42.2's `hypotheses[]` (*a ranked list, not a winner*), §82.3's
-first-class unknown, §92's per-stage provenance and §43.3's versioned ranking — and only the
-funnel and the cluster are new shapes, both of them analytical representations of answers the
-owner already gave. Three rules carry the most weight: **no stage is ever `observed`** (the Scan
-observes nothing, and a type that cannot express an observation cannot claim one); a **cluster
-or dependency is never invented to create a narrative**, so `independent` is a real output; and
-`expected_information_gain` on an evidence gap is **a claim about NiteOwl's own rules, never
-about the business** — *"this would let us put a range on it"* is verifiable, *"this would
-reveal £X"* is an estimate wearing a gap's clothing and P39 bars it. §107.4 restates the
-anti-funnel rule as properties the contracts must have: a zero-findings report stays reachable
-with **empty** prioritisation, clustering and dependency output, `recommended_product: null` and
-`free_tool_handoff: null` stay simultaneously reachable, and prioritisation **ranks genuine
-findings only**. **NOW: none** — five PREPARE items (P47–P51), one LATER (L35), no code, schema,
-migration, flag, prompt, provider, route, UI, test or configuration change, no store, no
-service, no table, no layer, no runtime, **no product started, no live Scan behaviour changed
-and no V1 work created. PR D is NOT started and is not authorised by this part.**
-
-Part XV (added 2026-09-15, **PR #107**, normal merge commit
-`3f292c1f7161dea5f9a01e8b0d5f77c9584c8ce9`, production-verified — the build log's
-`Cloning … (Branch: main, Commit: 3f292c1)` matches the merge commit) is the **closeout of the
-Outcome Learning and Cross-Product Decision Intelligence review**, and it is the emptiest of the
-fifteen by a wide margin. **Documentation only: `docs/ARCHITECTURE.md` §§109–115, one appended
-hunk, +476 / −0, the sole file in the PR**; no existing architecture text was altered and §21 is
-not redrawn. The review found the requested architecture **overwhelmingly already canonical** —
-Part III built the records, Parts IV and V made them honest, **Part VII was written against a
-near-identical brief and answered sixteen of its twenty-four sections with "already exists"**,
-Part IX made the ownership invariants binding, and Part XIII closed the provenance half. The
-canonical statement is therefore a refusal as much as a definition: **"NiteOwl Decision
-Intelligence" is a name for the coordinated operation of existing layers 4, 5, 6 and 9 — the
-Outcome Spine, Decision & Outcome Memory, Provenance and the Learning Layer — and is NOT a new
-service, component, runtime, layer, store, database, table or second system of record.** §109.2
-records all twelve refusals explicitly, and the **canonical `DecisionRecord` (§20.7), Decision
-Provenance (§93) and Outcome Provenance (§94, §95) are unchanged**, as is §24's Cross-Product
-Learning Contract.
-
-Three gaps were genuine and are recorded as contracts. **M20 (§110)** — a learned generalisation
-had no carrier, because §23's tiers are per-**link**, §57.2's levels are per-**scope** and
-§42.2's Finding is per-**tenant-window** — so the Learned Pattern is defined as a **fifth profile
-of the existing §58.1 derived artefact**, inheriting recipe, corpus boundary, `evidence_scope`,
-consents and rebuild-without, and adding `maturity` (`observation` → `repeated_correlation` →
-`weak_pattern` → `supported_pattern` → `validated_rule`) with **no automatic promotion** and
-`validated_rule` only on one of §23's admissible causal bases, denominator discipline, retained
-`contradicting_evidence[]`, **decay by re-measurement rather than an arithmetic half-life** (an
-expired pattern is stale, never false), retained supersession, and a **self-citation
-prohibition**. **M21 (§111)** — `support_independence` (`independent` / `mixed` /
-`niteowl_influenced`), **derived from the provenance of the supporting population, never
-asserted and never a flag**, with a `validated_rule` **ceiling** where the support is wholly
-NiteOwl-influenced: the one bias no existing safeguard reached, because every other safeguard
-governs how a case is *recorded* and this one governs which cases *exist*. **M22 (§112)** —
-**retention is declared with the record class before the first row**, never per row afterwards,
-across observations, decisions, actions, outcomes, measured impact, learned patterns and
-superseded learning; **no regulatory period is invented**, and erasure-by-reference, provenance
-continuity and existing consent boundaries are preserved. §113 adds the single continuous
-end-to-end trace that previously existed only in fragments.
-
-**The staged implementation sequence (§114) is DOCUMENTED AND NOT STARTED.** Stage 1 — the
-smallest real write, one append-only tenant-scoped `business_events` mechanism beginning with
-`appointment.booked` at the existing booking choke point — is **not begun and not approved**, and
-its trigger is unchanged and qualitative: the first paying business and sufficient live use, a
-reliable production booking path, and enough real resolved outcomes for an evaluation to mean
-anything. **No numeric threshold is invented.** **NOW: none** — three PREPARE items (P52–P54),
-one LATER (L36), no code, schema, migration, flag, prompt, provider, route, UI, test or
-configuration change, no store, no service, no table, no layer, no runtime. **Phase B remains NOT
-STARTED. Remy V1 is unchanged** — no new Remy event, storage, flag, provider integration,
-booking or voice behaviour, and **attendance / no-show learning and caller sentiment remain
-explicitly not introduced and not recommended** (§115.3). §115.1 records the risk that now
-dominates: **the architecture is sufficiently mature that premature implementation is a larger
-risk than missing architecture.**
-
+**§114's staged implementation sequence is DOCUMENTED AND NOT STARTED.**
+**Phase B is NOT STARTED.**
+**Stage 1 — one append-only tenant-scoped `business_events` mechanism beginning with
+`appointment.booked` at the existing booking choke point — is NOT STARTED and NOT APPROVED**,
+and its trigger is unchanged and qualitative: the first paying business and sufficient live
+use, a reliable production booking path, and enough real resolved outcomes for an evaluation
+to mean anything. **No numeric threshold is invented.** **NOW: none** — three PREPARE items
+(P52–P54), one LATER (L36). **Remy V1 is unchanged**, and **attendance / no-show learning and
+caller sentiment remain explicitly not introduced and not recommended** (§115.3). §115.1
+records the risk that now dominates: **the architecture is sufficiently mature that premature
+implementation is a larger risk than missing architecture.**
 ---
+
 
 # Current Status
 
-The following features are complete and tested:
+**Remy V1 implementation is COMPLETE** under the canonical Definition of Done — *"Does this
+stop a normal paying customer from reliably using Remy V1?"*
 
-- AI Receptionist
-- Website Chat Widget
-- Dashboard Preview Chat
-- Dashboard
-- Knowledge Base (Create/Edit/Delete)
-- Business Hours
-- Capacity Management
-- Double Booking Prevention
-- Calendar
-- Lead CRM
-- Four-step Onboarding Wizard
-- Dashboard Setup Checklist
-- Needs Review Workflow
-- Dashboard Preview Lead Separation
-- GitHub Workflow
-- Dashboard Timezone Correctness (PR #17, merged and live 2026-08-14)
-- Customer Manage-Link Timezone Correctness (PR #19, merged and live 2026-08-14)
-- Email Appointment Timezone Correctness (PR #21, merged and live 2026-08-14)
-- External-Calendar Rescheduling Correctness (PR #25, merged and live 2026-08-19)
-- Voice Calendar Booking (PR #23, merged 2026-08-18; **verified live end-to-end 2026-08-27**)
-- Owner Call-Summary Booking Status (PR #27, merged and live 2026-08-26)
-- Service-Matcher Morphology (PR #28, merged and live 2026-08-26)
-- Truthful Voice Booking Closing (PR #30, merged and live 2026-08-27; **live production smoke test PASS**)
-- Callback Urgency Owner Visibility (PR #34, merged and deployed 2026-08-31; **live regression found the same day — it did NOT work end-to-end**. Corrected by **PR #35**, merged, deployed and **live-production verified** 2026-08-31)
-- Owner Booking-Status Accuracy (PR #37, merged, deployed and **live-production verified** 2026-08-31 — a booking outcome is reported only when a time was actually requested)
-- Caller-Name Integrity (PR #39, merged, deployed and **live-production verified** 2026-09-01 — an email address can no longer manufacture a caller name)
-- Required Fields Before Closing (PR #40, merged, deployed and **live-production verified** 2026-09-01 — closing dialogue is forbidden until the required-field gate is satisfied; **Finding A CLOSED**)
-- Service-Address Integrity (PR #42, merged `e4d3a95` 2026-09-01 and deployed — speech-to-text noise can no longer become the canonical service address; **this is what actually closed Finding B**, and as deterministic code, not the prompt-only change that entry once proposed)
-- Caller-Name / Email-Digit Integrity (PR #43, merged `c104449`, deployed and production-verified 2026-09-02 — a digit-suffixed email can no longer condemn the caller's real name)
-- Canonical Owner Surfaces (PR #45, merged `a7d5102`, deployed and production-verified 2026-09-02 — the owner email shows the canonical **email**, and the dashboard shows the canonical **service address**)
-- Per-Call Metadata Integrity (PR #46, merged `869d815`, deployed and production-verified 2026-09-02 — a per-call fact can no longer outlive the call it belonged to)
-- Calendar Canonical Service Location (PR #47, merged `97948e3`, deployed and production-verified 2026-09-02 — the calendar UPDATE path uses the current call's resolved address instead of a dead metadata read)
-- Provider-Summary Source Containment (PR #48, merged `7c13e6c`, deployed and production-verified 2026-09-02 — **F4 Step 1**: provider prose is no longer an extraction input or a service fallback)
-- Canonical Owner Facts (PR #49, merged `38028df`, deployed and production-verified 2026-09-02 — **F4 Step 2**: canonical **Service needed** and **Appointment / Requested appointment / Requested callback** rows, in the organisation's timezone)
-- Narrative-Only Provider Summary (PR #51, implementation `8b41a46`, merged `8906564`, deployed and **live-production verified 2026-09-03** — **F4 Step 3, which completes F4**: the seven factual labels are gone from `buildSummaryInstructions` and the paragraph is context only)
-- Caller-Grounded Service Integrity (PR #54, feature commit `97c37b9`, merged `36805b8` 2026-09-03 and deployed — **F5**: a service label the caller never spoke can no longer become the canonical service. `service` was the last of the five caller-supplied voice fields with no deterministic guard)
-- Fallback Service Contract Alignment (PR #56, feature commit `ea6c0bb`, merged `a71815d` 2026-09-03 and deployed — the transcript-fallback extractor now asks for the caller's own service wording, so the two producers of `service` no longer disagree)
-- Empty StructuredData Fallback Recovery (PR #58, feature commit `eb4641a`, merged `3fdb8df` 2026-09-03 and deployed — a semantically empty provider envelope no longer suppresses the transcript fallback, so caller evidence the transcript holds is no longer discarded)
-- Service-Address Authority Integrity (PR #60, feature commits `373cf3b` and `e001f0f`, merged `a07a06a` 2026-09-04 and deployed — a plausible provider address can no longer outrank the caller's own words, and a same-street house-number conflict records nothing rather than booking the wrong door)
-- Partial-StructuredData Email Recovery (PR #62, feature commit `6289418`, merged `c2d48b7` 2026-09-04 and deployed — a caller's spoken email is recovered deterministically when a partial provider payload omits the field, so a booking can no longer complete with the customer never written to. **The FIRST partial-field recovery; the other omitted fields remain open**)
-- Partial-StructuredData Requested-Timing Recovery (PR #66, feature commit `837caa7`, merged `bd5853a` 2026-09-07 and deployed — the caller's requested day and time is recovered deterministically when a partial provider payload omits the field, so a caller who said when they wanted the visit no longer gets a request nobody can act on. **The SECOND partial-field recovery; `urgency` and `service` remain open**)
-- Urgency Representability Hardening (PR #68, feature commit `a2c483f`, merged `c390f53` 2026-09-07 and deployed — `urgent` is now `true` / `false` / `null`, so an untold urgency is no longer indistinguishable from a provider stating "not urgent". **REPRESENTATION ONLY and behaviour-neutral: NO transcript urgency recovery was implemented, and it remains V1.1/later**)
-- Returning-Customer Booking Isolation (PR #70, feature commit `72717f5`, merged `8833896` 2026-09-07 and deployed — a returning chat/widget customer booking again in a NEW conversation can no longer match their already-`booked` lead, so a second booking creates a separate lead instead of silently overwriting and rescheduling the appointment they already had. **Same-conversation rescheduling and voice are unchanged**)
-- Auth Fragment Session Consumption (PR #96, feature commit `406f5fc`, merged `eeed1f7` 2026-09-14, deployed and **SHA-verified** — an implicit-flow Supabase redirect, tokens in the URL fragment, is now consumed through the official `setSession()` into the existing SSR cookies and stripped from the address bar; previously no code path could consume it and every fragment-based recovery bounced to the "expired" page. **Password recovery and normal password sign-in manually verified on the preview**)
-- Cross-Device Password Recovery (PR #97, feature commit `515fabf`, merged `8ccddc6` 2026-09-14, deployed and **SHA-verified**; production Reset Password template switched to the `token_hash` link **after** the route was live; **cross-device recovery V1-VERIFIED in production 2026-09-14** — request in one browser context, reset in a fresh Incognito session, new password signs in. See the password-recovery rule below)
+## Shipped and tested
 
-Verified production checkpoints (PRs #27–#40). The shipped-feature list above and the
-standing rules below are the canonical record of *behaviour*; this list is the record of
-*verification*. Full narratives — root cause, test counts, mutation results — are in Git
-history at each merge commit. `CHANGELOG.md` records much of this history from PR #34
-onward where applicable.
+Complete with no PR recorded against them here: **AI Receptionist · Website Chat Widget ·
+Dashboard Preview Chat · Dashboard · Knowledge Base (create/edit/delete) · Business Hours ·
+Capacity Management · Double Booking Prevention · Calendar · Lead CRM · Four-step Onboarding
+Wizard · Dashboard Setup Checklist · Needs Review Workflow · Dashboard Preview Lead
+Separation · GitHub Workflow.**
 
-- **PR #27**, merged and deployed. The owner call summary reports the **final persisted booking status**, not an interim one.
-- **PR #28**, merged and deployed, **production-verified**: plumber/plumbing morphology now matches ordinary word forms. The same verification produced a genuine `booked` lead with a synced calendar integration link, which is what proves **live voice → Google Calendar booking end-to-end**.
-- **PR #30** (`dbf299b`), merged, deployed, **production-verified** 2026-08-27. Remy's spoken closing tells the truth about what is known while the caller is on the line — see the voice booking closing rule below.
-- **PR #34** (`7eff6ec`), merged and deployed (`dpl_9WhkwnRC6XAhg8HQ8q741VBz1bDj` READY, `git-main` alias, `/api/health` HTTP 200). It added the conditional **"Callback urgency"** row and leads-drawer note. **The merge and deployment facts stand; the behavioural claim did NOT** — see the regression below. Recorded rather than quietly rewritten.
-  - **Live post-merge regression, 2026-08-31 — PR #34 did not work end-to-end.** A real urgent call produced **no "Callback urgency" row at all**. **Root cause:** extraction returned `urgent: true` with `preferred_datetime: null` — exactly what `src/lib/voice/extraction.ts` instructs — but `calls.ts` derived `callbackUrgency` **only** from `preferred_datetime`. **PR #34 read a field the prompt above it is designed to leave empty.**
-  - **Why the tests missed it, and the lesson that generalises:** the PR #34 tests supplied `callbackUrgency` directly and checked it rendered; nothing exercised the step that *decides* it against the shape production emits. **All 54 passed while production did nothing. A test that supplies the value under test cannot prove the pipeline that produces it.**
-- **PR #35** (`62afd12`), merged, deployed (`dpl_BbGd7nezo2CKCG3pn8B8KZWnoZkA`) and **live-production verified 2026-08-31** — the fix for the above. `resolveCallbackUrgency()` reads **both** signals. Verified on a real burst-pipe urgency-only call: the email rendered `Callback urgency: Urgent — no specific day or time given`; callback date and time both "Not provided"; **no fabricated appointment datetime**; status **REQUIRES REVIEW** with the email stating the appointment was not confirmed; and no incorrect *"any time suits"* wording. See the callback urgency rule below.
-- **PR #37** (`13883e1`), merged, deployed (`dpl_9daL9V8cAb7376hVBDyThY9NdHm9`) and **live-production verified 2026-08-31.** A separate defect found by the same call: the owner email showed *"REQUIRES REVIEW — The requested appointment was not confirmed in the calendar"* on a call where **no time was ever requested**. It conflated **"we tried and could not"** with **"there was nothing to try"**. The block now renders only when `callbackTiming.preferredDatetime` is set — gated on the **sanitised** requested phrase deliberately, so fail-closed is preserved and urgency-as-time cannot return. Verified live: urgency row present, callback date/time "Not provided", **the false block absent**, no false booking attempt.
-- **PR #39** (`569cb8c`), merged, deployed (`dpl_5jeEKH4NVzsyyAMMEU2GvFUE9Lc5`) and **live-production verified 2026-09-01** — an email address can no longer manufacture a caller name. Verified on a real call where the caller said "Ernesto": the structured **Caller** field, the subject line and the generated summary all read **Ernesto**, and the two surfaces agreed. No email was collected on that call, so the guard held on the path where it matters most. PR #35's urgency row and PR #37's no-false-booking behaviour both survived the change. See the caller-name integrity rule below. *(Deployment identified by timestamp adjacency plus the `git-main` alias, not by a SHA comparison — `vercel inspect` carried no git metadata.)*
-- **PR #40** (`91d2bc3`), merged, deployed (`dpl_8xEYiKCKpQ6cntxRyPGVjX1nhavm`, `githubCommitSha` reading the merge commit itself) and **live-production verified 2026-09-01. Finding A CLOSED.** Verified live: Remy **requested the email before closing**, **did not skip a required field because the request was urgent**, and **ran the recap before the closing sequence**. **This is the part that matters** — PR #40 is a model-behaviour prompt correction, so the suite could prove the instruction present, coherent and mutation-sensitive, but never that the model obeys it. Only a live call could close it. See the closing-gate rule below.
+Everything below shipped with a PR. **Full narratives — root cause, test counts, mutation
+results, deployment ids — are in `CHANGELOG.md` and in git history at each merge commit.**
+The standing behaviour each one established is in **`docs/REMY_BEHAVIOUR_RULES.md`**.
+
+| Shipped | PR / merge | Caveat that must not be lost |
+|---|---|---|
+| Dashboard timezone correctness | #17, live 2026-08-14 | — |
+| Customer manage-link timezone correctness | #19, live 2026-08-14 | — |
+| Email appointment timezone correctness | #21, live 2026-08-14 | — |
+| Voice calendar booking | #23, merged 2026-08-18 | **Verified live end-to-end 2026-08-27** |
+| External-calendar rescheduling correctness | #25, live 2026-08-19 | — |
+| Owner call-summary booking status | #27, live 2026-08-26 | — |
+| Service-matcher morphology | #28, live 2026-08-26 | — |
+| Truthful voice booking closing | #30, live 2026-08-27 | Live production smoke test PASS |
+| Callback urgency owner visibility | #34, deployed 2026-08-31 | **#34 did NOT work end-to-end — a live regression was found the same day.** Corrected by **#35**, live-verified 2026-08-31 |
+| Owner booking-status accuracy | #37, live-verified 2026-08-31 | A booking outcome is reported only when a time was actually requested |
+| Caller-name integrity | #39, live-verified 2026-09-01 | An email address can no longer manufacture a caller name |
+| Required fields before closing | #40, live-verified 2026-09-01 | **Finding A CLOSED.** A model-behaviour prompt correction — only a live call could close it |
+| Service-address integrity | #42 `e4d3a95`, 2026-09-01 | **This is what actually closed Finding B**, as deterministic code — not the prompt-only change that entry once proposed |
+| Caller-name / email-digit integrity | #43 `c104449`, verified 2026-09-02 | A digit-suffixed email can no longer condemn the caller's real name |
+| Canonical owner surfaces | #45 `a7d5102`, verified 2026-09-02 | — |
+| Per-call metadata integrity | #46 `869d815`, verified 2026-09-02 | A per-call fact can no longer outlive its call |
+| Calendar canonical service location | #47 `97948e3`, verified 2026-09-02 | — |
+| Provider-summary source containment | #48 `7c13e6c`, verified 2026-09-02 | **F4 Step 1** |
+| Canonical owner facts | #49 `38028df`, verified 2026-09-02 | **F4 Step 2** |
+| Narrative-only provider summary | #51 `8906564`, live-verified 2026-09-03 | **F4 Step 3, completing F4** |
+| Caller-grounded service integrity | #54 `36805b8`, 2026-09-03 | **F5.** The last of the five caller-supplied voice fields to get a guard |
+| Fallback service contract alignment | #56 `a71815d`, 2026-09-03 | The two producers of `service` no longer disagree |
+| Empty `structuredData` fallback recovery | #58 `3fdb8df`, 2026-09-03 | Semantic substance, not container existence |
+| Service-address authority integrity | #60 `a07a06a`, 2026-09-04 | A same-street house-number conflict records nothing rather than booking the wrong door |
+| Partial-`structuredData` email recovery | #62 `c2d48b7`, 2026-09-04 | **The FIRST partial-field recovery; the other omitted fields remain open** |
+| Partial-`structuredData` requested-timing recovery | #66 `bd5853a`, 2026-09-07 | **The SECOND; `urgency` and `service` remain open** |
+| Urgency representability hardening | #68 `c390f53`, 2026-09-07 | **REPRESENTATION ONLY and behaviour-neutral. NO transcript urgency recovery was implemented; it remains V1.1/later** |
+| Returning-customer booking isolation | #70 `8833896`, 2026-09-07 | **Same-conversation rescheduling and voice are unchanged** |
+| Auth fragment session consumption | #96 `eeed1f7`, 2026-09-14, SHA-verified | Previously **no code path could consume an implicit-flow fragment** |
+| Cross-device password recovery | #97 `8ccddc6`, 2026-09-14 | **V1-VERIFIED in production 2026-09-14.** Production template switched to the `token_hash` link **after** the route was live |
+
+**Feature commits**, where the table above records only the merge commit: #51 `8b41a46` · #54
+`97c37b9` · #56 `ea6c0bb` · #58 `eb4641a` · #60 `373cf3b` and `e001f0f` · #62 `6289418` · #66
+`837caa7` · #68 `a2c483f` · #70 `72717f5`.
+
+**Free products** — see *Free-Product Strategy* below: the Setup Kit (PRs #77, #78), the
+Business Opportunity Scan Phase 1 logic, recommendations, public surface, funnel diagnosis,
+clusters and hypotheses (PRs #84, #87, #89, #92, #94, #99), and the Organic Acquisition
+Engine A-1, A-2a and A-2b (PRs #101, #103, #105).
+
+**Deployment-to-merge correspondence is usually NOT SHA-verified.** `vercel inspect` exposed
+no Git-source metadata for PRs #54, #58, #60, #62, #66, #68, #70, #89, #92 and #94, so
+identification rests on the new production deployment appearing seconds after the merge and
+carrying the production aliases. PRs #40, #96, #97, #99, #101, #103, #105, #107 and #108
+could be SHA-verified from `githubCommitSha` or the build log; that is the stronger evidence,
+and the difference is recorded rather than glossed over.
+
+**The PRs #27–#40 live-production verification record — including the PR #34 regression and
+the lesson that generalises from it — is in `docs/REMY_BEHAVIOUR_RULES.md`.**
+
+## Standing behaviour rules — index
+
+**Read the rule before changing the behaviour it governs.** Every rule below lives in full,
+with its PR, merge SHA and verification status, in **`docs/REMY_BEHAVIOUR_RULES.md`**.
+
+| Rule | Governs | Closed by |
+|---|---|---|
+| Dashboard timezone | Dashboard appointment times mean the **business's** timezone | PR #17 |
+| Customer manage-link timezone | A customer-picked time means business-local; unresolvable zone **fails closed** | PR #19 |
+| Email timezone | Emails render in the business's timezone; display **fails soft** | PR #21 |
+| **Standing timezone rule** | Instants are stored **UTC always**; a tenant timezone is never hardcoded | all three |
+| **Password-recovery and auth-callback** | A recovery link must work from **any** browser or device; fragments consumed once through `setSession()` | PRs #96, #97 |
+| **Cross-conversation lead matching** | Identifying the **person** is not identifying the **appointment** | PR #70 |
+| Reschedule availability | A reschedule is judged by the same decision every booking path makes; an appointment never conflicts with itself | PR #25 |
+| Voice calendar booking status | `VOICE_CALENDAR_BOOKING_ENABLED` is **set in production**; verified end-to-end 2026-08-27 | PR #23 |
+| **Voice booking closing** | A live call **cannot know a booking exists**; the spoken closing may claim only what is authoritative | PR #30 |
+| **Callback urgency** | Urgency is **not** a callback time; the flag has three states and only `true` acts | PRs #34, #35, #68 |
+| **Caller-name integrity** | An email address must never manufacture a caller name | PRs #39, #43 |
+| **Closing-gate** | Closing dialogue is forbidden until the required-field gate is satisfied; urgency never opens the gate | PR #40 |
+| **Service-integrity** | The canonical service must be grounded in the **caller's own speech**; both producers ask for the same thing | PRs #54, #56, #58 |
+| **Service-address authority** | A provider value is not authoritative merely because it is well formed; where neither source can be trusted, **nothing is recorded** | PR #60 |
+| **Caller-email evidence** | The provider wins first; evidence is cue- or question-anchored, caller turns only | PR #62 |
+| **Caller-timing evidence** | An urgency answer is an **answer**, not an absence; evidence must pin a **day** of its own | PR #66 |
+| **Service matching — one known false positive, DEFERRED** | `isServiceConfirmedByKnowledge` can confirm a service the business does not offer, and **fails open**. **`extracted.service` is NOT a trusted service identity.** A list of investigated-and-rejected approaches is recorded there — **do not casually retry any of them** | open |
+| Historical record — PR-number discrepancy in `main` | Deliberately **not** corrected; `main` history is not rewritten for a cosmetic message | — |
+
+**The canonical-information architecture below is the invariant all of those rules serve, and
+it stays here because it governs every change to the voice path.**
+Canonical-information architecture (established across PRs #39, #42, #43, #45, #46, #47, #48, #49, #51, #54):
+
+**ONE CANONICAL FACT → MANY RENDERINGS.** Never several independent readings of the same call, hoping they agree.
+
+- every caller-supplied field is resolved **once**, at the single convergence point in `toExtractedLead` (`voice/calls.ts`), by a deterministic guard: `resolveCallerName`, `resolveCallerEmail`, `resolveServiceAddress`, `resolveRequestedDatetime` and `resolveRequestedService`, plus `resolveCallbackUrgency` alongside. **All five caller-supplied fields are now guarded**; PR #54 closed the last gap. PR #62 replaced the email guard's normaliser-only form with `resolveCallerEmail`, which still calls the unchanged `normaliseSpokenEmail` first, and PR #66 did the same for timing with `resolveRequestedDatetime`, which still calls the unchanged `sanitisePreferredDatetime` first — **four of the five now read the transcript as evidence in their own right** (name, service address, email, requested timing), and only `service` remains null-in/null-out
+- **the requested timing is resolved in `processCallEnded` and PASSED IN**, rather than derived inside `toExtractedLead`, because the owner's urgency decision, booking-status gate and requested-time row need the same answer. One derivation, several readers — the parameter is required, with no default, so the field cannot be silently lost by a caller that forgets it
+- every downstream consumer reads that **resolved** value — the lead row, the lead's metadata, the calendar event, the owner email and the dashboard. A consumer that reads the raw extraction, or re-reads a stored value independently, is the defect pattern all of these PRs exist to remove
+- the facts the owner can now read from **canonical structured rows**, without depending on any generated prose: **Caller · Caller ID · Alternate number · Email · Service address · Service needed · Appointment / Requested appointment / Requested callback · Callback urgency · Booking status**
+- **a guard resolves the value, and a provider candidate does not win by default (PR #60).** Being well formed is not the same as being authoritative: where deterministic caller evidence contradicts a candidate, the caller's own words are canonical, and where two sources genuinely disagree with no evidence to settle it, the guard records nothing. **Correct information or safe uncertainty** — never whichever source happened to be read first
+- **absence is rendered as absence.** A value a guard refused produces no row, never a fallback and never an older value — the owner is not shown an email nothing was sent to, or an address no engineer was given
+- the **provider-generated narrative remains contextual prose and is NOT an authoritative fact source.** It is kept in `voice_calls.summary`, in `leads.message`, and in the owner email beneath the rows, for review and audit. It decides nothing: PR #48 removed it as an extraction input and as a service fallback, and PR #51 removed the seven factual labels it used to restate, so it no longer offers a second reading of any fact a row already carries
+- **booking truth outranks completeness.** A confirmed instant is shown only when the calendar actually accepted the booking (`ownerBookingStatus` is the single place that is decided, and it fails closed); a time that was merely requested is shown as requested, in the caller's own words, never re-parsed; urgency is never rendered as a time
 
 Deferred and non-blocking (do **not** pick these up as part of other work):
 
@@ -414,270 +330,6 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 - The `requested_service` architectural seam remains **deferred and not approved** (same section).
 - **Rule 11 recap wording, minor and pre-existing.** The recap can still say the team will contact the caller by phone while the final closing points at the confirmation email. Both statements are true and the closing itself is single and coherent, so no truthfulness rule is broken. It predates PR #30 and was deliberately left alone.
 - **Speech-to-text noise, observed not fixed.** The 2026-08-27 smoke test mis-heard a spoken email twice before the read-back loop settled on the correct address, and stored "Galway" as "Galloway". The read-back behaved correctly; these are transcription artefacts, not booking defects.
-
-Canonical-information architecture (established across PRs #39, #42, #43, #45, #46, #47, #48, #49, #51, #54):
-
-**ONE CANONICAL FACT → MANY RENDERINGS.** Never several independent readings of the same call, hoping they agree.
-
-- every caller-supplied field is resolved **once**, at the single convergence point in `toExtractedLead` (`voice/calls.ts`), by a deterministic guard: `resolveCallerName`, `resolveCallerEmail`, `resolveServiceAddress`, `resolveRequestedDatetime` and `resolveRequestedService`, plus `resolveCallbackUrgency` alongside. **All five caller-supplied fields are now guarded**; PR #54 closed the last gap. PR #62 replaced the email guard's normaliser-only form with `resolveCallerEmail`, which still calls the unchanged `normaliseSpokenEmail` first, and PR #66 did the same for timing with `resolveRequestedDatetime`, which still calls the unchanged `sanitisePreferredDatetime` first — **four of the five now read the transcript as evidence in their own right** (name, service address, email, requested timing), and only `service` remains null-in/null-out
-- **the requested timing is resolved in `processCallEnded` and PASSED IN**, rather than derived inside `toExtractedLead`, because the owner's urgency decision, booking-status gate and requested-time row need the same answer. One derivation, several readers — the parameter is required, with no default, so the field cannot be silently lost by a caller that forgets it
-- every downstream consumer reads that **resolved** value — the lead row, the lead's metadata, the calendar event, the owner email and the dashboard. A consumer that reads the raw extraction, or re-reads a stored value independently, is the defect pattern all of these PRs exist to remove
-- the facts the owner can now read from **canonical structured rows**, without depending on any generated prose: **Caller · Caller ID · Alternate number · Email · Service address · Service needed · Appointment / Requested appointment / Requested callback · Callback urgency · Booking status**
-- **a guard resolves the value, and a provider candidate does not win by default (PR #60).** Being well formed is not the same as being authoritative: where deterministic caller evidence contradicts a candidate, the caller's own words are canonical, and where two sources genuinely disagree with no evidence to settle it, the guard records nothing. **Correct information or safe uncertainty** — never whichever source happened to be read first
-- **absence is rendered as absence.** A value a guard refused produces no row, never a fallback and never an older value — the owner is not shown an email nothing was sent to, or an address no engineer was given
-- the **provider-generated narrative remains contextual prose and is NOT an authoritative fact source.** It is kept in `voice_calls.summary`, in `leads.message`, and in the owner email beneath the rows, for review and audit. It decides nothing: PR #48 removed it as an extraction input and as a service fallback, and PR #51 removed the seven factual labels it used to restate, so it no longer offers a second reading of any fact a row already carries
-- **booking truth outranks completeness.** A confirmed instant is shown only when the calendar actually accepted the booking (`ownerBookingStatus` is the single place that is decided, and it fails closed); a time that was merely requested is shown as requested, in the caller's own words, never re-parsed; urgency is never rendered as a time
-
-Dashboard timezone rule:
-
-Dashboard appointment times mean the **business's** timezone (`organisations.timezone`), never the owner's browser/device timezone.
-
-- `datetime-local` values are converted with `wallClockToInstant(value, orgTimezone)` in `src/lib/calendar/timezone.ts`, which is DST-aware
-- dashboard display formatting uses the organisation timezone; the previous hardcoded `Europe/London` formatting is gone
-- this matches the chat, widget and voice booking paths, which already resolved the organisation's zone
-
-Customer manage-link timezone rule (same rule, customer side):
-
-A time a customer picks on the manage-booking link means that wall-clock time in the **business's** timezone — never `Europe/London`, never the customer's device.
-
-- `/api/bookings/manage` converts with the same `wallClockToInstant`; the old London-only conversion is gone
-- the page displays and prefills in the organisation timezone, returned by `GET`
-- an unresolvable organisation timezone **fails closed**: the reschedule is refused, and neither Google Calendar nor `appointment_datetime` is written
-- cancellation is unaffected — it converts no wall-clock time
-
-Email timezone rule (closed by PR #21 — this was the PR #19 follow-up):
-
-Appointment times in emails render in the **business's** timezone. `formatAppointmentDate` in `src/lib/email.ts` takes the organisation zone; the `Europe/London` hardcode is gone.
-
-- the zone comes from `getOrgOwnerEmail`'s existing `organisations` read — no extra database query
-- threaded into booking confirmation, owner new-booking notification, cancellation, reschedule and call-summary formatting, **including subject lines**
-- display **fails soft**: a missing, empty or unusable zone falls back to `DEFAULT_ORG_TIMEZONE` so the email still sends, and the formatter's `try/catch` remains as final protection
-- `en-GB` wording and date format are unchanged — that is date presentation, not a timezone
-
-Standing timezone rule (all three surfaces):
-
-Appointment instants are stored as **UTC instants**, always. A business-local timezone is used only to interpret or display a wall-clock time. **Email formatting must never reintroduce a hardcoded tenant timezone.**
-
-Password-recovery and auth-callback rule (closed by PR #96, merge `eeed1f7`, and PR #97, merge `8ccddc6`, both 2026-09-14; **cross-device recovery V1-verified in production 2026-09-14**):
-
-**A recovery link must work from ANY browser or device, and an auth redirect must be consumed by official Supabase APIs into the existing SSR cookies — never by a parallel session store.**
-
-- **`/auth/confirm-reset` accepts exactly three link shapes** (`src/lib/auth/recoveryLink.ts`, pure): `token_hash` + `type=recovery` → `verifyOtp({ type: 'recovery', token_hash })`; `code` alone → the original PKCE `exchangeCodeForSession`; nothing → forwarded to `/reset-password` so a fragment can be consumed client-side. **Everything else is refused before any Supabase call** — a hash without a type, a type without a hash, any other type, an empty / whitespace / over-length hash, both shapes at once. Success → 307 `/reset-password`; any failure → 307 `/forgot-password?error=link`
-- **`type` is a literal in code.** The URL's `type` only gates entry to the branch, so a magic-link, signup or invite token can never be relabelled into a recovery session
-- **The production Reset Password email template sends `{{ .SiteURL }}/auth/confirm-reset?token_hash={{ .TokenHash }}&type=recovery`** — a fixed route on the Site URL, no Supabase `/verify` redirect hop. This is what makes recovery cross-device: `verifyOtp` needs nothing from the requesting browser. **The PKCE `?code=` shape is same-browser-only by design** — the code verifier is a host-only cookie set only in the profile that called `resetPasswordForEmail`, and a failed exchange deletes it — which is why the first real production test failed even though PR #96 was working as designed. The `?code=` branch is kept for links already issued, not as the primary path. **Any future template change must keep the route deployed first and the template second**; the reverse breaks every reset email until the deploy lands
-- **Implicit-flow fragments (`#access_token=…`) are consumed once, client-side, through `setSession()`** (`src/lib/auth/hashSession.ts`, mounted once in the root layout by `AuthHashSessionHandler`): the fragment is stripped via `history.replaceState` **before** any network call, `setSession` verifies the token against Supabase before saving through the SSR cookie storage, a malformed / error / rejected fragment produces no session, and the destination is a **fixed literal** chosen from the fragment's `type` (`/reset-password` for recovery, else `/dashboard`). `@supabase/ssr` hard-codes PKCE and auth-js rejects an implicit fragment on a PKCE client, so **no page's browser client can consume one on its own** — this handler is the only consumer. `/reset-password` awaits that consumption before its `getUser()` gate, and the gate is unchanged: no session, no form
-- **No token in any log, redirect `Location`, error body or console**, and no localStorage / sessionStorage auth. Verified live with a synthetic value on every branch
-- **Magic-link authentication is deferred to V1.1/later and is NOT a V1 blocker.** The app has no magic-link sender; the dashboard's *Send magic link* necessarily targets the production Site URL; and the fragment consumer fails closed. Recorded as unverified rather than assumed
-- **Known, unchanged exposure:** a `token_hash` link is consumed by any GET, so a mail-scanner pre-visit burns it. The Supabase-hosted link had the same single-use exposure; a click-to-confirm mitigation is V1.1
-
-Cross-conversation lead matching rule (closed by PR #70, merge commit `8833896`, deployed 2026-09-07):
-
-**Identifying the PERSON is not identifying the APPOINTMENT. A confirmed booking may be reached by the conversation it was made in, never by contact details from a later one.**
-
-- **layer 1 — same `conversation_id`** — keeps the **full** `MERGEABLE_STATUSES`, `booked` included. Within one conversation the person and the appointment coincide, so a genuine in-session reschedule still merges and still moves the Google event
-- **layers 2 and 3 — cross-conversation** (email/phone with no time bound; same-source 30-minute recency) — use `CROSS_CONVERSATION_MERGEABLE_STATUSES`, the same list **minus `booked`**. The 30-minute bound narrows WHICH lead can be reached, never WHOSE, so layer 3 needs the same exclusion as layer 2
-- the cross-conversation set is **derived** from `MERGEABLE_STATUSES`, not written out, so the two cannot drift: a status added later is mergeable in-conversation by default, and `booked` is the single documented exclusion
-- **a second booking is a second lead.** Two visible records the owner can reconcile, never one record silently moved — and **never** a customer's confirmed appointment rescheduled by a request that was not about it
-- **a cross-conversation reschedule creates a second lead too**, deliberately. `/api/bookings/manage` is the designed reschedule path and is unchanged
-- **voice is unaffected** — `findOpenLeadForCapture` returns null for `source === "voice"` before either layer, and that exemption is untouched
-- `PROTECTED_STATUSES`, `isBookingCompletedByContactUpdate`, the calendar-rescheduling implementation and the manage-booking flow are all unchanged. **Do not close this differently later** by removing `booked` from `MERGEABLE_STATUSES` globally, or by putting a time bound on layer 2 — both were considered and rejected
-
-Reschedule availability rule (closed by PR #25, merge commit `4784cfc`):
-
-A reschedule is judged by the **same decision every other booking path makes** — business hours, then internal capacity, then the business's real external calendar — and an appointment must never conflict with **itself**.
-
-- both reschedule routes (owner dashboard `/api/leads`, customer manage link `/api/bookings/manage`) go through `checkBookingSlot`; the internal-only `isWithinBusinessHours` + `isSlotAvailable` pair is gone from both (`b2e80e7`)
-- `checkBookingSlot`'s `rescheduleExclusion` is the external counterpart to `excludeLeadId`, built by the shared `appointmentBusyWindow()` helper so the two routes cannot drift (`ce48832`)
-- the exclusion is **subtracted** from the busy list, never matched against it: only the span the appointment already occupies is freed, so a genuine conflict extending into newly claimed time still refuses the move. **Whole busy intervals must never be dropped for merely overlapping the old window** — that would wave another customer's appointment through
-- "we could not check" is never "that time has gone": a failed hours read, a failed capacity count or an unreadable calendar returns **503** and leaves the appointment untouched
-- callers that pass no exclusion use the busy list exactly as fetched, so **new bookings are unaffected**
-- known and accepted: Google free/busy exposes **no event identity**, so an event lying entirely inside the appointment's own window is subtracted with it. The internal capacity check catches any other *lead* in that span, so this needs a Google-only event invisible to our database
-
-Voice calendar booking status:
-
-`VOICE_CALENDAR_BOOKING_ENABLED` is **set in the production environment**, so voice calendar booking (PR #23) is **enabled in production**. The flag requires the exact literal `"true"`, so anything else — including unset — still reads as off.
-
-**Verified end-to-end in production (2026-08-27).** A live phone call booked an appointment and the Google Calendar event was created: the PR #28 production verification produced a genuine `booked` lead together with a synced calendar integration link. Voice bookings are no longer local-only.
-
-This supersedes the earlier record that the flag was absent and the feature disabled.
-
-Voice booking closing rule (closed by PR #30, merge commit `dbf299b`):
-
-A live call **cannot know that a booking exists**, so the spoken closing may only claim what is authoritative at the moment it is spoken.
-
-- the calendar event is written **after the caller has hung up** — `processCallEnded` runs in `after()`, then `capturePartialLead` settles through `settleCalendarBacking`. **Post-call settlement remains the single booking path**
-- the live assistant tool surface is exactly **`check_availability` and `endCall`**. There is **no booking tool**, no mid-call calendar write, no second booking path and no hold or reservation mechanism. A regression test pins this, and any change that adds a third tool must be treated as an architectural decision, not a feature
-- `check_availability` is the one authoritative fact Remy learns mid-call, so **"currently showing as available"** is the strongest claim the closing may make — and only when the tool actually returned FREE. It is a reading, not a hold: nothing reserves the slot, so it can still be taken before the request is processed
-- the closing must **never** say booked, confirmed, reserved, held, secured, locked in or "in the diary", and must never claim the request has already been submitted while the caller is still on the line
-- processing is stated as happening **after the call**, and the **confirmation email is the authoritative booking confirmation**. It is offered as something to look out for, never guaranteed — settlement can fail, and then no confirmation is sent
-- rule 9 no longer announces what happens next; it defers to the single rule 11 closing, so the caller never hears two competing next-step promises
-
-**Verified by live production smoke test 2026-08-27** (call `01a04416-941c-7991-9ea5-f0593c01f2e5`, deployment proven built from `dbf299b`): `check_availability` ran and returned AVAILABLE; Remy said *"That time is currently showing as available. After this call, I'll submit your booking request for processing so please look out for the confirmation email."*; the call ended normally; post-call settlement created the Google event; the lead settled to `booked`; exactly one `integration_links` row synced; and the customer confirmation email was received. No duplicate or contradictory state.
-
-Callback urgency rule (opened by PR #34, merge `7eff6ec`; **NOT closed by it** — see the live regression above. Closed by **PR #35**, merge `62afd12`, **live-production verified 2026-08-31**):
-
-Urgency is **not** a callback time, and the two must never be confused — but the owner must still see it.
-
-- **Urgency is decided from two signals, not one.** This is the whole substance of the correction. `resolveCallbackUrgency` (`src/lib/voice/callbackTiming.ts`) takes the caller's own phrase when the model supplied one, and falls back to the extracted **`urgent` flag** when it did not. Reading only `preferred_datetime` — what PR #34 shipped — loses the urgency on every call where the model **obeys** its own extraction schema, which is the normal case
-- `sanitisePreferredDatetime` returns a real timing **or** an urgency phrase, **never both**. It remains a backstop for a model that *disobeys* and writes urgency into `preferred_datetime`; it is not, and never was, the primary source
-- **A real timing wins outright.** When the caller gave a usable day or time, no urgency row is produced at all, so urgency can never compete with a field that means WHEN
-- the value reaches the owner as a conditional **"Callback urgency"** row in the call-summary email (`src/lib/email.ts`) and a read-only note in the leads drawer (`LeadsTable.tsx`), and is kept on `leads.metadata.callback_urgency`
-- **THE FLAG HAS THREE STATES, AND ONLY `true` ACTS (PR #68).** `details.urgent` is `true` when the provider said the caller was urgent, `false` when it said they were not, and **`null` when it said nothing usable** — absent from a partial payload, blank, or not a boolean. Every consumer tests `=== true`, so `null` behaves exactly as `false` does and **absence never becomes urgency**. This is representation, not recovery: nothing reads the transcript for urgency, and **transcript-based urgency recovery is deferred to V1.1/later**
-- it is labelled **as urgency, never as a date or a time**, and is HTML-escaped like every other caller-supplied value
-- the dashboard note renders **outside** the datetime input, so it can never be edited or saved into `preferred_datetime`
-- **Never fabricate the caller's words.** On the fallback path NiteOwl holds only a boolean, so the row reads `Urgent — no specific day or time given` (`URGENT_WITHOUT_TIMING`) — NiteOwl's own wording, rendered plainly and **not** as a quotation. Inventing a quote to fill the row would be the exact fabrication this rule exists to prevent
-- the distinctions are pinned by tests that drive the **real `processCallEnded`**, not the email helper in isolation — the gap that let PR #34 ship broken
-
-**Merged, deployed and live-production verified 2026-08-31.** A real urgency-only call — a burst pipe, *"As soon as possible. It's urgent."*, then no specific day or time — produced `Callback urgency: Urgent — no specific day or time given` in the owner's email, with callback date and time both "Not provided", no fabricated appointment datetime, booking status **REQUIRES REVIEW**, the email stating the appointment was not confirmed in the calendar, and no *"any time suits"* wording.
-
-Caller-name integrity rule (closed by PR #39, merge commit `569cb8c`, **live-production verified 2026-09-01**):
-
-**An email address must never manufacture a caller name.** A caller-supplied identity outranks a model inference, and an email outranks nothing at all.
-
-- **No code derives a name from an email — the model does.** Read-only reproduction against the real extractor established the mechanism: when a caller name is absent or unclear, extraction fabricates a plausible person from the adjacent email local part (`jameshartley@gmail.com` → name `James Hartley`, 3 of 3 runs). **Which extractor produced the bad name on the live call was NOT established** — the provider's structured data and the transcript fallback are both possible and the logs no longer reach back — so the guard sits **downstream of both**, in `toExtractedLead`, where the two paths converge
-- `name` was the **only** caller-supplied field in the voice pipeline with no deterministic backstop: `email` has `normaliseSpokenEmail`, `preferred_datetime` has `sanitisePreferredDatetime`. `resolveCallerName` in `src/lib/voice/nameIntegrity.ts` is the third, and is self-contained, synchronous and deterministic — **no model call, no network, no imports**
-- the precedence rule: spoken support agreeing with the candidate keeps the candidate (it may legitimately be the fuller form); spoken support disagreeing with a candidate that **looks manufactured from the email** takes the caller's own word; spoken support disagreeing otherwise keeps the candidate, so **a later correction always wins and a stale first answer is never resurrected**; **no** spoken support plus a manufactured-looking candidate rejects it, so the owner sees the caller's real phone number rather than an invented person; otherwise the candidate stands exactly as before
-- `findSpokenName` strips literal and spoken email spans **first**, so *"james hartley at gmail dot com"* can never be read as a name while *"I'm John, john@gmail.com"* still yields John. It is **evidence, not a guess**: anything ambiguous yields null
-- the edit-distance rule (at least 6 letters, at most 2 edits) exists for one measured reason — on the live call the fabricated name and the local part differed by a single vowel (`erniesephora` vs `erniesophura`). It is consulted **only as a NEGATIVE guard when no spoken support exists**, so a legitimate John Smith with `johnsmith@gmail.com` is protected before it is ever reached. **Similarity alone is never proof that a name is invalid**
-- **the persisted lead name and the owner-email Caller field derive from the same resolved decision and cannot disagree.** Guarding the lead alone was insufficient: the owner email read the raw `details?.name`, so the surface the defect was actually observed on bypassed the guard entirely. `callerName` now reads `extracted?.name`
-- 28 tests, 5 of which drive the **real `processCallEnded`**; mutation-verified — bypassing the guard fails 2, removing spoken-name precedence fails 5
-
-**Extended by PR #43 (merge `c104449`, deployed and production-verified 2026-09-02) — the guard could destroy a name the extractor got RIGHT.** The opposite failure to Ernesto's, and worse: there the model invented a name and the guard had to reject it; here the model was correct and the guard overwrote it.
-
-- **The 2026-09-02 call.** Vapi's `structuredData` held the correct `"Jason Test"`; the transcript rendered the isolated spoken-name turn as `"JSON test"`; the email was captured correctly as `jasontest141@gmail.com`. `looksDerivedFromEmail` stripped digits from the local part, so `jasontest141` collapsed to `jasontest` — exactly the caller's own name — and reported an email-derived match. With the mangled transcript making `namesAgree` false, PR #39's rule 2 fired and replaced the correct name with the transcript rendering. The persisted lead and the owner email both received `"JSON test"`. **The email from the same `structuredData` object came through untouched — only `name` passes this guard, and only `name` was corrupted.**
-- **The fix.** Digits are preserved when normalising the local part, and a digit-bearing local part is settled by the exact test alone — without that second part `johnsmith` vs `johnsmith82` is two edits, inside the existing edit-distance budget, so a real John Smith would still be destroyed. **Building an email from your own name plus digits is the ordinary human pattern**, and it no longer marks a caller as fictional. No JSON→Jason mapping, no dictionary, gazetteer, fuzzy correction or phonetic matching; no transcriber, prompt or provider change.
-- **The trade, recorded rather than glossed over.** A name genuinely manufactured from a digit-bearing local part no longer trips the guard either — the evidence is identical for both cases. The costs are not symmetric, and that settles it: a false positive **destroys** a correct name, a false negative only leaves the candidate standing as it stood before PR #39. **This fails toward keeping the caller's own data.** All-letter local parts, including the observed `erniesophura`, are untouched.
-- **Validation.** The real failing call replays through the **real `processCallEnded`**: lead name and owner-email Caller field both `Jason Test`, email preserved, `JSON test` absent. Ernesto protection preserved. Mutation-verified — restoring digit-stripping fails 6, removing only the digit short-circuit fails 1. 1240 tests pass / 0 fail across 220 suites; `tsc` clean; ESLint unchanged at 11. Production deployment `dpl_8Sc2X1sGmHuT8XXDuCUSEKoqF3vQ` reached READY carrying `niteowlhq.com` and the `git-main` alias, its `githubCommitSha` reading the merge commit itself; `/api/health` returned **HTTP 200** `{"status":"ok","database":"ok"}`.
-- **No live call was required, and this is the distinction worth keeping.** Unlike PR #34 and PR #40, this is a **deterministic code defect**, replayable from the real production payload — so the suite genuinely closes it. A model-behaviour correction still could not be.
-
-Closing-gate rule (closed by PR #40, merge commit `91d2bc3`, **live-production verified 2026-09-01**):
-
-**Closing dialogue is forbidden until the applicable required-field gate is satisfied — and an urgent handoff acknowledgement is not closing dialogue, so saying one never licenses the transition.**
-
-- the defect this fixes was a **TRANSITION, not a phrase**. Remy said the right sentence at the wrong moment and then behaved as though the call was closing. Banning the sentence would have been wrong: an urgent caller should hear *"I'll pass your request to the team straight away"* immediately
-- rule 5's **COMPLETION GATE** now states that **URGENCY NEVER OPENS THE GATE**: an urgent **service visit** is a service request, keeps rule 5's full list, and **rule 13's shorter callback list does NOT apply to it**. Declining a time settles the **time** and nothing else, and is never a sign the call is ready to end. Email is named as the step this failure loses
-- a handoff acknowledgement may be given **the moment it is true**, but must be followed by **the next unfinished item** — never *"anything else?"*, a recap, a goodbye, or rule 11's closing line
-- rule 11 **defers explicitly to the gate** for when the call may end, and names its four lines as **CLOSING LINES** forbidden while a required field is open. **Having said something that sounded like one earlier never counts as having closed**, and the remaining debt is spelled out
-- rules 6 and 12 mark their urgency acknowledgements as not closings; rule 13 separates its mid-call handoff phrase from rule 11's closing
-- **a caller is never pressed.** Refusal still releases the gate (*"A caller who refuses or cannot give a detail counts as done for it"*), and *"Ask at most twice"* is unchanged, so a caller who declines a time is not asked again
-- **no state machine, no new tool, no config key, no provider logic.** The live tool surface remains exactly `endCall` and `check_availability`, and a test pins that the assistant config's key set has not grown
-- the sequence tests **parse the required-field list back out of the prompt** and replay the real 2026-09-01 call against it, rather than matching sentences — dropping `email` from the gate breaks that replay. This is the deliberate answer to the PR #34 gap, where an all-green suite proved only that the prompt *said* the right thing
-
-**Model-behaviour corrections are not closed by tests.** This rule, like PR #34's, could only be confirmed by a live call, and was: on 2026-09-01 Remy requested the email before closing, did not skip a required field because the request was urgent, and ran the recap before the closing sequence.
-
-Service-integrity rule (closed by PR #54, merge commit `36805b8`; producer contract aligned by PR #56, merge commit `a71815d`; both deployed 2026-09-03):
-
-**The canonical requested service must be grounded in the CALLER'S own speech on the current call.** A service the caller never asked for must never become canonical.
-
-- **caller turns are the only evidence.** Assistant speech, Knowledge Base terminology and model-invented labels establish nothing — and the assistant is the one party on the call holding the business's own "Services Offered" vocabulary in its prompt, which is precisely why its turns are excluded
-- **explicitly negated caller wording is not support.** "It's not the boiler, it's the radiator" supplies `radiator`, never `boiler`. Bare "no" is deliberately **not** a negation cue: "no hot water" is one of the commonest ways a caller names the thing they are ringing about, and treating it as a negation would destroy real caller information — the opposite of this guard's purpose
-- **keep, reduce, or refuse.** A fully supported candidate is kept exactly as written, so reordering and morphology survive ("my radiator is leaking" fully supports "leaking radiator"). A partly supported candidate **falls toward the caller's own wording** rather than preserving the invented portion ("radiator repair" becomes "radiator"). An unsupported candidate is **refused**, and the canonical service resolves to **null**
-- **the result is always a subsequence of the model's own candidate.** That is what makes "it cannot invent a service" a property of the code rather than a claim about it — it has no way to produce a word the candidate did not already contain, so it can never resurrect a service the caller superseded
-- `resolveRequestedService` (`src/lib/voice/serviceIntegrity.ts`) is **synchronous, deterministic, model-free, network-free and vocabulary-free**. **It is NOT a taxonomy, a classifier, a fuzzy matcher or a semantic service-inference system** — it is a provenance boundary. It never decides what a call was about and holds no trade vocabulary. Its only domain knowledge is PR #28's existing `stemServiceWord`, so the guard and the Knowledge Base matcher agree about word forms instead of each having an opinion
-- **one resolver at the convergence point, not a guard per consumer.** Both extraction paths — provider `structuredData` and the transcript fallback — converge in `toExtractedLead`, and the resolved value is produced there. Every downstream consumer then reads it: the lead row, the KB check, calendar-booking eligibility, the calendar event title, the owner email row, the customer confirmation and the dashboard. **Adding a separate guard to each consumer was deliberately avoided** — that is the anti-pattern the PR #39 defect and PRs #45–#47 exist to remove
-- **refusal is fail-closed for booking, and never destroys an otherwise genuine lead.** This is NOT "every call creates a lead". An unsupported service does not unlock calendar-backed booking, because the Knowledge Base gate is only as sound as its input and an invented label that happens to match the KB would be rubber-stamped. Lead capture still proceeds wherever other genuine caller substance exists — a name, a time, or urgency. Only when the refused service was the **sole** substance is no lead created, and in that case the guard has established the call contained nothing the caller supplied
-- the trade is deliberately asymmetric. A false positive persists a service nobody asked for, shows it to the owner, titles an engineer's diary entry with it and sends it to the **customer**. A false negative gives the owner the caller's own rougher wording, or no service at all — and **absence is already rendered as absence** everywhere: no Service row, a plain "Appointment" event title, no service line in the customer's email. **The caller's truth outranks a tidier label**
-- **BOTH PRODUCERS MUST ASK FOR THE SAME THING (PR #56).** A guard that refuses ungrounded wording is only half the rule: a producer instructed to paraphrase will keep handing it values it must refuse, and every one of those is a booking lost for no reason. The `structuredData` schema and the transcript-fallback prompt now state the **same** contract for `service` — the caller's own words, never expanded, renamed, relabelled or made more specific. **A future prompt change to either producer must keep them aligned**, and asking a model for a "summary" or a canonical label of a caller-supplied fact is the specific mistake to avoid. The guard stays the enforcement boundary regardless: aligning a producer never licenses relaxing it
-- **PRODUCER OUTPUT IS JUDGED BY SEMANTIC SUBSTANCE, NOT CONTAINER EXISTENCE (PR #58).** A syntactically valid provider object must never suppress a recovery path merely because the object exists. When an extraction producer supplies **no substantive supported caller information**, it is treated as **absent** for producer-selection purposes — that is decided once, at the parser boundary, so every consumer reads the same answer. `parseStructuredDetails` therefore returns null for `{}`, for an all-null object, and for one holding only empty or whitespace strings; it returns the object whenever any supported field carries substance. **`urgent: true` IS substance** and must never be collapsed away — losing it is the PR #35 failure again; **`urgent: false` is not**. *(The original reason given here — that `false` is indistinguishable from no urgency signal — stopped being true with **PR #68**, which made the two distinguishable. The rule is unchanged and the reason is now stated properly: a payload whose only content is "not urgent" describes no enquiry, so it must keep reaching the transcript fallback. `null` does not count either, for the plainer reason that the provider said nothing.)* **This is not arbitrary truthiness**: the test is over the named supported fields and is written `=== true`, so a field added to the parser and forgotten in the check would silently stop counting.
-- **The two producer rules are SEPARATE lessons and must stay separate.** PR #56 aligned **what** the two producers are asked to produce; PR #58 ensures an **empty result from one producer does not prevent the other from running**. Collapsing them into one vague principle loses both. Neither rule permits **merging** the producers: whichever one runs, it runs alone.
-- **PR #58 AND PR #62 OPERATE AT DIFFERENT LAYERS, AND THE DISTINCTION MATTERS.** PR #58 is **record-level producer selection**: an EMPTY payload means the provider said nothing, so the fallback extractor runs. PR #62 is **field-level evidence recovery** on a PARTIAL payload: the provider did speak, its selection stands, **the fallback extractor is still never invoked**, and one field is recovered afterwards from the caller's own turns by a deterministic guard — the mechanism `resolveCallerName` and `resolveServiceAddress` have always used on that same path. The superseded email expectation in `tests/voiceStructuredDataEmpty.test.mjs` records this new field-level recovery; **PR #58 was neither weakened nor reversed**, and its extractor-never-invoked assertion still passes. **PR #66 is the same layer as PR #62**, for `preferred_datetime`, and updates that same test's timing expectation for the same reason: `urgency` and `service` there are still not completed, because neither has such a guard.
-
-Service-address authority rule (closed by PR #60, merge commit `a07a06a`, deployed 2026-09-04):
-
-**A provider value is not authoritative merely because it is well formed. Explicit caller evidence outranks it — and where neither can be trusted, NOTHING is recorded.**
-
-The resolved order in `resolveServiceAddress`, deterministic throughout:
-
-- **different place → the caller wins.** Reliable caller-spoken evidence naming a different place beats the provider candidate. `81 Oakland Drive` against a provider `12 Meadow Court` resolves to **81 Oakland Drive**
-- **same place, agreeing → the candidate stands, byte for byte**, including a fuller provider rendering (`81 Oakland Drive, Galway`, `Flat 2, 14 Mill Road`). Nothing the provider held is dropped
-- **the candidate lacks a house number the caller gave → recover it.** Substring containment is required, so taking the caller's wording can only **ADD** the number and can never lose part of the candidate — `Oakland Drive, Galway` is left alone
-- **same street, CONFLICTING house numbers → correction, or nothing.** If deterministic transcript ordering proves the caller **superseded** the candidate's number with a later corrected one, their final word wins. Otherwise **no service address is recorded at all**. `81 Oakland Drive` and `12 Oakland Drive` are two front doors, not two renderings, and choosing either would send an engineer somewhere on a coin flip
-- **explicit caller self-correction remains authoritative**, and is the only thing that resolves a numeric conflict. `findSpokenAddresses` returns the caller's addresses **in order**, so a superseded value is identifiable from the caller's own turns — evidence, not inference. `findSpokenAddress` is unchanged, and is now that list's last element
-- **unreliable evidence changes nothing.** Silence, no address question, an ambiguous reply, a fragment, evidence that is itself transcription noise, a spelt-out number, or an address only the **assistant** said all leave the provider value exactly as the model wrote it. This is **not** "the transcript always wins"
-
-Two boundaries worth keeping in mind before extending it:
-
-- **only COMPARABLE numbers conflict.** A spelt-out `eighty one` would need a number-word table, and `Flat 2, 14 Mill Road` does not carry its number in the position read. Both yield no comparison and leave prior behaviour untouched — **conservative, not clever**. Widening this means adding inference, which this module does not do
-- **refusal is NOT a booking failure.** The service address was never a booking gate, so an unresolved conflict keeps the appointment and simply sends the calendar event with **no location** — the existing "absence is rendered as absence" semantics, with no new conflict field, flag or surface. The owner still has the caller's phone number, and **a wrong address is worse than none**
-
-Caller-email evidence rule (closed by PR #62, merge commit `c2d48b7`, deployed 2026-09-04):
-
-**A provider value that survives normalisation is authoritative. Only when it does not is the caller's own speech read — and only where the CONVERSATION establishes that the caller is giving their address.**
-
-- **the provider wins first.** `resolveCallerEmail` runs the existing `normaliseSpokenEmail` on `details.email`; if that yields an address it is returned and the transcript is **not consulted at all**. No comparison, no conflict resolution. A structured-versus-transcript disagreement is **out of scope**: there is no deterministic way to say which of two valid addresses is wrong, and no corruption path has been shown. **This is not "the transcript wins"**
-- **absence is one path, not two.** A field the provider omitted and a value that cannot be made into a valid address are the same absence after normalisation, so malformed input gets no authority class of its own
-- **evidence is CUE- or QUESTION-ANCHORED, never a span search.** A candidate is read only from an answer to an **explicit assistant email request** in the immediately preceding turn, or from an **explicit caller self-declaration** (`my email is …`, `you can email me at …`) whose cue supplies the left boundary. The candidate is then handed to the **unchanged** normaliser — locating and normalising stay separate responsibilities
-- **CALLER TURNS ONLY. An assistant turn can supply question context and nothing else.** Remy is the one party on the call speaking a model-generated address back, so reading its turns would launder its own guess into caller evidence — including when its read-back is phrased exactly like the self-declaration cue, where **only the speaker separates the two**
-- **a bare acknowledgement is not the caller supplying an address.** "Yes", "correct", "that's right" against a read-back confirm the assistant's transcription, not the address itself; if it mis-heard, a confirmation goes to a stranger
-- **the LAST reliable caller value wins**, across turns and within one turn, so an explicit self-correction is deterministic ordering rather than inference — the same authority the address guard uses
-- **clause boundaries bound every candidate.** The caller's own commas and sentence ends, so `John Smith, john dot smith at example dot com` and `…, if that's easier` both read correctly, and a leading `No,` on a correction is stripped as `addressIntegrity` already does. **A whole clause is never a sub-span**, which is what makes truncation structurally impossible
-- **nothing is ever completed or invented.** An incomplete address gets no TLD, ordinary speech containing `at`/`dot` yields nothing, and a free-floating or third-party address with no question or cue behind it is not the caller's own — the field means *this caller's* email
-
-Caller-timing evidence rule (closed by PR #66, merge commit `bd5853a`, deployed 2026-09-07):
-
-**A provider timing that survives the sanitiser is authoritative. An urgency answer is an ANSWER, not an absence. Only genuine absence admits the caller's own speech — and evidence must pin a DAY of its own.**
-
-- **the provider wins first.** `resolveRequestedDatetime` runs the existing `sanitisePreferredDatetime` on `details.preferred_datetime`; if a real timing survives it is returned byte for byte and the transcript is **not consulted at all**. No comparison, no conflict resolution. **This is not "the transcript wins"**, and structured-versus-transcript conflict stays deliberately out of scope, exactly as for email
-- **URGENCY BLOCKS RECOVERY.** The caller was asked when and said "as soon as possible"; that is their answer, so a day mentioned elsewhere on the call must never outrank it. The urgency still reaches the owner unchanged (PR #35), and this is the one place the timing rule differs from the email rule — an email has no equivalent of "I answered, and my answer was that I don't have one"
-- **only an absent or blank field is an absence.** Then, and only then, deterministic caller-turn evidence is read
-- **EVIDENCE SELECTION, NOT DATETIME PARSING.** The recovered value is the caller's **phrase**, and `parseDatetimeToIso` resolves it exactly as it resolves a provider phrase — organisation timezone, DST, `snapToNamedWeekday`. The guard never parses, resolves, completes, repairs or converts a datetime, which is why **no timezone, availability, calendar or booking semantics changed**
-- **a DAY is required; a clock alone is not enough.** *"AI: what time on Friday? / User: 3 PM"* has a caller-spoken clock whose day came from the assistant, and resolving it would book the wrong day. A bare day part and a spelled ordinal with no month are refused for the same reason. **Incomplete-but-anchored timing is recovered and follows the parser's existing clarification behaviour** — it is not completed here
-- **caller turns only, anchored to an explicit timing question or an explicit caller cue.** **Assistant turns are never read**, including when the assistant's own offer is phrased *exactly* like a recognised caller cue (*"How about Tuesday at 2?"*) — **only the speaker separates a suggestion from evidence**, and reading it would launder a model-generated time into a booking nobody asked for
-- **a bare acknowledgement supplies nothing.** "Yes", "correct", "that's right" confirm the assistant's proposal, not a time. A caller who restates the time in their own words IS evidence — the distinction is the speaker, not the value
-- **the LAST reliable anchored caller value wins**, across turns and within one turn, so a correction is deterministic ordering rather than inference — the same authority the address and email guards use
-- **ordinary speech is never a booking preference.** A house number, a phone number, a duration, a quantity, and a day mentioned while describing the problem rather than answering about timing all recover nothing
-- **resolved once, in `processCallEnded`, and passed to every consumer.** The lead, the owner's urgency decision, the booking-status gate and the requested-time row read the same decision
-
-**PARTIAL PROVIDER OUTPUT MUST NOT SILENTLY ERASE RELIABLE CALLER INFORMATION — but the fix must never become "two independent AI readings hoping they agree".** Field-level recovery requires a **deterministic provenance and authority rule**. PR #62 was the first implementation of one, for email; **PR #66 is the second, for requested timing**. **A field without such a rule stays unrecovered** — `urgency` and `service` still are — and the longer-term direction remains a single canonical extraction/provenance architecture, which is **not** started.
-
-Historical record — a cosmetic PR-number discrepancy in `main`, deliberately NOT corrected:
-
-Merge commit **`3457927`** (the PR #39 documentation closeout) carries the message *"Merge pull request #40 from niteowl-bot/docs/pr39-live-verification-closeout"*. **No PR #40 existed for that branch** — it was merged locally with a hand-written message, and the number was guessed. GitHub later issued **#40 to the Finding A fix** (`fix/voice-required-fields-before-closing`, merge `91d2bc3`), so that message now points at an unrelated PR.
-
-- **`main` history is deliberately NOT rewritten.** The discrepancy is cosmetic, the commit is already on `origin/main`, and rewriting shared history to fix a message is a far worse trade than recording it here
-- the underlying facts are unaffected: `3457927` really is the PR #39 docs closeout, and `91d2bc3` really is PR #40
-- **the lesson, which is the reusable part:** `git merge --no-ff -m "Merge pull request #N …"` does **not** create PR #N. Take the number from `gh` — or open the PR first — rather than guessing it in a merge message
-
-Service matching — one known false positive, DEFERRED (investigated 2026-08-26, against `f05db92`):
-
-`isServiceConfirmedByKnowledge` (`src/lib/leadCapture.ts`, shared by voice, chat **and** widget) can confirm a service the business does not offer.
-
-Reproduction, against a Plumbing-only Knowledge Base:
-
-```
-"electrician for a broken radiator"  →  true   (WRONG)
-   significant tokens: [electrician, broken, radiator]   requiredMatches = 2
-   electrician = miss,  broken = HIT,  radiator = HIT    →  2 of 3, confirmed
-```
-
-Why: every significant token carries **equal weight**, so incidental descriptor words can satisfy the threshold while the token naming the service misses entirely. `requiredMatches` is `n <= 2 ? n : ceil(2n/3)` — non-monotonic, strictest at exactly two words. This **fails open**, which makes it more serious than the PR #28 morphology bug, which failed closed. It has never been observed in production.
-
-**A qualifier/preposition gate was implemented and REJECTED.** The idea was to split the request at the first qualifier preposition and treat the words before it as the requested service. Adversarial testing of 24 phrases against the real matcher proved the invariant "words before the qualifier identify the service" is simply false in ordinary English — English `for` is both purposive ("looking **for** a plumber") and qualifying ("plumber **for** a radiator"). It introduced four genuine false negatives on valid requests:
-
-- `"I need help with a burst pipe"` (before `with` = "help")
-- `"help with a blocked toilet"` (= "help")
-- `"issue with a leaking pipe"` (= "issue")
-- `"need someone for a leaking radiator"` (= "someone")
-
-The experiment was fully reverted; no part of it remains.
-
-**Architectural finding — `extracted.service` is NOT a trusted service identity.** Its extraction contract calls it a *"short summary of what the caller wants"* (voice `extraction.ts`; chat/widget prompt example returns `"Plumber booking"`). One free-text field, model-generated, observed in production holding a trade (`"plumber"`), a family (`"plumbing"`), trade + request (`"plumbing appointment"`), trade + problem, a problem alone, and once an entire call summary paragraph (lead `dbff9272`). `shouldUpdateService` already guards it against model misclassification. `confidence` gates nothing.
-
-**Never make `extracted.service` authoritative for deciding which services a business offers.**
-
-**PR #54 (F5) did not change the matcher, and did not close this.** It changed only what reaches it: the value handed to `isServiceConfirmedByKnowledge` on the voice path is now the caller-grounded resolved service, so the matcher is no longer asked to judge a label nobody spoke. The `requiredMatches` false positive above is **unaffected and still open** — it is a property of the matcher, and chat and the widget still pass an unguarded value. **`extracted.service` remains untrusted as a service identity.**
-
-The safer future direction is a distinct upstream signal — conceptually `requested_service` — but that is **DEFERRED and not approved**. It is a proper architecture task across voice, chat and widget requiring: an explicit semantic contract; a clear split between requested service identity and problem description; **constrain-only** semantics (may refuse, may never confirm); fallback to existing behaviour when absent or uncertain; adversarial tests; provider-independent boundaries; identical behaviour across all three surfaces; PR #28 morphology preserved; fail-safe throughout; and no hard-coded trade taxonomy unless separately justified.
-
-**Do not casually retry any of these** — each was investigated and rejected:
-
-- another preposition/qualifier heuristic (proven to cause false negatives)
-- more stop-word tuning (an ever-growing list; breaks on "I require assistance with…")
-- trade-name suffix heuristics (`-er` catches `under`, `water`, `other` — verified to break `"leak under the shower"`)
-- fuzzy matching, edit distance, embeddings, or an LLM call inside the matcher
-- hard-coded trade vocabularies or industry-specific lists
-- cross-record contradiction as the sole fix (never fires on a single-service KB, so it misses this very case)
-- lowering `requiredMatches` or any arbitrary threshold change (amplifies the false positive)
 
 ---
 
@@ -808,383 +460,14 @@ started or approved for implementation.
 
 ## 1. Flagship — NiteOwl Business Opportunity Scan
 
-**PHASE 1 PURE LOGIC: IMPLEMENTED AND SHIPPED (PR #84, merge `7d242d8`, deployed and
-production-health verified 2026-09-11). THE PRODUCT ITSELF: NOT BUILT AT THAT TIME — the
-public surface shipped later, in PR #89; see below.**
-
-What PR #84 delivered is exactly the deterministic Phase 1 contract logic, as five pure modules
-under `src/lib/freetools/` (`scanTypes`, `scanQuestions`, `scanValidation`, `scanFindings`,
-`scanLostRevenue`) with their four test suites (`tests/freeToolsScan*.test.mjs`):
-
-- the canonical nine-question set, allowed values and required/optional split (§87.2);
-- the validator — refuses and never repairs or coerces, `not_sure` first-class, Q4 > Q3
-  surfaced as an inconsistency and never resolved (§87.4);
-- the deterministic finding engine over the three condition codes, ranked by the enumeration
-  and by nothing else (§87.1, §87.3);
-- the Phase 1 Lost Revenue sizing — E1 only, a range never a point, UNKNOWN as a first-class
-  result for the other two codes and for every §88.3 gate (§88.1–§88.3);
-- the frozen `estimate_basis` and the executable recomputation that makes the result
-  reproducible from its basis alone (§88.4).
-
-It is pure, deterministic, provider-independent and tenant-free: no model, network, storage,
-clock, randomness or `org_id` is reachable from it, and a structural boundary suite pins that.
-D1–D4 hardening (pre-rounding eligibility, an accurate `no_permitted_expression` reason, one
-shared rule-set version, requiredness read from the question definitions) landed before merge.
-
-**What Phase 1 does NOT include, and what is therefore still not built or approved:** a public
-route or page, any UI or product surface, persistence of a run, the bearer-token run linkage,
-the consent and promotion flow (Part XII §89), routing to a recommendation, cross-product
-outcome learning, any Part XIII provenance runtime, and every later Scan phase. Nothing
-outside the five modules imports them today. **Shipping the logic did not approve the
-product**: each of those is its own decision.
-
-**PHASE 1 RECOMMENDATION LAYER SHIPPED (PR #87, approved head `21e0ea3`, normal merge commit
-`6055f64` 2026-09-11, deployed as `dpl_GWa2YAHEagFrBzYM2Zwv4DJbAmwE` with the deployed SHA
-equal to the merge commit, and production-health verified — `/api/health` HTTP 200
-`database: ok`, homepage HTTP 200). THE SCAN PRODUCT ITSELF WAS STILL NOT BUILT AT THAT
-TIME — see the PR #89 entry below.** What is
-shipped is exactly two pure-logic increments — **PR #84**, the Phase 1 deterministic
-foundations (questions, validation, findings, E1 sizing, `estimate_basis`), and **PR #87**,
-the recommendation layer described here. What is **NOT built**: a route, page or UI;
-persistence; run identity or bearer-token linkage; the consent and promotion flow; outcome
-measurement; any Part XIII provenance runtime; any learning runtime; and every later phase.
-A recommendation here is a **proposed** suggestion at authority level **recommend** with
-source type **derived_deterministic** — it is not a decision that was taken, not an action,
-not an outcome and not learning, and it authorises nothing. A sixth pure module, `src/lib/freetools/scanRecommendations.ts`, gives every
-rendered finding exactly one deterministic, owner-actionable recommendation, keyed by
-`finding.condition` alone — never by impact, estimate size, confidence, cap reason, provider,
-tenant, clock or model. `buildScanReport` attaches it after sizing. Fixed owner-facing text
-pinned verbatim by test; Phase 1 routing follows §84.3's class table: `enquiry.unanswered` →
-Remy, `enquiry.no_followup` → no product (the structural anti-funnel case, §81.2), and
-`booking.friction` → Remy as where the answer lives **plus** a **link-only** Setup Kit
-handoff as the first step of §84.4's path (no answers, pre-fill, token, state or consent —
-the handoff and the product are separate fields, and the next step is useful without
-either). Q1/Q2-aware routing (§87.2) is **deferred and not implemented**. **D-B1** is represented as
-`threshold_rule: "improvement_from_stated_baseline"` read with a `direction` (`decrease` for
-Q4 unanswered enquiries and Q7 messages to book, `increase` for Q9's share of *answered*
-enquiries becoming work); the criterion is declared here and evaluated nowhere in this layer; the
-baseline is the owner's raw stated answer quoted with its question id, never
-`EstimateBasis.result`, and is `null` — with wording that says one must be established
-first — whenever the answer has no position on the scale (`not_sure`, absent,
-`varies_a_lot`). `action_status: proposed`, `authority_level: recommend`,
-`source_type: derived_deterministic`, shared `SCAN_RULE_SET_VERSION`, `review_window_days: 28`,
-no `expected_effect` (W.2 deferred). **PR #87 is pure logic: no UI, no route, no
-persistence, no consent/promotion, no outcome comparator, no Part XIII runtime**, and its
-merge does not approve or start any of the items in the previous paragraph. Two non-blocking
-cosmetic follow-ups (a stale comparison-oriented comment; the `enquiry.no_followup` next-step
-prose not repeating the criterion's exact denominator) are recorded in `CHANGELOG.md` and
-left for a separate tidy. Full record in `CHANGELOG.md`.
-
-**PHASE 1 PUBLIC SURFACE SHIPPED (PR #89, approved head `61b82f9`, normal merge commit
-`f3ab620` 2026-09-12, deployed as `dpl_7m7mdyDGdTk3H4BzedgEUxJNEY9o` — Ready on the
-production aliases — and production smoke-verified: `/api/health` HTTP 200 `database: ok`,
-homepage HTTP 200, `/free-tools` HTTP 200 and linking to the Scan, and
-`/free-tools/business-opportunity-scan` HTTP 200 serving the questionnaire). **THE SCAN IS
-NOW USABLE BY A VISITOR — this supersedes the "not built" wording in the two paragraphs
-above, which remain as the record of what PRs #84 and #87 each delivered.** Five files:
-`src/app/free-tools/business-opportunity-scan/page.tsx`, `ScanClient.tsx` and
-`scanPresentation.ts`, `tests/freeToolsScanSurface.test.mjs`, and the listing entry in
-`src/app/free-tools/page.tsx`. **No `src/lib/freetools/` module changed** — the Phase 1 logic
-is consumed, not modified.
-
-- **It stores nothing.** No `localStorage`, no `sessionStorage`, no cookie, no query string,
-  no API route, no database write, no network call. Answers live in client memory for one
-  page view and a refresh clears them, which is why §26's staged model is satisfied
-  trivially — the same way the Setup Kit satisfies it.
-- **Three screens split by POSITION in the contract order, never by question id**, and
-  `validateScanAnswers` is the sole authority on refusal. The surface never repairs, coerces
-  or second-guesses an answer.
-- **KEYBOARD-ONLY NAVIGATION WAS NOT PERFORMED.** It is recorded as an **unperformed manual
-  check, NOT a pass**, and is a **documented non-blocking accessibility verification gap**
-  carried to V1.1/later. The non-blocking judgement rests on code evidence and never on a
-  substituted result: native interactive elements throughout, no `tabIndex` override
-  anywhere, no `onClick` on a non-interactive element, no custom widget, modal or focus trap,
-  and errors already carrying `role="alert"`, `aria-invalid` and `aria-describedby`. **Do not
-  later record this as verified without actually performing it.**
-- **Deployment-to-merge correspondence is NOT SHA-verified** — `vercel inspect` exposed no
-  Git-source metadata, as for PRs #54, #58, #60, #62, #66, #68 and #70 — so identification
-  rests on the production deployment appearing two seconds after the merge and carrying the
-  production aliases.
-- **What is STILL not built, and what this merge does not approve:** persistence of a run;
-  run identity or bearer-token linkage; the consent and promotion flow (Part XII §89); any
-  database, schema, migration or RLS; tenant or `org_id` identity; a `DecisionRecord`, Spine
-  event, Business Memory or Business Graph write; outcome or impact measurement; any Part XIII
-  provenance runtime; cross-product learning; any model call, prompt or provider change;
-  Setup Kit pre-fill; Q1/Q2-aware routing; the standalone Lost Revenue entry; and every later
-  Scan phase. `docs/ARCHITECTURE.md` is unchanged and no Remy code, flag, schema or
-  configuration was touched. *(PR D has since shipped as **PR #92**; see below. The rest of
-  this list stands.)*
-
-**ENQUIRY FUNNEL DIAGNOSIS SHIPPED — PR D IS COMPLETE AND CLOSED (PR #92, approved head
-`3f43056`, normal merge commit `97dda2b` 2026-09-13, deployed as
-`dpl_6cAqdZkmi4sqo6GUe2rEnMbswKv4` — Ready on the production aliases — and verified).** This
-is the build against Part XIV's contracts, and it is the point at which the Scan stops being a
-questionnaire with findings attached and starts reasoning about the process the owner
-described. Seventeen files: eleven added, six modified, **+4312 / −12**. `docs/ARCHITECTURE.md`
-is unchanged.
-
-Five new pure modules under `src/lib/freetools/` — `scanFunnel.ts`, `scanDependencies.ts`,
-`scanPrioritisation.ts`, `scanImpactClass.ts`, `scanEvidenceGaps.ts` — all held to the same
-structural boundary suite, which now covers **eleven modules instead of six**. What they add:
-
-- **A deterministic enquiry-to-booked-work funnel** in five stages with opaque ids and fixed
-  positions: `enquiry_received` → `enquiry_answered` → `time_agreed` → `work_booked` →
-  `enquiry_followed_up` (a `recovery` stage, after the booking decision). Each carries the
-  state of what we know — `owner_declared`, `unknown` with `owner_not_sure` or `not_answered`
-  recorded separately, `inconsistent` — **separately from its health**: `finding`,
-  `appears_adequate`, `not_established` with its reason, or `not_assessed`. **No stage can be
-  `observed`**, and `derived` is declared but never emitted
-- **Two stages are never given a verdict, deliberately.** `enquiry_received` (Q1–Q3) is demand
-  generation, and `work_booked` (Q9) would reach a condition class §81.3 excluded. Both render
-  context only. **Adequacy is a claim and is refused where the answers do not support it** —
-  Q4 = 0 with Q5 = *no* is `not_established` / `no_way_of_knowing`, **not** an inconsistency,
-  because the two statements can both be true
-- **Earliest-leak detection** — the earliest *assessable* stage with a finding, reported with
-  what looks adequate before it **and** what was never established before it. The second list
-  is the honesty clause: without it, "earliest" implies nothing earlier is wrong
-- **Versioned prioritisation, separate from `report.findings` order.** A four-rung visible
-  ladder (blocking → path position → confidence → `SCAN_CONDITION_ORDER` as final tie-break);
-  every position carries the **enumerated reason code of the rule that placed it**. Only two
-  rungs fire in Phase 1 and a sweep pins that the others never bind.
-  `SCAN_PRIORITISATION_RULE_SET_VERSION` is a **separate constant feeding a separate report
-  field** (P47)
-- **Deterministic dependencies** — one entry per pair, `should_precede` under `stage_order`.
-  `blocked_by`, `independent`, `should_follow` and three of the four canonical rules are
-  declared and **never emitted** in Phase 1, pinned by sweep. Every sentence states it is
-  about the order things can be **measured** in, never about cause
-- **Four-state impact classification** (`quantified` / `directional` /
-  `material_unquantifiable` / `insufficient_evidence`) as **presentation only** over the
-  reason codes sizing already produces. The classifier cannot reach the operands, so
-  `directional` cannot be upgraded
-- **Evidence-gap reporting** — fourteen codes derived from confidence caps, sizing reasons and
-  **funnel stage state**, deduplicated and stably ordered. The raw answers are not read, which
-  is what makes the set reconstructible from the report. `no_permitted_expression` produces
-  **no gap**
-- **The user-visible report** gains *"Where your enquiries are going"* (on every report,
-  including zero-findings), *"Where to start"*, a priority line and impact-class line on each
-  existing card, *"How these relate"* and *"What would sharpen this"*. The surface holds no
-  rule of its own
-
-**What PR #92 preserved, verified rather than assumed:** existing finding detection unchanged
-(`deriveFindings` untouched) · `report.findings` still in **`SCAN_CONDITION_ORDER`** ·
-**`SCAN_RULE_SET_VERSION` unchanged at `v1`** · zero-findings behaviour preserved and pinned ·
-**the nine questions untouched** in wording, options, requiredness and order · `scanQuestions`,
-`scanValidation`, `scanLostRevenue` and `scanRecommendations` with **zero diff** · **no Remy
-change** · and **no persistence, database, schema, tenant, account, API route, model, prompt,
-provider, network call, clock, analytics or external runtime** added. All twelve deleted lines
-were audited individually and every one is an in-place widening; **no pre-existing assertion
-was weakened to make the implementation pass.**
-
-**Verification:** PR D suites 124 pass / 0 fail; free-tools 455 / 0; full repository **1998
-pass / 0 fail / 0 skipped**; `tsc` clean; ESLint at the existing baseline with 0 problems in
-PR D files; build successful; `git diff --check` clean. In production: `/api/health` HTTP 200
-`database: ok`, homepage HTTP 200, **`/free-tools/business-opportunity-scan` HTTP 200**, and
-**the deployed client bundle was confirmed to contain the funnel implementation** — the string
-*"Where your enquiries are going"* located in `/_next/static/chunks/1o1od15vo02n2.js` — so the
-diagnosis layer is genuinely live, not merely built. The feature branch was deleted locally
-and on origin after `git branch -d` accepted it. **Deployment-to-merge correspondence is NOT
-SHA-verified** (no Git metadata from `vercel inspect`, as for PRs #54, #58, #60, #62, #66, #68,
-#70 and #89); identification rests on the deployment appearing two seconds after the merge and
-carrying the production aliases.
-
-**One implementation discrepancy, found and corrected before merge.**
-`unanswered_count_not_given` and `unanswered_count_unknown` were specified to derive from the
-sizing reasons `q4_missing` / `q4_not_sure` — but **sizing only runs on a finding, and an
-absent or "not sure" Q4 raises none** (§87.4), so both codes were unreachable. They now derive
-from the `enquiry_answered` **stage state**, with the approved blocking, information-gain and
-effort semantics preserved exactly; the Q6/Q7 gaps moved onto the same table, so there is **one
-mechanism instead of two**. **No finding is manufactured and sizing still never runs without
-one.**
-
-**What PR #92 did NOT do, and what its merge does not approve:** clusters (§102) and hypotheses
-(§103) — both Part XIV contracts, both deliberately out of scope · scenario output (**L35**) ·
-`evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token linkage and the
-consent and promotion flow (Part XII §89) · outcome or impact measurement · any Part XIII
-provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit pre-fill · the
-standalone Lost Revenue entry · a second business process · a fourth condition code · and every
-later Scan phase. **PR D is complete and closed.** *(Clusters have since shipped as **PR #94**;
-see below. The rest of this list stands.)*
-
-**OPPORTUNITY CLUSTERS SHIPPED — PR E IS COMPLETE AND CLOSED (PR #94, approved head `5df75eb`,
-normal merge commit `4cfd87d` 2026-09-13, deployed as `dpl_2ZdxdkENNy42SLrXWy7NaecSNGur` —
-Ready on the production aliases — and verified).** The build against Part XIV **§102**, and
-deliberately the smallest Scan increment: tracing canon rather than filling a table left exactly
-two relations emittable. Eight files: two added, six modified, **+1243 / −4**.
-`docs/ARCHITECTURE.md` is unchanged.
-
-- **A cluster is a stated relation between exactly TWO findings.** It references them by opaque
-  id and **holds no copy**: not a finding, not a score, not a container, not a new record type.
-  One new module, `src/lib/freetools/scanClusters.ts`, held to the same boundary suite, which
-  now covers **twelve modules**
-- **STRICTLY DOWNSTREAM, and structurally so.** `deriveFindings`, `computeLostRevenue`,
-  `prioritise`, `deriveDependencies`, `deriveEvidenceGaps` and `recommendFor` neither import it
-  nor take a clusters argument, and only the assembler imports it. **Clustering never replaces,
-  collapses, summarises, re-ranks or re-confidences a finding**, and `report.findings` is
-  unchanged in count, content and **`SCAN_CONDITION_ORDER`**
-- **Phase 1 emits exactly two relations:** `sequential_in_one_process` (literally adjacent
-  funnel stages) and `independent` (the fallthrough, and per §102 a real output). **Fewer than
-  two findings produces no clusters at all**
-- **The other three relations stay declared and intentionally unreachable**, each blocked by
-  missing CANON rather than missing code: `shared_cause_candidate` needs hypothesis sets
-  (§103); `competing_for_same_resource` needs a canonical resource model; `masked_measurement`
-  needs a canon-traceable finding-to-finding trigger. **No hypothesis, resource or masking
-  model was invented to make them fire, and no proxy stands in** — a sweep pins that they never
-  fire, and a source-level test proves the module cannot read a finding's evidence, confidence
-  or cap
-- **Adjacency is LITERAL.** `work_booked` is never assessed and is not skipped, so
-  `booking.friction` and `enquiry.no_followup` fall through to `independent` rather than being
-  related across a stage the Scan refuses to judge
-- **`independent` means our rules established nothing, never that the findings are unrelated.**
-  Its confidence is deliberately `low`, and the wording says so
-- **A cluster carries its OWN provenance and relation confidence and inherits neither.**
-  `source_type` is **`derived_deterministic`**; the type cannot express `business_provided`.
-  Proven not to inherit: `independent` stays `low` where both members are `high`
-- **`cluster_rule_set_version` is independently versioned** (§107.3), its own constant feeding
-  its own report field, present even when `clusters` is empty. `SCAN_RULE_SET_VERSION` and
-  `SCAN_PRIORITISATION_RULE_SET_VERSION` did not move
-- **No new report section.** The established relation renders as one line inside the existing
-  *"How these relate"* area; pairs the rules did not relate are covered by **one honest
-  sentence** rather than a row each. Finding cards and their order are unchanged; the footer
-  gains only the relation rule-set version
-- **Provider-independent, model-independent, zero-persistence.** No clock, randomness,
-  identifier generation, network, storage, tenant or provider is reachable; imports are limited
-  to `scanFunnel` and `scanTypes`
-
-**Upstream non-interference was proven, not assumed:** across twelve scenarios every PR D field
-— findings, impact and sizing, recommendations with their next steps, product attribution and
-handoffs, `impact_class`, funnel, `earliest_leak`, dependencies, prioritisation and evidence
-gaps — was recomputed from the shipped modules with no clusters in play and **deep-compared**
-against the report. All deep-equal. A suppressed finding (Q4 > Q3) is never clustered, and
-**Remy and every unrelated system were untouched.**
-
-**Verification:** cluster suite **37 pass / 0 fail**; PR D suites **124 pass / 0 fail,
-unmodified**; free-tools **502 / 0**; full repository **2045 pass / 0 fail / 0 skipped**; `tsc`
-clean; ESLint **0 problems in PR E files** with the repository baseline unchanged at **11 (7
-errors, 4 warnings)**; build successful with the Scan route still **static / prerendered**;
-`git diff --check` clean. In production: `/api/health` **HTTP 200** `database: ok`, homepage
-**HTTP 200**, `/free-tools/business-opportunity-scan` **HTTP 200** — and **all twelve client
-chunks were fetched and inspected, locating four distinct cluster markers** (*"two points on
-one path"*, *"not the same as knowing"*, *"No link has been established"*, *"relation rules"*)
-in `/_next/static/chunks/3yivmzi59j782.js`, so the cluster functionality is **genuinely live
-rather than merely routable**. The feature branch `feat/scan-opportunity-clusters` was deleted
-locally and remotely **after** production verification succeeded, with containment proved first.
-**Deployment-to-merge correspondence is NOT SHA-verified** (no Git metadata from `vercel
-inspect`, as for PRs #54 through #92); identification rests on the three-second adjacency, the
-production aliases and the bundle-content proof.
-
-**One reviewed scope extension, accepted deliberately.** `tests/freeToolsScanSurface.test.mjs`
-was outside the permitted-modify list, but its pre-existing **exact-match** footer assertion
-could not survive the required `cluster_rule_set_version`. It was **extended, never loosened**:
-same mechanism, same literal prefix and order, each version read from its own report field, one
-requirement added.
-
-**What PR #94 did NOT do, and what its merge does not approve:** hypotheses (§103) · scenario
-output (**L35**) · `evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token
-linkage and the consent and promotion flow (Part XII §89) · outcome or impact measurement · any
-Part XIII provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit
-pre-fill · the standalone Lost Revenue entry · a second business process · a fourth condition
-code · and every later Scan phase. **PR E is complete and closed**, and the next milestone is
-still Google's verification review. *(Hypotheses have since shipped as **PR #99**; see below.
-The rest of this list stands.)*
-
-**DIAGNOSTIC HYPOTHESES SHIPPED — PR F IS COMPLETE AND CLOSED (PR #99, approved head
-`2a3baf8`, normal merge commit `33171f015bdddec0c28a67058dfc16d23c226ff1` 2026-09-14, deployed
-to production — Ready on `niteowlhq.com` / `www`, **SHA-verified** from the build log's
-`Cloning … (Commit: 33171f0)` — and verified: `/api/health` HTTP 200 `database: ok`, homepage
-200, `/free-tools` 200, `/free-tools/business-opportunity-scan` 200, and the string *"What might
-be behind this"* located in the live client bundle).** The build against Part XIV **§103**, the
-last of the six Part XIV contracts, and the only remaining gap in the loop's **Explain** stage.
-Nine files: two added, seven modified, **+1060 / −5**. `docs/ARCHITECTURE.md` is unchanged.
-
-- **A hypothesis is a candidate explanation, and that is its ceiling.** One new pure module,
-  `src/lib/freetools/scanHypotheses.ts` (imports `scanTypes` only), held to the same boundary
-  suite, which now covers **thirteen modules**. Each finding now carries
-  `hypotheses: ScanHypothesis[]` — ranked, **no winner** (no `is_primary`, `winner` or
-  `selected` exists, and a one-item list is still ranked and reason-coded) — plus
-  `hypotheses_empty_reason: "no_rule_matched" | null`. **`claim_class` is the literal
-  `"hypothesis"`**: `asserted_cause` and `observation` are unrepresentable in the type, the
-  §101 `observed` pattern applied to §103 and **P50** designed out at the type rather than at
-  promotion
-- **Every emitted hypothesis names the evidence it rests on** — at least one owner answer,
-  quoted verbatim as `business_provided` — and `source_type` is `derived_deterministic`. A
-  **closed rule table** keyed by condition and answers: four rules for `enquiry.unanswered`
-  (Q2 working hours / varies, Q1 three or more channels, Q5 no / sometimes) and two for
-  `booking.friction` (Q1 message-based channels, Q2 working hours / varies). **Q1 and Q2 are
-  read only as evidence for an explanation; Q1/Q2-aware routing (§87.2) remains deferred**
-- **`enquiry.no_followup` has no rules, deliberately.** Q6 *is* the practice, and nothing
-  else the owner said explains why it is what it is, so its list is **empty with a stated
-  reason** and nothing is invented to fill it. The empty case renders *"Your answers don't
-  point to a particular reason."* — a real answer, not a gap
-- **Hypothesis confidence is its own and inherits nothing.** Fixed per rule; the entry point
-  takes the **condition, not the finding**, so the finding's confidence and cap are
-  structurally unreadable. Pinned in both directions: a low-confidence finding carries a
-  medium hypothesis, a high-confidence finding carries a low one
-- **The wording stays tentative** — *may / could / suggests* — and a test refuses
-  *because / caused / cause of / root cause / is why* in every display text and in the
-  rendered section. **This is an explanatory layer, not proof of causation**, and the Atlas
-  boundary (§100.3) is untouched: the Scan still asserts no cause and reasons across no domain
-- **`SCAN_HYPOTHESIS_RULE_SET_VERSION`** is its own constant feeding its own report field,
-  present on every report; the finding, ordering and relation versions did not move
-- **No new report section.** One *"What might be behind this"* block inside each existing
-  finding card, after *How confident we are*; the footer gains only *explanation rules v1*.
-  No CTA, link, product, handoff or storage
-- **Strictly downstream, and structurally so.** Only the assembler imports the module;
-  `deriveFindings`, sizing, prioritisation, dependencies, evidence gaps, recommendations and
-  **clusters** neither import it nor take hypotheses. **`shared_cause_candidate` is NOT
-  activated** — the cluster layer still cannot read hypotheses, and a test pins that the
-  relation never fires even where two findings' hypotheses overlap on the same answer
-- **Provider-independent, model-independent, zero-persistence.** No clock, randomness,
-  identifier generation, network, storage, tenant, provider or model is reachable
-
-**Upstream non-interference was proven, not assumed:** across fourteen scenarios (including a
-suppressed Q4 > Q3 finding and a Q3 *not sure*) every pre-existing report field was
-recomputed from the shipped modules and **deep-compared** against the report; a key-set pin
-shows the only new keys are the two per-finding fields and the report version; finding order
-stays **`SCAN_CONDITION_ORDER`** and the count is unchanged. All five deleted lines were
-audited: each is an in-place widening (footer clause, import allow-list, destructuring), and
-**no pre-existing assertion was weakened.**
-
-**Verification:** hypotheses suite **41 pass / 0 fail**; all Scan suites **492 / 0**; full
-repository **2139 pass / 0 fail / 0 skipped**; `tsc` clean; ESLint **0 problems in the nine
-changed files** with the repository baseline unchanged at **11 (7 errors, 4 warnings)**; build
-successful with the Scan route still **static**; `git diff --check` clean. **Six mutation
-checks, each verified to have landed and then fully restored:** no evidence ref fails 10,
-`claim_class` changed fails 2, *because* introduced fails 2, confidence inherited from the
-finding fails 4, findings reordered fails 3, a hypothesis invented for the empty state fails 4.
-The feature branch was deleted locally and on origin after production verification.
-
-**What PR #99 did NOT do, and what its merge does not approve:** `shared_cause_candidate`
-activation (the natural follow-on, its own decision) · scenario output (**L35**) ·
-`evidence_refs[].role` (**P49**) · persistence, run identity, bearer-token linkage and the
-consent and promotion flow (Part XII §89) · outcome or impact measurement · any Part XIII
-provenance runtime · cross-product learning · Q1/Q2-aware routing · Setup Kit pre-fill · the
-standalone Lost Revenue entry · a second business process · a fourth condition code · any
-model call or prompt · and every later Scan phase. **PR F is complete and closed.** All six
-Part XIV contracts are now built; the next Scan increment, whatever it is, needs its own
-approval.
-
-**Documented non-blocking follow-ups from the PR #84 reviews, all still open:** S1–S5
-(confidence levels and cap policy that the implementation chose and canon does not yet
-specify) and N.1–N.4 (a displayed low of 0 after outward rounding, recomputation not
-re-running eligibility, two stale prose comments). Recorded in `CHANGELOG.md` under PR #84.
-
-**Its MVP contract is `docs/ARCHITECTURE.md` Part XI (§80–§86)** — the promise, the three
-Phase 1 finding classes, the Lost Revenue sizing module, the finding and input contracts,
-routing, the outcome loop and the IN / NOT IN / PREPARE / LATER classification. Part XI is a
-**contract, not a plan**: it schedules nothing and creates no NOW item.
-
-**Its three Phase 1 contract decisions are resolved in Part XII (§87–§90)** — the three
-condition codes and nine owner-facing questions, **one** permitted Lost Revenue expression
-(two of the three candidates were rejected as unsizeable without an invented rate, so
-`enquiry.no_followup` and `booking.friction` always report impact UNKNOWN in Phase 1), the
-`estimate_basis` recomputability contract, and the consent and promotion wording. **Parts XI
-and XII remain contracts: PR #84 implemented the Phase 1 logic they specify, and nothing
-beyond it — the consent and promotion flow in particular is unimplemented.**
-
 The flagship free acquisition and discovery product. Its purpose is to identify
 evidence-backed opportunities and problems: revenue leakage · missed enquiries · weak
 follow-up · unused capacity · booking and scheduling friction · cash-flow friction · marketing
 inefficiency · operational bottlenecks · retention problems · repeat-business opportunities.
+
+**Its contracts are `docs/ARCHITECTURE.md` Part XI (§80–§86, the MVP contract — *a contract,
+not a plan*), Part XII (§87–§90, the three Phase 1 decisions) and Part XIV (§100–§108, the
+intelligence contracts).** Parts XI and XII schedule nothing and create no NOW item.
 
 **It must distinguish four things, and the distinction is the product:**
 
@@ -1196,12 +479,49 @@ inefficiency · operational bottlenecks · retention problems · repeat-business
 | **Assumption** | What had to be taken as true to get there | `assumed` (§20.6), carried in the Finding's `assumptions` |
 
 **Where impact is estimated, the evidence, assumptions and confidence are exposed rather than
-invented precision.** This is not a new rule — §26 already states that visible assumptions are
-what separate a finding from a sales figure, and §43.2 already requires a range, a direction or
-*"unknown"* rather than a fabricated number. Part X **P39** adds the one the commercial framing
-makes easy to forget: **an estimate never enters the Outcome Spine as a measured outcome, and
-never becomes the baseline a later paid outcome is graded against.**
+invented precision** (§26, §43.2). Part X **P39** adds the one the commercial framing makes
+easy to forget: **an estimate never enters the Outcome Spine as a measured outcome, and never
+becomes the baseline a later paid outcome is graded against.**
 
+### What has shipped
+
+**Each entry's full closeout — files, test counts, mutation checks, deployment ids, the
+"what this merge does NOT approve" list — is in `CHANGELOG.md` at the dated entry for that
+PR.** Nothing below is Remy V1 or V1.1 work.
+
+| Increment | PR / merge | What it is |
+|---|---|---|
+| Phase 1 pure logic | **#84** `7d242d8`, 2026-09-11 | Five pure modules under `src/lib/freetools/` — the nine questions, validation, the deterministic finding engine over three condition codes, E1 Lost Revenue sizing, the frozen `estimate_basis`. **Logic only, no product surface** |
+| Phase 1 recommendation layer | **#87** `6055f64`, 2026-09-11 | One deterministic recommendation per finding, keyed by `finding.condition` alone. `proposed` / `recommend` / `derived_deterministic` — **it authorises nothing**. Q1/Q2-aware routing deferred |
+| Phase 1 public surface | **#89** `f3ab620`, 2026-09-12 | The questionnaire and report a visitor actually uses. **It stores nothing** — no storage, cookie, query string, API route, database write or network call |
+| Enquiry funnel diagnosis (**PR D**) | **#92** `97dda2b`, 2026-09-13 | The five-stage funnel, earliest-leak detection, versioned prioritisation, dependencies, four-state impact classification, evidence gaps. **No stage can ever be `observed`** |
+| Opportunity clusters (**PR E**) | **#94** `4cfd87d`, 2026-09-13 | Deterministic pairwise relations between existing findings. Phase 1 emits `sequential_in_one_process` and `independent` only; the other three stay declared and unreachable until their canonical models exist |
+| Diagnostic hypotheses (**PR F**) | **#99** `33171f0`, 2026-09-14 | *"What might be behind this"* — evidence-referenced candidate explanations from a closed rule table, ranked with **no winner**, tentative wording only. **An explanatory layer, never proof of causation**; `shared_cause_candidate` NOT activated |
+
+**All six Part XIV contracts are now built. PRs D, E and F are complete and closed.**
+
+### What is NOT built, and what none of those merges approves
+
+Persistence of a run · run identity or bearer-token linkage · the consent and promotion flow
+(Part XII §89) · any database, schema, migration or RLS · tenant or `org_id` identity · a
+`DecisionRecord`, Spine event, Business Memory or Business Graph write · outcome or impact
+measurement · any Part XIII provenance runtime · cross-product learning · any model call,
+prompt or provider change · Q1/Q2-aware routing · Setup Kit pre-fill · scenario output
+(**L35**) · `evidence_refs[].role` (**P49**) · `shared_cause_candidate` activation · a second
+business process · a fourth condition code · and every later Scan phase. **Each is its own
+decision, and the next Scan increment needs its own approval.**
+
+### Open non-blocking items
+
+- **S1–S5 and N.1–N.4** from the PR #84 reviews — confidence levels and cap policy the
+  implementation chose and canon does not yet specify; a displayed low of 0 after outward
+  rounding; recomputation not re-running eligibility; two stale prose comments. Recorded in
+  `CHANGELOG.md` under PR #84.
+- **Keyboard-only navigation of the Scan surface was NOT performed** (PR #89). It is an
+  **unperformed manual check, not a pass**, carried to V1.1/later. The non-blocking judgement
+  rests on code evidence — native interactive elements throughout, no `tabIndex` override, no
+  custom widget or focus trap, errors already carrying `role="alert"`. **Do not later record
+  it as verified without actually performing it.**
 ## 2. Lost Revenue Scan
 
 **PHASE 1 SIZING LOGIC SHIPPED with PR #84 (`scanLostRevenue.ts` — E1 only); the standalone
@@ -1319,220 +639,58 @@ governed disclosure**, with per-claim consent and evidence frozen as of publicat
 ## 7. Organic Acquisition Engine
 
 **Canonical as of 2026-09-14. An extension of the existing architecture, not a second one.**
-The engine is the distribution/acquisition layer on top of §1–§6 above and the architecture
-they already rest on — `docs/ARCHITECTURE.md` §26 (value before any account, no inferred
-identity, own namespace, explicit promotion), `docs/AGENT_ACCESS_LAYER.md` §25 (free products as
-distribution; repeat usage linked only by a token the visitor holds; the §25.2 provenance floor
-on cross-visitor learning), §84.3 (honest routing, and away from Remy), §76/§77 (an estimate is
-never a measured outcome; a named result is a governed disclosure) and §72.2 S3 (a dependency is
-classified at adoption). A read-only reconciliation of the proposal against canon found **no
-conflict**: every component was already present, a compatible extension, or deferred by an
-existing rule, and the three items needing decisions are recorded below rather than assumed.
+The engine is the distribution / acquisition layer on top of §1–§6 above and the architecture
+they already rest on — `docs/ARCHITECTURE.md` §26, §72.2 S3, §76, §77, §84.3 and
+`docs/AGENT_ACCESS_LAYER.md` §25. A read-only reconciliation against canon found **no
+conflict**.
 
-**Binding rules for every phase:** free value is delivered before any commercial ask, and never
-crippled to force one · no visitor identity is ever inferred (no fingerprint, IP, domain or
-behavioural matching) · acquisition surfaces reuse the canonical Scan findings, hypotheses,
-recommendations and routing — **no parallel SEO diagnosis or recommendation engine** · no
-invented statistics, benchmarks, reviews, ratings, customer results or location pages · a free
-Scan estimate never becomes a measured outcome · every external SEO / analytics / email provider
-is registered under S3 / P37 before it is depended on · **aggregate acquisition measurement,
-visitor journey tracking and measured business outcomes are three different things** and are
-never conflated · **a competitive or growth argument is never on its own a NOW** (§78).
-
-**The phase ladder:**
+**Binding rules for every phase:** free value is delivered before any commercial ask, and
+never crippled to force one · **no visitor identity is ever inferred** (no fingerprint, IP,
+domain or behavioural matching) · acquisition surfaces reuse the canonical Scan findings,
+hypotheses, recommendations and routing — **no parallel SEO diagnosis or recommendation
+engine** · **no invented statistics, benchmarks, reviews, ratings, customer results or
+location pages** · **a free Scan estimate never becomes a measured outcome** · every external
+SEO / analytics / email provider is registered under S3 / P37 before it is depended on ·
+**aggregate acquisition measurement, visitor journey tracking and measured business outcomes
+are three different things** and are never conflated · **a competitive or growth argument is
+never on its own a NOW** (§78).
 
 | Phase | Scope | Status |
 |---|---|---|
-| **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR #101, merge `fcd2e68`, production-verified 2026-09-14 (below) |
-| **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, using canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR #103, merge `adb30c7`, production-verified 2026-09-14 (below) |
-| **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire (the A-2 decision below) | **SHIPPED** — PR #105, merge `31bbd45`, production-verified 2026-09-14 (below) |
-| **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
+| **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR **#101** `fcd2e68`, production-verified 2026-09-14 |
+| **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR **#103** `adb30c7`, production-verified 2026-09-14 |
+| **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
+| **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, a field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
-**A-1 — SHIPPED (PR #101, approved head `840657e`, normal merge commit
-`fcd2e68234479a4d5f0e88dbb1a0df3583cfa7d8` 2026-09-14T17:40:02Z, deployed to production —
-Ready, target production, branch `main`, build log `Cloning … (Commit: fcd2e68)` matching the
-merge commit, `niteowlhq.com` / `www` aliases attached — and verified).** Nine files, +759 / −15:
+**Full closeouts for A-1, A-2a and A-2b — files, tests, pinned guarantees, production
+verification — are in `CHANGELOG.md` at the dated entries for PRs #101, #103 and #105.** What
+they established and preserved, in one line each: the sitemap carries **no `lastModified`**
+because no reliable per-route date exists; the public and private route lists **partition the
+real `src/app` inventory**, so an unclassified new page fails before a crawler finds it;
+problem pages take their wording from `SCAN_RECOMMENDATIONS` **verbatim** and `why_it_matters`
+is excluded because it would diagnose a stranger; **`enquiry.no_followup` keeps its canonical
+`recommended_product: null` truth visible**; every CTA is the literal Scan path with **no query
+string, hash, prefill or carried state**; and the Lost Revenue page **calculates nothing**.
+The sitemap now carries **ten** approved public URLs. **`isPrivatePath` is segment-aware — a
+substring check wrongly flags `/booking` inside `…/problems/booking-back-and-forth`; do not
+repeat that check.**
 
-- `src/lib/site/publicRoutes.ts` — the **canonical public-route inventory**: six indexable
-  pages (`/`, `/free-tools`, the two tools, `/privacy`, `/terms`) and fifteen private route
-  families (`/dashboard /chat /leads /calendar /knowledge /settings /onboarding /admin /api
-  /auth /login /signup /reset-password /forgot-password /booking` — the manage-booking link is
-  token-gated, so private). One list read by the sitemap, robots and the tests; a test pins
-  that the two lists **partition the real `src/app` inventory**, so an unclassified new page
-  fails before a crawler can find it
-- `src/app/sitemap.ts` and `src/app/robots.ts` — the Next file conventions. **The sitemap
-  carries no `lastModified`**: no reliable per-route date exists and none is invented (no
-  clock, no file mtime, no hand-typed stamp), so the output is byte-identical for every call
-- per-free-tool **canonical / OpenGraph / Twitter metadata** (titles and descriptions
-  unchanged; the tool pages previously inherited Remy's OpenGraph from the root layout)
-- `src/lib/site/structuredData.ts` — **truthful JSON-LD** for the hub (`CollectionPage`
-  listing the tools by reference) and both tools (`WebApplication`, free offer,
-  `isAccessibleForFree: true`). **Publisher is the brand, `NiteOwl AI`, not a legal entity**
-  — the smallest truthful representation; company/legal identity lives in Privacy and Terms
-  and is not restated. The shape has no field for a rating, review, count, saving, benchmark
-  or location, and the only numeral is the zero price. Rendered as a script string child with
-  `<` written as `<` — no `dangerouslySetInnerHTML`
-- **internal linking verified, not changed**: hub → tools, layout nav → hub and home, footer →
-  privacy and terms
-- **zero persistence, zero identity, zero tracking/analytics, zero provider dependency** — no
-  cookie, storage, request API, fetch, database, analytics name, external host or new package
-  in any A-1 file, pinned by test · **no change to Scan intelligence** (`src/lib/freetools`
-  zero diff), **no change to Remy**, **no change to routing or recommendations** · **no
-  Lost-Revenue entry page yet** · one reviewed test extension: the Scan surface's import
-  allow-list gains the single alternative `@/lib/site/(publicRoutes|structuredData)` so the
-  Scan page can use the shared JSON-LD builder rather than duplicating its shape
-
-**Production verification (2026-09-14):** `/api/health` **200** `{"status":"ok","database":"ok"}`
-· `/` **200** · `/free-tools` **200** · `/free-tools/business-opportunity-scan` **200** ·
-`/free-tools/ai-receptionist-setup-kit` **200** · `/sitemap.xml` **200 with exactly the six
-approved public URLs**, all on `https://niteowlhq.com`, zero private routes, **zero `lastmod`
-elements** · `/robots.txt` **200** with all fifteen private families disallowed and
-`Sitemap: https://niteowlhq.com/sitemap.xml`. Automated: `organicDiscoverability` 34 / 34,
-all free-tools + Scan suites 577 / 577, full suite 2173 / 0 / 0, `tsc` clean, ESLint 0
-problems on the nine files, build with `/sitemap.xml` and `/robots.txt` static.
-
-**A-2a — SHIPPED (PR #103, approved head `83d8906`, normal merge commit
-`adb30c7488ef18c343bb90c111a87b33df35cca2` 2026-09-14T18:18:08Z, deployed to production — Ready,
-target production, branch `main`, build log `Cloning … (Commit: adb30c7)` matching the merge
-commit — and verified).** Ten files, +854 / −1; `src/lib/freetools`, the Scan surface, the Setup
-Kit, `sitemap.ts` and `robots.ts` all zero diff.
-
-- **Exactly three public problem-led pages, mapped 1:1 to the three canonical Scan condition
-  classes** and keyed by `ScanConditionCode`, so a fourth page needs a fourth code (a Part XI
-  boundary change) and cannot be added by editing prose:
-  `/free-tools/problems/unanswered-enquiries` → `enquiry.unanswered` ·
-  `/free-tools/problems/enquiries-that-do-not-book` → `enquiry.no_followup` ·
-  `/free-tools/problems/booking-back-and-forth` → `booking.friction`
-- **Canonical wording provenance.** `src/lib/site/problemPages.ts` is a static content map:
-  each page's headline and "One thing you can do" are
-  `SCAN_RECOMMENDATIONS[condition].headline` / `.next_step` **verbatim** (pinned by deep-equal),
-  so the pages and the report cannot drift apart. **`why_it_matters` is excluded** — it begins
-  *"You told us that…"* and would diagnose a stranger — and **no hypothesis `display_text` is
-  echoed**; both absences are pinned
-- **Static educational mechanism prose only.** "How this tends to happen" explains how a
-  problem tends to arise in general; every paragraph carries a hedge (*may / can / often /
-  tends / might / could*, pinned) and no digit appears on any page (pinned). **No diagnosis from
-  page content**: ban-lists over rendered text, metadata and JSON-LD refuse statistics,
-  benchmarks, currency claims, *"businesses like yours"*, customer counts, reviews, ratings,
-  testimonials, locations, *"you are losing"*, *"your business is"*, *"because your"*, *"root
-  cause"*, and funnel pressure (sign up, log in, pricing, trial, urgency)
-- **No thresholds, no answer comparisons, no duplicated Scan engine logic.** The map holds no
-  `applies`, reads no answer and compares nothing; no page calls or imports a Scan engine
-  module; `validateScanAnswers` and `buildScanReport` remain called from `ScanClient.tsx`
-  only (all pinned). The Scan is the only place a statement about *a* business is made
-- **CTA routes to the unchanged Business Opportunity Scan** — the literal
-  `/free-tools/business-opportunity-scan`, **no query-string mode, no prefill, no fragment, no
-  state carried**; every `href` on a page ∈ {Scan, hub, Setup Kit}. `ScanClient` reads no
-  entry/mode parameter (pinned)
-- **Honest routing preserved per class.** `booking.friction` additionally shows the canonical
-  `SETUP_KIT_HANDOFF` verbatim, once; **`enquiry.no_followup` keeps the canonical
-  `recommended_product: null` truth visible** — *"There is nothing to buy for this…"*, no
-  product, no handoff; Remy is named at most once per page, as attribution **after** the advice
-  and the CTA, never *"Remy fixes this"*; metadata titles and descriptions name no product.
-  **No Remy pressure**
-- **Zero persistence, identity, cookies, storage, analytics, tracking, provider, dependency,
-  form or contact capture.** Server components only — no client directive, hook, request API,
-  fetch, database, external host or `<script src>` in any A-2a file (pinned). `WebPage` JSON-LD
-  with the brand-only publisher via the A-1 builder; A-1's canonical / OpenGraph / Twitter
-  metadata pattern
-- **No questionnaire change, no Scan contract or version change**: `SCAN_QUESTIONS.length ===
-  9`, six required, `SCAN_QUESTION_SET_VERSION` and all four rule-set versions still `v1`
-  (pinned). **No Lost-Revenue entry page yet** — A-2b is not started *(true at PR #103; A-2b
-  has since shipped as **PR #105**, recorded below)*
-- The three routes were registered in the A-1 public-route registry (sitemap and robots consume
-  it unchanged); the `/free-tools` hub gained a *"Common problems"* section with three internal
-  links and no form or capture; `tests/organicProblemPages.test.mjs` (37) pins everything above,
-  and `organicDiscoverability`'s exact sitemap list was extended from six to nine URLs
-
-**Production verification (2026-09-14):** PR #103 merged normally · production deployment
-**Ready**, target production, **commit matched the merge commit** · the three new routes
-**HTTP 200** (with `/`, `/free-tools`, both tools also 200; `/api/health` 200 `database: ok`) ·
-`/sitemap.xml` **200 containing the nine approved public URLs** (A-1's six plus the three
-problem-led routes), zero `lastmod` · `/robots.txt` **200** · **the private-route partition
-remained intact** — a quick shell grep first reported one "private" hit, which was the substring
-`/booking` inside `…/problems/booking-back-and-forth`; it was **disproved with the canonical
-segment-aware `isPrivatePath` check (0 private paths)**, and is recorded so nobody repeats the
-substring check · local `main` = `origin/main` · feature branch deleted locally and remotely.
-Automated: `organicProblemPages` 37 / 37, `organicDiscoverability` 34 / 34, all free-tools + Scan
-+ A-1 + A-2a suites 614 / 614, full suite 2210 / 0 / 0, `tsc` clean, ESLint 0 problems on the ten
-files, build with the three routes static.
-
-**A-2b — SHIPPED (PR #105, approved head `771233e`, normal merge commit
-`31bbd45af3e1fbbd6914f4b72c42d4fb44cb3947` 2026-09-14T22:12:42Z, deployed to production — Ready,
-target production, branch `main`, build log `Cloning … (Commit: 31bbd45)` matching the merge
-commit, `niteowlhq.com` / `www` aliases attached — and verified).** Six files: three added, three
-modified, +581 / −3; `src/lib/freetools`, the Scan surface, the Setup Kit, `problemPages.ts`,
-`ProblemPageView.tsx`, the three A-2a pages, `sitemap.ts`, `robots.ts` and `structuredData.ts`
-all zero diff.
-
-- **Purpose.** A discoverable **Lost Revenue framing / entry page** at
-  **`/free-tools/lost-revenue`** for people searching around missed enquiries and lost revenue.
-  It explains what the existing nine-question Business Opportunity Scan **can and cannot size**;
-  it **performs no calculation itself**, **diagnoses nobody**, **carries no visitor state**, and
-  sends the visitor to the **unchanged** Scan, which remains the sole validator, sizing, finding,
-  recommendation and report path
-- **Implementation.** A static, server-rendered page (`src/app/free-tools/lost-revenue/page.tsx`)
-  over one content module (`src/lib/site/lostRevenuePage.ts`); the public-route registry
-  extended by one route, so the **exact sitemap public-route count becomes 10** with **no change
-  to `sitemap.ts` or `robots.ts` logic**; `WebPage` JSON-LD from the existing structured-data
-  builder with the brand-only publisher; the A-1 canonical / OpenGraph / Twitter metadata
-  pattern; the `/free-tools` hub gains **one internal Lost Revenue link** beneath *Common
-  problems* — not a fourth card
-- **Exactly one CTA**, *"Start the free Scan"*, whose `href` is the literal
-  `/free-tools/business-opportunity-scan` — **no query string, hash, prefill, mode, answer
-  transfer or state**. The page links only to approved internal destinations already verified in
-  production: the Scan, the canonical unanswered-enquiries problem page, and the hub
-- **Wording provenance.** The sized problem is named by
-  `SCAN_RECOMMENDATIONS["enquiry.unanswered"].headline` verbatim; the sizing ideas are restated
-  in plain prose **without importing or executing the engine** — missed enquiries assumed to
-  convert at about the same rate as answered ones (and that this is likely generous), the
-  visitor's own typical job value, a range worked out from those answers alone, the UNKNOWN gates
-  in their own terms, and *"An estimate, not a measurement"* — each idea pinned by test so the
-  prose cannot drift into a different economic claim. **No number appears on the page**
-- **Truthfulness preserved, all pinned:** the nine-question Scan contract unchanged
-  (`SCAN_QUESTIONS.length === 9`, the six required ids), `SCAN_QUESTION_SET_VERSION` and all four
-  rule-set versions still `v1`; **no duplicate sizing or calculation logic and no engine call**
-  from the page (a string-stripped arithmetic / threshold / answer-comparison detector, plus a
-  ban on naming any sizing module); **UNKNOWN stated as "a real answer, not a failure"**; the
-  estimate never represented as a measurement, comparison, promise or recovery; ban-lists refuse
-  statistics, benchmarks, averages, results, reviews, locations, urgency and recovery claims;
-  **no product pressure, no Remy mention**; no persistence, identity, cookies, storage,
-  analytics, tracking, provider coupling, contact capture or new dependency; `validateScanAnswers`
-  and `buildScanReport` still called only from `ScanClient.tsx`, which still reads no entry /
-  mode / prefill parameter
-
-**Verification:** `organicLostRevenueEntry` **23 / 23** · `organicDiscoverability` **34 / 34** (ten-URL
-sitemap) · `organicProblemPages` **37 / 37** (still exactly three problem directories) · organic /
-free-tools / Scan / anti-funnel combined **637 / 637** · full suite **2233 pass / 0 fail / 0
-skipped**, 393 suites · `tsc --noEmit` clean · ESLint **0 problems on the six changed files**,
-repository baseline unchanged at **11 (7 errors / 4 warnings)** · `next build` successful with
-`/free-tools/lost-revenue` static · `git diff --check` clean.
-
-**Production closeout (2026-09-14):** PR #105 merged by **normal merge commit**, not squash or
-rebase · production deployment **Ready**, **build commit matched the merge commit** · `/api/health`
-200 `database: ok`; `/`, `/free-tools`, `/free-tools/business-opportunity-scan`,
-`/free-tools/lost-revenue`, the three `/free-tools/problems/*` pages, `/sitemap.xml` and
-`/robots.txt` **all 200** · **sitemap contained exactly the 10 approved public URLs**, an exact match
-to the registry, zero `lastmod`, **no private / auth / admin / API route** by the segment-aware
-`isPrivatePath` check · **the live Lost Revenue page had exactly one Scan CTA anchor with no query
-or hash** (the document's one `?` is Next's `<link rel="icon">`, not a page link) and `WebPage`
-JSON-LD present · feature branch deleted locally and remotely · `main` = `origin/main` = the merge
-commit after cleanup · `supabase/.temp/cli-latest` remained untouched throughout.
-
-**The unresolved A-2 decision, preserved rather than assumed:** **do NOT create a shorter
+**The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
 required (§87.2), with `validateScanAnswers` the sole refusal authority and one
 `SCAN_QUESTION_SET_VERSION`. **A Lost-Revenue surface remains framing / entry only** — a
 different landing and emphasis into the same nine questions and the same `buildScanReport` —
 **unless a separately approved decision creates a new `SCAN_QUESTION_SET_VERSION`** and states
-its §107.3 comparability consequences. Before A-2 is built, a **public-content rule** is also
-to be recorded here: problem pages take their business wording from canonical constants, may
-explain general mechanisms, and may not assert a cause for a specific business, a statistic, a
-benchmark, a customer result or a location; no page exists without genuine content.
+its §107.3 comparability consequences.
 
+**The public-content rule, now established by A-2a and A-2b:** a problem or entry page takes
+its business wording from canonical constants, may explain general mechanisms in hedged terms,
+and **may not assert a cause for a specific business, a statistic, a benchmark, a customer
+result or a location**; no page exists without genuine content.
 ---
+
 # Architecture Rule
 
 Every new feature must:
@@ -1736,44 +894,23 @@ Shipped (previously listed as remaining or future):
 
 Free products (see *Free-Product Strategy* above — none of this is V1 work):
 
-- **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). Do not rebuild
-- **NiteOwl Business Opportunity Scan** — the flagship free acquisition product. **Phase 1
-  pure logic SHIPPED** (PR #84), **Phase 1 recommendation layer SHIPPED** (PR #87, merge
-  `6055f64`), the **Phase 1 public surface SHIPPED, LIVE and production-verified** (PR #89,
-  merge `f3ab620`, 2026-09-12) — a visitor can now complete the Scan and read a report — and
-  the **Enquiry Funnel Diagnosis SHIPPED, LIVE and production-verified** (**PR D**, delivered
-  as PR #92, merge `97dda2b`, 2026-09-13): the funnel, earliest leak, versioned prioritisation,
-  dependencies, four-state impact classification and evidence gaps. **PR D is complete and
-  closed.** Then **opportunity clusters SHIPPED, LIVE and production-verified** (**PR E**,
-  delivered as PR #94, merge `4cfd87d`, 2026-09-13): deterministic pairwise relations between
-  existing findings, emitting `sequential_in_one_process` and `independent` in Phase 1, with
-  the other three declared relations intentionally unreachable until their canonical models
-  exist. **PR E is complete and closed.** Then **deterministic diagnostic hypotheses SHIPPED,
-  LIVE and production-verified** (**PR F**, delivered as PR #99, merge `33171f0`, 2026-09-14):
-  each finding can now say *"What might be behind this"* — evidence-referenced candidate
-  explanations from a closed rule table, ranked with no winner, their own confidence, an
-  explicit `no_rule_matched` empty state, tentative wording only. An explanatory layer, never
-  proof of causation; `shared_cause_candidate` NOT activated. **PR F is complete and closed.**
-  Persistence, run identity, consent flow, outcome measurement, Part XIII runtime and later
-  phases NOT started and not approved
-- **Lost Revenue Scan** — a module and acquisition hook within the Scan, optionally surfaced as
-  a narrower standalone entry. Phase 1 sizing logic shipped inside PR #84; the standalone
-  entry NOT started
-- **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
-  NOT started
-- **Organic Acquisition Engine** (see *Free-Product Strategy* §7) — **A-1 Discoverability
-  Foundation SHIPPED, LIVE and production-verified** (PR #101, merge `fcd2e68`, 2026-09-14):
-  public-route inventory, `sitemap.xml`, `robots.txt`, free-tool metadata and truthful
-  JSON-LD, zero persistence / identity / tracking. Then **A-2a Problem-Led Discovery Pages
-  SHIPPED, LIVE and production-verified** (PR #103, merge `adb30c7`, 2026-09-14): three static
-  pages mapped 1:1 to the canonical Scan condition classes, canonical wording, every CTA into
-  the unchanged nine-question Scan, `enquiry.no_followup` keeping its null-product truth.
-  Then **A-2b Lost-Revenue entry SHIPPED, LIVE and production-verified** (PR #105, merge
-  `31bbd45`, 2026-09-14): `/free-tools/lost-revenue`, a framing / entry page that calculates
-  nothing and sends the visitor to the unchanged Scan; sitemap now ten public URLs.
-  **B, C and D NOT started**; the Lost-Revenue questionnaire is not to be shortened without a
-  separately approved `SCAN_QUESTION_SET_VERSION` decision
+**Status lives in *Free-Product Strategy* above; closeouts live in `CHANGELOG.md`.** None of
+it is V1 or V1.1 work.
 
+- **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). **Do not rebuild**
+- **NiteOwl Business Opportunity Scan — Phase 1 SHIPPED and LIVE**: pure logic (#84),
+  recommendations (#87), public surface (#89), enquiry funnel diagnosis (#92), opportunity
+  clusters (#94) and diagnostic hypotheses (#99). **All six Part XIV contracts are built.**
+  Persistence, run identity, the consent flow, outcome measurement, any Part XIII runtime and
+  every later phase are **NOT started and not approved**
+- **Lost Revenue Scan** — a module and acquisition hook inside the Scan; its Phase 1 sizing
+  logic shipped inside #84, and A-2b added a framing / entry page (#105). There is still **no
+  separate Lost Revenue questionnaire, and creating one needs an approved
+  `SCAN_QUESTION_SET_VERSION` decision**
+- **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
+  **NOT started**
+- **Organic Acquisition Engine** — **A-1 (#101), A-2a (#103) and A-2b (#105) SHIPPED, LIVE and
+  production-verified**; **B, C and D NOT started**
 Future:
 
 - Outlook Calendar
@@ -1795,3 +932,35 @@ Future:
 8. Push to GitHub.
 9. Update CHANGELOG.md.
 10. Update CHECKLIST.md if required.
+11. Update `PROJECT_CONTEXT.md` **only if current state changed** — a status line, never a
+    narrative.
+
+---
+
+# Documentation Ownership and Size Discipline
+
+*Established 2026-09-15, when this file reached 165,612 characters and exceeded the active
+context limit. Nothing was deleted to fix it: the material moved to the document that
+canonically owns it.*
+
+**The rule:**
+
+> **PROJECT_CONTEXT.md carries current state once, and points at the canonical record of
+> everything else. A fact whose home is `docs/ARCHITECTURE.md`, `CHANGELOG.md` or
+> `docs/REMY_BEHAVIOUR_RULES.md` is referenced here, never restated here.**
+
+How that is kept:
+
+1. **A merged PR updates `CHANGELOG.md`** (workflow step 9). It adds at most a **one-line
+   status change** here, and only if current state changed.
+2. **Architecture goes in `docs/ARCHITECTURE.md`.** This file gets one pointer row per Part,
+   not a paragraph.
+3. **A new standing behaviour rule goes in `docs/REMY_BEHAVIOUR_RULES.md`**, with one index
+   line here.
+4. **Size discipline: 75,000 characters soft, 100,000 hard.** At the soft limit the next
+   closeout triggers a maintenance pass. The hard ceiling is two-thirds of the tool limit, so
+   one closeout can never cross it. Check with `wc -c PROJECT_CONTEXT.md`.
+5. **Nothing is deleted to make room.** Over budget means *move it to its canonical owner*,
+   never *summarise it away*. A safety rule is moved verbatim, never paraphrased into
+   something weaker.
+6. **Every move leaves a pointer**, and the pointer names the document and the section.
