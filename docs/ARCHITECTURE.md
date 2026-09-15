@@ -9027,3 +9027,479 @@ analytical representations of answers the owner already gave.
 Five PREPARE items, one LATER item, no new record type, no store, no service, no table, no
 layer, no runtime, **no product started and no V1 work created.** The Scan's live behaviour is
 untouched, and the next milestone is still Google's verification review.
+
+---
+
+# Part XV — Outcome Learning and Cross-Product Decision Intelligence, closeout
+
+*Added 2026-09-15 against commit `15ca468`. **Documentation only. NOW: none.** No code, schema,
+migration, service, store, table, API, route, UI, provider, integration, flag, prompt, test or
+configuration is created or changed by this part, and nothing below is approved for
+implementation. Remy V1's locked Definition of Done is untouched, and no Remy behaviour, event,
+storage, flag or provider is proposed.*
+
+**This part records the closeout of a review, not the start of a build.** The fifteenth review
+asked for a canonical Outcome Learning and Cross-Product Decision Intelligence layer above
+Business Memory, the Business Graph, orchestration, permissions and the provider-independent
+infrastructure. The honest finding, and the reason this part is short, is that **the
+overwhelming majority of what it asked for is already canonical** — Part III built the records,
+Part IV and Part V made them honest, **Part VII was written against a near-identical brief and
+answered sixteen of its twenty-four sections with "already exists"**, Part IX made the ownership
+invariants binding, and Part XIII closed the provenance half.
+
+Three gaps are genuine, and they are the whole of this part's new content: **M20**, a learned
+generalisation has no contract, so the review's maturity ladder, decay, contradiction and
+supersession have no carrier; **M21**, nothing declares that a pattern's supporting population
+was produced by NiteOwl's own prior recommendations; **M22**, retention is specified for
+personal identity and not for the record classes. One documentation requirement is met at §113:
+a single continuous end-to-end trace, which existed only in fragments.
+
+**NOW: none.**
+
+---
+
+## 109. The reconciliation, and what this part refuses to create
+
+### 109.1 Placement — the brief's requirements against what exists
+
+| Requirement | Already answered by | Standing |
+|---|---|---|
+| The loop *Observe → Diagnose → Explain → Recommend → Approve/Act → Measure → Learn* | **§98.1**, stage by stage, each with the carrier it already has | **Exists**, verbatim |
+| The thirteen questions the system must be able to answer | **§98.2** answers them from named fields; §92.1's ten-stage chain carries the rest | **Exists** |
+| A Decision Intelligence layer above Identity, Graph, Memory, events, gateway, permissions, automation and audit | **§53** — this is **not** a further layer; it is existing layers **4, 5, 6 and 9** operating together. **§70** made the invariants binding | **Exists.** Building it as a component would be the regression |
+| No product owns the canonical cross-product model | §24's five prohibitions; §59.1's one spanning rule | **Exists** |
+| Decision Provenance contract | **§20.7** — the single canonical `DecisionRecord`; §93.1 states it as the questions it must answer; §93.2's three fields closed the last of them | **Exists in full** |
+| `fact ≠ correlation ≠ likely cause ≠ proven cause` | **§23** — five tiers, no automatic promotion, five admissible causal bases, tier and basis displayed at every surface | **Exists**, stronger than asked — `unattributed` has no counterpart in the brief |
+| Outcome Provenance contract | §20.7's Outcome group, **§94** (eight states, `outcome_resolution`, `outcome_contradicting_evidence`), **§95** (Impact) | **Exists.** *Unintended consequences* are §95.3's opposing impacts, kept and never netted; *learning eligibility* is rule 5, **derived and never a flag** |
+| Decision and Outcome linkable without collapsing into one opaque record | §94.2, §94.3 — by reference, many-to-many, no join entity | **Exists** |
+| Outcome Learning; maturity, decay, contradiction, supersession | §23 (per **link**), §57.2 (per **scope**), §43.5 (guardrails), §58.1 (derived artefacts' rights) | **GAP — M20.** None of these is a generalisation *across* decisions |
+| Cross-product learning without coupling | **§24**, **§59.1**, **§59.2** — and §59.2 already contains the brief's own Remy → Scout → Atlas → Forge → Pulse example | **Exists** |
+| Business-specific versus network learning | §27's five gates and two absolute prohibitions; §57.1 `evidence_scope`; §57.2 — **Level 6 is cross-*product* inside one tenant; only Level 5 crosses a tenant** | **Exists** |
+| Decision Quality model | §43's Recommendation profile, §43.2's range / direction / *unknown* rule, §43.3's refusal of a universal score, §50.4 *NiteOwl is allowed not to know* | **Exists** |
+| Feedback safeguards — confirmation, survivorship, selection, staleness, gaming, automation loops | §43.5's seven guardrails · §55.1's denominator · §54.2's evaluation boundary · §56.1 `withheld` · §23 `unattributed` · §20.7 rules 5 and 7 | **Mostly exists — GAP M21** for the one the brief names explicitly: a corpus reinforced by NiteOwl's own advice |
+| What belongs in Memory, Graph, decisions, audit, events; lifecycle and retention | §20.4's placement table, §48.3's thin head, §20.5's volume discipline, §20.5 / M7's erasure by reference | **PARTIAL — GAP M22.** Erasure is settled; **retention per record class is not** |
+| Proprietary intelligence, providers replaceable | §25's copy test, §28's ownership table, **§70.3**, **§70.4**, §98.3's proprietary tuple | **Exists** |
+| Learning never bypasses permissions | §43.4, §20.7's Authority group, `docs/AGENT_ACCESS_LAYER.md` §3 and §18, §20.9 | **Exists** — it is the distinction the access layer is built on |
+| A complete cross-product end-to-end scenario | §22 (shapes), §59.2 (chain questions), §98.1 (loop) | **Documentation gap**, met at §113 |
+
+### 109.2 The twelve refusals, recorded explicitly
+
+Each of these was available to this review and is refused, because each would create a second
+copy of something that already exists:
+
+- **No new architectural layer.** §21 is unchanged and is not redrawn.
+- **No Decision Intelligence service, runtime, boundary or component.**
+- **No second system of record**, and no fifth appearance of the mistake §52.4 names.
+- **No new database, store or table created for Decision Intelligence.**
+- **No duplicate `DecisionRecord`.** §20.7 remains the single decision contract; the Learned
+  Pattern of §110 is **not** a decision and never occupies its place.
+- **No replacement of Decision Provenance** (§20.7, §93) — unchanged, and extended by nothing
+  here.
+- **No replacement of Outcome Provenance** (§20.7's Outcome group, §94, §95) — unchanged.
+- **No replacement of the Cross-Product Learning Contract** (§24) — its four exchange types and
+  five prohibitions stand; §110.5 adds one clause to exchange type 3 and removes nothing.
+- **No provider-owned intelligence corpus.** §28 and §70.3 stand: the corpus, the recipe and the
+  evaluation are NiteOwl's, wherever the computation is rented.
+- **No cross-tenant shortcut.** Nothing here crosses a tenant boundary; §27's five gates and two
+  absolute prohibitions are untouched, and nothing is scheduled against them.
+- **No learning that bypasses permissions or authority.** A pattern's confidence grants nothing.
+- **No hidden chain-of-thought storage** (§92.3), and **no Remy V1 scope expansion** (§115.3).
+
+### 109.3 The canonical statement, and the invariants preserved
+
+> **"NiteOwl Decision Intelligence" is a name for the coordinated operation of existing
+> architecture layers — the Outcome Spine, Decision & Outcome Memory, Provenance and the
+> Learning Layer — and not a new component.** Naming it is worth doing; creating a service to
+> hold the name is not, and §20's opening rule already forbids it.
+
+Six invariants are carried into this part unchanged, and every rule below is subordinate to
+them:
+
+| Invariant | Source |
+|---|---|
+| **Derived, never primary** — the layer is rebuildable from the Spine and Memory, which is what makes it erasable, portable and retirable | §70.1 |
+| **Dependencies point downward only** — removing the layer may make an outcome worse, never wrong and never impossible | §70.2 |
+| **Rent the computation; own the corpus, the recipe and the evaluation** | §70.3 |
+| **One canonical `DecisionRecord`** | §20.7 |
+| **An inference may drive an action; an inference may never silently become a fact** | §20.6 |
+| **Confidence is not authority** — knowing what appears best is not being permitted to do it | §43.4, AAL §3 |
+
+### 109.4 What must not be touched
+
+§53.2, restated once so a reader arriving at Part XV first need not reconstruct it: one booking
+engine behind four channels · the single canonical `DecisionRecord` · **§21 as the single
+diagram** · the eight products stay eight (§24's prohibitions) · `org_id` scoping and the two
+trust models · truthful degradation, and the rule it generalised into — *not knowing is a
+finding, and is never rendered as its nearest confident neighbour* (§23).
+
+---
+
+## 110. M20 — A learned generalisation has no contract
+
+*Finding. Added by Part XV, 2026-09-15.*
+
+### 110.1 The gap
+
+Three existing structures are each adjacent to a learned pattern and none of them is one.
+**§23's five tiers** are properties of *one link between one decision and one outcome*.
+**§57.2's six levels** are properties of *scope*. **§42.2's Finding** is a diagnosis of *one
+tenant in one window*. **§58.1** governs a derived artefact's *rights* — recipe, corpus
+boundary, `evidence_scope`, consents, rebuild-without — and says nothing about what it asserts.
+
+So a statement of the form *"where conditions X, Y and Z hold, action A tends to be followed by
+outcome B"* has no carrier, and neither do the three things the review asked for by name:
+**confidence decay**, **contradictory-evidence handling** and **superseded learning**. §20.9
+says the Learning Layer consumes Decision & Outcome Memory and produces new decision inputs; it
+does not say what a produced input **is**.
+
+The consequence of leaving it is specific and quiet. The first learned pattern will be whatever
+the first query returned, with no maturity, no denominator, no decay and no supersession — and
+from the moment it is displayed it is indistinguishable from a validated rule. That is M4's
+failure, *an inference silently becoming a fact*, moved one level up to where it is harder to
+see, because the inference is about the corpus rather than about a customer.
+
+### 110.2 The correction — a fifth profile, not a new artefact
+
+> **A Learned Pattern is a profile of the existing derived artefact (§58.1). It is not a record
+> type, not a store, not a table and not a decision.**
+
+It therefore inherits §58.1 in full and restates none of it: the **recipe** and its version, the
+**corpus boundary** it was built over, its **`evidence_scope`** (§57.1), the **consents** it
+depends on where the scope is `cohort`, deletion by **rebuild-without**, and the prohibition on
+building an artefact whose inputs cannot be enumerated. It is **derived, rebuildable,
+tenant-scoped under the existing scope rules, provenance-carrying, and dependent on Decision &
+Outcome Memory**, and it is **never written back into the Business Graph, Business Memory or the
+Spine as a primary fact merely because it was learned** (§20.9, unchanged).
+
+What the profile adds:
+
+| Field | Meaning | Rule |
+|---|---|---|
+| `assertion` | The generalisation, in the canonical vocabulary — conditions, action class, outcome class | Enumerated codes, never prose, on the §42.2 `condition` model |
+| `maturity` | `observation` / `repeated_correlation` / `weak_pattern` / `supported_pattern` / `validated_rule` | **No automatic promotion between levels.** §23's rule, applied to generalisation |
+| `support` | The population the pattern rests on: sample, window, and the **denominator** | **§55.1's denominator is not renegotiated here.** Rejected, withheld, expired, unresolved and `unattributed` cases stay in the count wherever existing rules require it |
+| `support_independence` | §111 | **Derived, never asserted** |
+| `contradicting_evidence[]` | Evidence pointing away from the assertion | **Retained.** Contradiction lowers maturity and confidence; it never erases the pattern or its history |
+| `valid_until` | When the pattern stops being current absent re-measurement | §20.6 already carries the field; this makes it load-bearing |
+| `supersedes` / `superseded_by` | The pattern this one replaces, and the reverse | **Superseded learning is retained** |
+
+### 110.3 Five rules
+
+1. **No automatic promotion, and `validated_rule` is earned by evidence, not by repetition.**
+   Accumulating correlation never becomes cause (§42.3), and a pattern reaches `validated_rule`
+   only on one of §23's five **admissible causal bases** — a deterministic mechanism, a
+   controlled intervention, a designed experiment, an isolated before/after with stated
+   controls, or a robust domain-defined basis declared in advance. A pattern at any lower
+   maturity that is displayed as a rule is the M10 failure with a longer sample.
+2. **A pattern that cannot state its denominator is an `observation`, whatever its sample
+   size.** M16's argument applied to generalisation: a rate computed over the cases that
+   produced an outcome rises as reliability falls.
+3. **Decay is by re-evaluation, never by arithmetic.** A pattern decays because it was
+   re-measured against the corpus and the support changed — **not** by a half-life applied to a
+   stored confidence number, which is false precision (§43.2) wearing a statistical costume. An
+   expired pattern is **unresolved and stale, not false**: it is `unattributed`'s sibling, and
+   it is never rendered as a refutation nobody measured.
+4. **Contradiction lowers; it never deletes.** §43.5's rule, given a field. Both readings are
+   kept, exactly as §94.1's `contested` keeps both measurements.
+5. **Self-citation is prohibited.** A Learned Pattern may be referenced later as **derived
+   evidence** on a decision — that is what §20.9 means by *produces new decision inputs* — but a
+   decision may never cite a pattern whose support includes that decision's own outcome, and a
+   pattern may never count, as support, outcomes that were themselves graded using it.
+   Otherwise the corpus grades itself and the circularity is invisible, because nothing was
+   edited and no provenance rule was broken.
+
+### 110.4 What it is not
+
+It is **not** a score, not a ranking, not a universal priority unit (§43.3 stands), not a fact,
+not a decision, and not an authority. It proposes; it never writes facts and never executes
+(§20.9, §43.4). A `policy_version` change suggested by a learner is **adopted by a recorded
+decision**, never by the learner writing it (§98.2).
+
+### 110.5 One clause added to §24, and nothing removed
+
+> **A Learned Pattern crossing a product boundary carries its `maturity`, its `support`, its
+> `evidence_scope` and its `support_independence` with it, or it does not cross.**
+
+This is §24's fifth prohibition — *no derived claim loses its provenance in transit* — applied
+to the new profile. A pattern that arrives in a second product as a bare rule has become a fact
+by accident. The four exchange types and the five prohibitions are otherwise unchanged.
+
+---
+
+## 111. M21 — Support independence, and the self-reinforcing corpus
+
+*Finding. Added by Part XV, 2026-09-15.*
+
+The review asked that a feedback loop must not become self-reinforcing merely because NiteOwl
+previously made the same recommendation. **P30 (`action_status: withheld`) is the mechanism**
+that makes a comparison group possible, and **X6** keeps counterfactual estimation reachable.
+Neither states the rule, and without it the failure leaves no trace:
+
+> NiteOwl recommends same-day callbacks · owners adopt the recommendation · same-day callbacks
+> become over-represented in the corpus **because NiteOwl put them there** · the pattern's
+> support grows with every repetition of its own advice.
+
+Nothing is edited, no provenance rule is broken, no query is wrong, and the reported evidence
+strengthens indefinitely. It is the one bias on the review's list that the existing safeguards
+do not reach, because every existing safeguard governs how a case is *recorded* and this one
+governs which cases *exist*.
+
+**The correction — one derived field and one ceiling.**
+
+`support_independence` — `independent` / `mixed` / `niteowl_influenced`.
+
+- **It is DERIVED from the provenance of the supporting population**, by tracing whether the
+  supporting decisions descend from a NiteOwl recommendation (`addresses_finding_id`,
+  `originating_product`, and the recommendation's own `resulting_event_ids`). **It is never
+  manually asserted, and it is never a flag** — the same construction that keeps learning
+  eligibility derived in §20.7 rule 5, for the same reason: a field that can be set to
+  `independent` is the laundering path reopened under a different name.
+- **A pattern whose supporting population is wholly `niteowl_influenced` may never reach
+  `validated_rule` on that evidence alone.** Its ceiling is `supported_pattern`. Reaching higher
+  requires evidence NiteOwl did not generate — which in practice means §23's admissible bases,
+  which in practice means X6, which is exactly why P30 exists.
+- **Every surface displaying such a pattern displays the limitation**, under §23's existing
+  display rule and §51.3's explanation requirement. *"This holds across forty cases, all of
+  which followed our own advice"* and *"this holds across forty cases"* are different
+  statements, and only the first is honest.
+
+**No existing safeguard is weakened by this.** §55.1's denominator, §56.1's withheld population,
+§54.2's evaluation boundary, §23's tiers and the comparison-group and counterfactual rules stand
+exactly as written; M21 adds a ceiling and removes nothing.
+
+---
+
+## 112. M22 — Retention is a property of the record class
+
+*Finding. Added by Part XV, 2026-09-15.*
+
+M7 settled the hard half: **history holds references, never copies**, so an erasure redacts the
+referenced entity and the counts, intervals and transitions still reconcile. §31 says
+classification and retention are *"decided at write time"*. But no lifecycle is stated **per
+record class**, and the classes have genuinely different answers — a non-identifying Spine row
+and a decision's whitelisted input digest are not the same exposure, and a superseded pattern is
+kept for explanation while being excluded from learning.
+
+> **Retention is declared with the record class, before the first row of that class is written.
+> It is never a per-row judgement made afterwards.**
+
+This is §20.5's payload-whitelist construction — *what may be stored is a property of the type,
+decided once* — applied to how long it is kept. The class-level policy, without inventing
+durations:
+
+| Class | Lifecycle position | Notes |
+|---|---|---|
+| **Raw observations / Spine events** | Longest-lived, because comparability depends on it | Non-identifying by construction (M7). Erasure redacts the referenced entity; the row stands |
+| **Decisions** | Live with the history they explain | The **whitelisted input digest** is the identifying surface and carries the shorter policy — P27 already requires the whitelist to serve the temporal purpose as well as the privacy one |
+| **Actions / interventions** | With the decision that produced them | `resulting_event_ids` are Spine references, not copies |
+| **Outcomes** | With the decision they attach to | `reversed` never deletes the original (§94.1); a retention rule must not achieve by expiry what §94.1 forbids by edit |
+| **Measured impact** | With the outcomes it rests on | Opposing assertions expire together or not at all — expiring one and keeping the other is §95.3's netting by the back door |
+| **Learned / derived patterns** | Shortest — they are **derived and rebuildable** (§58.1), so expiry costs nothing that cannot be rebuilt | Scope-`cohort` artefacts already inherit the shortest-lived consent among their inputs |
+| **Superseded learning** | **Retained for provenance and historical explanation**, and excluded from learning | Without it, a decision made under an earlier belief is unexplainable — the M15 loss in a different direction |
+
+Four things are preserved and none is renegotiated: **erasure by reference** (M7), **history and
+provenance continuity** (§23's *re-attribution never rewrites history*), the permission for
+**non-identifying historical records** to persist, and every existing privacy and consent
+boundary (§27, §20.8, §89). **No regulatory period is invented here**, and none may be invented
+later without the lawful-basis work §3.7 already gates it behind: the architecture fixes *where
+the policy is declared*, not *what number it holds*.
+
+---
+
+## 113. The continuous trace — 4–6 PM missed calls
+
+One trace, end to end, using only carriers that already exist. It is the review's documentation
+requirement, and it is illustrative: **no step of it is implemented, scheduled or approved.**
+
+1. **Observe.** Remy's existing choke points already compute this and discard it (M1, M2).
+   Spine events: `enquiry.received` at 16:12, `actor_type: customer`, `source_product: remy`,
+   `correlation_id` binding the episode; no `appointment.requested` follows it. **References and
+   non-identifying payload only — no transcript, name, number or free text ever reaches the
+   Spine** (M7).
+2. **Business State.** *"Enquiries received versus answered, by hour"* is a **computed
+   projection** (§20.4), with its freshness stated. It is not a further source of truth and not
+   a table anything else keys to.
+3. **Diagnose.** A **Finding** (§42.2): `condition: enquiry.unanswered`, `time_window`
+   16:00–18:00 over six weeks, `hypotheses[]` each carrying its own §23 tier,
+   `contradicting_evidence`, `assumptions` at source type `assumed`, and `evidence_scope:
+   tenant`. The ceiling is `attributed_to` — **not `caused_by`**, because no admissible basis
+   exists yet, and the tier is earned by the evidence and never by the strength of the claim.
+4. **Explain.** Enumerated `reason_codes` plus a business-level `explanation`. **No hidden model
+   chain-of-thought is stored on any stage** (§92.3).
+5. **Size.** An **Impact assertion** (§95.2) with `measurement_basis: estimated` — a range with
+   visible assumptions (§43.2). **P39 binds: this estimate never enters the Spine as a measured
+   outcome and never becomes the baseline a later paid outcome is graded against.** It is
+   displayed as an estimate forever and never promotes by age, repetition or use (§95.3 rule 2).
+6. **Recommend.** A `DecisionRecord`, `decision_type: recommendation.*`, `action_status:
+   proposed` — **which reserves nothing** (rule 4) — with `addresses_finding_id` and, **written
+   before any outcome is known**, a `success_criterion` (the named metric, its direction and its
+   threshold, against the owner's stated baseline), a `review_at`, an `expected_effect` as a
+   range, `effort`, `reversibility`, `risks` and `dependencies`. If success cannot be stated in
+   advance it is recorded as `decision_type: observation`, never as a recommendation with an
+   outcome slot waiting to be filled in generously (rule 7).
+7. **Route.** Honest routing (§84.3): reception and booking friction → **Remy**; a staffing or
+   workflow change → **Forge**; the economic validation → **Ledger**. Where no NiteOwl product
+   addresses the finding, **the output is the finding and its recommended action with no product
+   attached** (§50.4).
+8. **Withhold.** A second candidate that a named rule actually evaluated and did not take is
+   recorded with `action_status: withheld` and a reason code (P30). **It has an outcome slot of
+   its own** (§94.2), it is the only possible comparison group, and it is **never scored as a
+   failure**.
+9. **Authorise.** `authority_level` is what the business granted; the approval path records
+   `approved_by`, `approved_at` and `approval_status` — including `expired` and `overridden`,
+   where an override is **a new human decision with its own outcome slot**. The governed
+   capability's five checks run (AAL §3). **Approval is not action**, and **recommending never
+   authorises** (§43.4).
+10. **Act.** The domain choke point **re-runs its own rules** — an approved reschedule still goes
+    through `checkBookingSlot` and is still refused if the slot has gone. Approval authorises an
+    *attempt*, never an *outcome*. The resulting Spine event is `caused_by` the decision, which
+    is admissible for the one reason that always is: **NiteOwl performed it**.
+11. **Measure the outcome.** At `review_at`: `outcome_resolution` ∈ {`measured`, `partial`,
+    `unresolved`, `contested`, `reversed`}, defaulting to `pending` at write time so *"not yet"*
+    is distinguishable from *"nobody looked"*; `outcome_provenance`; and `outcome_link_tier`,
+    which is `unattributed` where the attempt ran and established nothing. **Learnable only
+    where provenance ∈ {`observed`, `derived_deterministic`} AND resolution is `measured`** —
+    neither alone suffices, and eligibility stays derived.
+12. **Measure the impact.** A **measured** Impact assertion (§95.2): category, quantity, unit,
+    window, `measurement_basis`, assumptions, confidence, tier and `evidence_scope`. Where the
+    intervention also cost something, that is a **second, opposing assertion** — **both kept,
+    never netted** (§95.3 rule 3). The estimate from step 5 stands beside it, still an estimate.
+13. **Learn.** An evaluation run over **every recommendation issued** (§55.1), judged on evidence
+    at or before `decided_at` (§54.2). One tenant, one window, one result is
+    `maturity: observation` (§110). Repetition alone moves it no further than
+    `repeated_correlation`; `validated_rule` needs an admissible basis. If every supporting case
+    followed a NiteOwl recommendation, `support_independence: niteowl_influenced` and the ceiling
+    is `supported_pattern` (§111), stated on every surface that shows it.
+14. **Cross-product reuse.** Scout, Atlas, Forge and Pulse receive this **only** as a §24
+    permissioned derived claim carrying provenance, confidence, tier, scope and maturity. **No
+    product reads another's tables, holds a foreign key into one, or waits on one in a
+    customer-facing path.** The chain across products is **reconstructed** from `correlation_id`
+    and canonical entity references (§59.2) — it is not an entity, the **weakest link governs
+    the claim**, and eight `correlated_with` hops do not compose into a cause at the end.
+
+---
+
+## 114. Implementation sequence and triggers — recorded, not started
+
+### 114.1 The sequence
+
+**Stage 0 — documentation only: this part.** Zero code, schema, migration, flag, prompt,
+provider, route, UI, test or configuration change. Reversible as one commit.
+
+Everything below is **future implementation work**, and its band and trigger are unchanged from
+where the existing classification already put it:
+
+| Stage | Content | Trigger | Reversible |
+|---|---|---|---|
+| **1** | The smallest real write: one append-only, tenant-scoped `business_events` mechanism, beginning with the **single already-justified event `appointment.booked`** at the existing booking choke point — canonical references and non-identifying payload, `dedupe_key` unique, **both** `occurred_at` and `recorded_at`, and **no read path back into Remy** | L16 / L17's trigger, unchanged | Yes — additive, revertible by dropping the write |
+| **2** | `DecisionRecord` capture at the existing choke points — a projection of what `checkBookingSlot` and `calendarSync` already compute (M2) | After stage 1 | Yes |
+| **3** | Outcome filling and resolution by a separate process; `pending` at write time | After stage 2, plus one elapsed `review_at` | Yes |
+| **4** | Aggregate evaluation (**L28**), then the derived-artefact registry (**L29**) | Enough resolved recommendations for a rate to mean anything | Yes |
+| **5** | The Learned Pattern profile (§110) | Stage 4 | Yes — derived, rebuildable, deletable by rebuild-without |
+| **6** | Cross-product (**X2**), cohort (**X3**), experimentation (**X6**) | Two products live for one tenant · all five §27 gates in code before the first statistic · a `withheld` population recorded as it occurred | — |
+
+> **NOW: NONE.** None of stages 1–6 is started, approved or scheduled by this part.
+
+### 114.2 The triggers
+
+Implementation begins on **real operational evidence, never on architectural readiness**. The
+existing triggers stand and no numeric threshold is invented here: **the first paying business
+and sufficient genuine live use** · **a reliable production booking path**, which is what L16 and
+L18 have always sat behind · **enough real resolved outcomes for an evaluation to mean
+anything**. Speculative accumulation ahead of those is the work this document has refused
+fifteen times.
+
+---
+
+## 115. Risks, classification and verdict
+
+### 115.1 Risks
+
+| Risk | Where it bites | Mitigation |
+|---|---|---|
+| **Building "Decision Intelligence" literally** | A service or store above the bus becomes a second system of record over the same history — the fifth appearance of the mistake §52.4 names | §53's ruling and §109.2's twelve refusals; §70's invariants |
+| **A learned pattern outrunning its evidence** | A first-week correlation displayed as an operational rule; a business acts on it | §110 — the maturity ladder, no automatic promotion, denominator required, `validated_rule` only on an admissible basis |
+| **A self-reinforcing NiteOwl-generated corpus** | Support grows with every repetition of NiteOwl's own advice; **no defect exists to find** | §111 — `support_independence`, derived, with a ceiling |
+| **Retention decided per row, after the fact** | A per-row archaeology across an accumulated corpus, on the oldest and therefore most valuable rows | §112 — declared with the record class, before the first row |
+| **Hindsight leakage and filtered denominators** | Offline evaluation looks excellent while the live system underperforms it | M15, M16 — already mitigated (§54.2, §55.1), and §110 rule 2 extends the denominator rule to generalisations |
+| **Cross-tenant leakage** | The end of the company | §27's gates; §57.2 — Level 6 is cross-*product* inside one tenant and crosses nothing. Nothing here is cross-tenant |
+| **Provider lock-in of the intelligence corpus** | A provider-hosted memory, index or fitted artefact holds the moat | §28, §70.3, and §58.1's prohibition on an artefact whose inputs cannot be enumerated |
+| **Accidental Remy V1 expansion** | The specific risk this brief carries, because its worked example is a Remy scenario | §115.3 |
+| **Moat architecture built before the data exists** | Engineering effort spent on a corpus with nothing in it, while the product has zero paying businesses | **The architecture is now sufficiently mature that premature implementation is the larger risk.** This is the fifteenth review; the correct response to all fifteen remains a reliable phone call |
+
+### 115.2 Classification
+
+**ALREADY EXISTS — no change needed.** Every row in §109.1 marked *Exists*: the loop, the
+questions, the canonical `DecisionRecord`, Decision and Outcome Provenance, Impact, the five link
+tiers and their admissible bases, §24's contract, `evidence_scope` and the six levels, §27's
+gates, §28's ownership table, §43's quality model, §70's invariants and §98's tuple.
+**Unchanged, unredrawn and not extended by this part.**
+
+**DOCUMENTATION STRENGTHENING — applied in this pass.** The reconciliation and the twelve
+refusals (§109) · the canonical statement that Decision Intelligence names existing layers
+(§109.3) · the continuous end-to-end trace (§113) · the staged sequence and its triggers recorded
+as future work (§114).
+
+**PREPARE — define now, build nothing**
+
+| # | Item | Why now |
+|---|---|---|
+| **P52** | **The Learned Pattern profile** (§110) — maturity with no automatic promotion, denominator discipline, retained contradiction, decay by re-measurement, retained supersession, and the self-citation prohibition | Free while no artefact exists. Afterwards the first pattern is whatever the first query returned, and it is indistinguishable from a rule the moment it is displayed |
+| **P53** | **`support_independence`, derived, with the `validated_rule` ceiling** (§111) | The only bias on the review's list that no existing safeguard reaches. Unreconstructable later, because the lineage that would prove influence is the thing nobody wrote down |
+| **P54** | **Retention declared with the record class** (§112) | §20.5's whitelist argument applied to time. One table now; a per-row archaeology later |
+
+**LATER — build when the trigger fires**
+
+| # | Item | Trigger |
+|---|---|---|
+| **L36** | **Learned Patterns materialised** under P52–P54, inside the §58.1 derived-artefact registry | L29, which is behind L28, which is behind the resolved-recommendation volume that is behind L24 |
+
+**MUCH LATER.** X1–X6 unchanged. Nothing is added, moved or re-triggered.
+
+| Band | Part XV items |
+|---|---|
+| ALREADY EXISTS | The whole of §109.1's *Exists* column |
+| DOCUMENTATION STRENGTHENING | 4, all applied |
+| PREPARE | 3 (P52–P54) |
+| LATER | 1 (L36) |
+| MUCH LATER | 0 new |
+| **NOW** | **0** |
+
+**Simplicity check.** Zero new tables, zero new services, zero new stores, zero new providers,
+zero new documents, one new **profile** of an existing artefact, and **no change to §21's
+diagram**.
+
+### 115.3 Remy V1 protection — stated, not assumed
+
+**Remy V1 is unchanged by this part**, and nothing in it is a Remy roadmap item. Explicitly
+**not** introduced, proposed or approved: **attendance / no-show learning** (§59.1 already
+records it as absent and **not now** — it would need an owner-facing feature to record it, and
+inventing one to feed a corpus is the failure this document forbids) · **caller sentiment or
+quality** (model-derived, therefore `ai_inferred`, therefore never learnable — low value, real
+privacy cost, **not recommended**) · **any new Remy event created for this architecture** · **any
+new booking behaviour** · **any new voice behaviour** · **any new Remy provider integration** ·
+**any new Remy storage** · **any new feature flag**.
+
+§59.1 stands as written: Remy's first five contribution signals are **already computed at a
+choke point and discarded**, which is M1 / M2 and is already classified L16 / L18. **Part XV adds
+nothing to Remy's roadmap**, and this architecture waits on the existing product roadmap and on
+real data.
+
+### 115.4 Verdict
+
+The fifteenth review asked for an architecture that, in all but three respects, this document
+already held — and the most useful thing Part XV does is say so plainly rather than build a
+second copy of it under a new name. Decision Intelligence is **named, not created**: existing
+layers 4, 5, 6 and 9, under §70's invariants, with one canonical `DecisionRecord` beneath them.
+
+Three genuine gaps are closed as contracts: a learned generalisation now has a shape that cannot
+outrun its evidence (**M20**), a pattern must declare whether NiteOwl's own advice produced its
+support (**M21**), and retention is declared with the record class before the first row exists
+(**M22**). One continuous trace is written down.
+
+Three PREPARE items, one LATER item, **no new record type, no store, no service, no table, no
+layer, no runtime, no product started and no V1 work created.** The architecture is ready in the
+only sense that matters — the first real write would land correctly — and the correct amount to
+implement today is **zero**. The next milestone is still Google's verification review.
+
+**NOW: none.**
