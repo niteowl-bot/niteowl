@@ -703,10 +703,24 @@ without industry-keying Remy core:** `presentation.pain_layout` (`cards` / `time
 `contrast`, default `cards`) with typed story data on `pain_points`, and capability order
 carried by the content arrays. Plumbers currently use `timeline` (a four-stage numbered
 missed-call story on a cyan rail); electricians use `contrast` (domestic / commercial panels of
-quoted caller enquiries). Differentiation therefore exists in two independent layers — hero
-(Slice 1) and body (Slice 2) — and is structural and content-specific, not colour alone.
-**Slice 3 — workflow motifs + section order + mid-page CTA — is NOT STARTED. Slice 4 — FAQ /
-how-it-works copy differentiation — is NOT STARTED.** Neither is approved or implemented.
+quoted caller enquiries). **Slice 3 (PR #125, reviewed head `762bfb9`, merge `3565411`,
+production-verified 2026-09-16) adds a workflow-motif contract and controlled section ordering
+through the same typed presentation system:** `presentation.workflow` (`none` / `flow_curve` /
+`flow_circuit`, default `none`) with typed four-node `workflow` data and a truthfulness footnote;
+`presentation.section_order` over a closed `IndustrySection` set (hero always first, final CTA
+always last, omitted shared sections appended); and typed `mid_cta` data. Plumbers use
+`flow_curve` (round-node S-curve: call answered → job & address captured → time checked → booking
+request submitted) with the order pain → workflow → mid CTA → …; electricians use `flow_circuit`
+(square-node stepped trace: call → classify → capture → route, where route is KB-listed and
+time-checked → booking request, otherwise flagged for review) with the order workflow → mid CTA →
+pain → …. **Different section ordering and mid-page Scan CTA placement are controlled through
+the shared typed presentation system — there remains ONE Remy, ONE shared `IndustryPage`
+architecture and no per-industry implementation fork.** Differentiation now exists in three
+layers — hero (Slice 1), body (Slice 2), workflow / flow (Slice 3) — all structural and
+content-specific, not colour alone; **the truthfulness guard remains mandatory: no visual or
+workflow may imply booked, dispatched, diagnosed, certified or any outcome Remy did not
+produce** (`tests/industryWorkflow.test.mjs` pins it page-wide). Slices 1 and 2 remain intact.
+**Slice 4 — FAQ / how-it-works copy differentiation — is NOT STARTED and NOT APPROVED.**
 Closeouts are in `CHANGELOG.md`.
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
 `…/problems/booking-back-and-forth`; do not repeat that check.**
