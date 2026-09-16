@@ -2,6 +2,22 @@ import SalesChatWidget from "./SalesChatWidget";
 import PricingPrice from "./PricingPrice";
 import HeroDemo from "./HeroDemo";
 
+// Industry landing pages that actually exist. Each entry is a live route
+// under src/app; the "Built for your industry" section below the hero
+// renders one card per entry and nothing else, so an industry appears
+// here only once its page ships — no placeholder cards, no fake routes.
+// There is still one Remy: these are marketing framings of it.
+const INDUSTRY_PAGES = [
+  {
+    icon: "🔧",
+    name: "Plumbers",
+    description:
+      "See how Remy helps plumbing businesses handle calls, capture enquiries and stay responsive.",
+    cta: "Explore Remy for Plumbers",
+    href: "/ai-receptionist-for-plumbers",
+  },
+];
+
 // Objection-handling FAQ — every answer reflects real, shipped behaviour.
 // Reused for both the visible section and the FAQPage structured data so
 // they always match (a Google requirement for rich results).
@@ -114,6 +130,44 @@ export default function Home() {
       {/* ── HERO ── */}
       <section className="bg-slate-950 pt-32 pb-24 px-6">
         <HeroDemo />
+      </section>
+
+      {/* ── BUILT FOR YOUR INDUSTRY ── */}
+      <section className="bg-white border-b border-slate-200 py-10 sm:py-12 px-4 sm:px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-6">
+            <p className="text-indigo-600 text-sm font-semibold uppercase tracking-widest mb-2">
+              Built for your industry
+            </p>
+            <p className="text-slate-500 text-base">
+              One Remy, tailored to the way your trade actually works.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-4">
+            {INDUSTRY_PAGES.map((industry) => (
+              <a
+                key={industry.href}
+                href={industry.href}
+                className="group w-full sm:max-w-md bg-slate-950 rounded-2xl p-5 sm:p-6 ring-1 ring-indigo-500/30 shadow-lg transition-shadow hover:shadow-indigo-950/40 hover:ring-indigo-400/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+              >
+                <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
+                  <div className="text-3xl shrink-0" aria-hidden="true">
+                    {industry.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-white font-semibold text-lg mb-1">{industry.name}</h2>
+                    <p className="text-slate-400 text-sm leading-relaxed mb-4">
+                      {industry.description}
+                    </p>
+                    <span className="inline-flex w-full sm:w-auto items-center justify-center bg-indigo-600 group-hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors">
+                      {industry.cta}&nbsp;→
+                    </span>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
       </section>
 
       {/* ── PERFECT FOR ── */}
