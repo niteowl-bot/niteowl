@@ -87,12 +87,12 @@ describe("an IndustryPage without presentation keeps the pre-Slice-1 rendering",
     assert.match(visualOf(html), /data-hero-visual="summary_card"/);
   });
 
-  test("presentation changes ONLY the hero: everything after it renders identically with or without it", () => {
+  test("the hero variant changes ONLY the hero: everything after it renders identically with job_ticket or summary_card", () => {
     const after = (html) => html.slice(html.indexOf("data-pain-points"));
-    const withPresentation = renderView(PLUMBERS_PAGE);
-    const without = renderView({ ...PLUMBERS_PAGE, presentation: undefined });
-    assert.equal(after(withPresentation), after(without));
-    assert.notEqual(visualOf(withPresentation), visualOf(without));
+    const withTicket = renderView(PLUMBERS_PAGE);
+    const withCard = renderView({ ...PLUMBERS_PAGE, presentation: { ...PLUMBERS_PAGE.presentation, hero_visual: "summary_card" } });
+    assert.equal(after(withTicket), after(withCard));
+    assert.notEqual(visualOf(withTicket), visualOf(withCard));
   });
 });
 
@@ -100,7 +100,8 @@ describe("an IndustryPage without presentation keeps the pre-Slice-1 rendering",
 
 describe("plumbers opts into the job ticket and electricians into the enquiry panel", () => {
   test("plumbers: cyan theme, job_ticket, ticket data present", () => {
-    assert.deepEqual(PLUMBERS_PAGE.presentation, { theme: "cyan", hero_visual: "job_ticket" });
+    assert.equal(PLUMBERS_PAGE.presentation.theme, "cyan");
+    assert.equal(PLUMBERS_PAGE.presentation.hero_visual, "job_ticket");
     assert.ok(PLUMBERS_PAGE.hero.job_ticket);
     const visual = visualOf(renderPage(PlumbersPage));
     assert.match(visual, /data-hero-visual="job_ticket"/);
@@ -114,7 +115,8 @@ describe("plumbers opts into the job ticket and electricians into the enquiry pa
   });
 
   test("electricians: amber theme, enquiry_panel, panel data present and the highlighted type is one of the types", () => {
-    assert.deepEqual(ELECTRICIANS_PAGE.presentation, { theme: "amber", hero_visual: "enquiry_panel" });
+    assert.equal(ELECTRICIANS_PAGE.presentation.theme, "amber");
+    assert.equal(ELECTRICIANS_PAGE.presentation.hero_visual, "enquiry_panel");
     const panel = ELECTRICIANS_PAGE.hero.enquiry_panel;
     assert.ok(panel);
     assert.ok(panel.enquiry_types.includes(panel.highlighted_type));

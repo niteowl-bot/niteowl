@@ -3,6 +3,7 @@ import type {
   IndustryEnquiryPanel,
   IndustryJobTicket,
   IndustryPage,
+  IndustryPainColumn,
   IndustryTheme,
 } from "@/lib/site/industryPages";
 import { webPageJsonLd } from "@/lib/site/structuredData";
@@ -62,7 +63,11 @@ function CheckIcon() {
 // the action colour on every page.
 const THEME: Record<
   IndustryTheme,
-  { pill: string; dot: string; ring: string; badge: string; accent: string; stroke: string; chip: string }
+  {
+    pill: string; dot: string; ring: string; badge: string; accent: string; stroke: string; chip: string;
+    /** Light-surface counterparts, for sections on white (Slice 2: the pain story). */
+    lightMarker: string; lightMarkerText: string; lightLine: string; lightLabel: string; lightPanel: string;
+  }
 > = {
   indigo: {
     pill: "bg-indigo-950 border-indigo-800 text-indigo-300",
@@ -72,6 +77,11 @@ const THEME: Record<
     accent: "text-indigo-300",
     stroke: "text-indigo-400",
     chip: "bg-indigo-500/15 border-indigo-400/60 text-indigo-200",
+    lightMarker: "bg-indigo-600 border-indigo-600",
+    lightMarkerText: "text-white",
+    lightLine: "bg-indigo-200",
+    lightLabel: "text-indigo-700",
+    lightPanel: "bg-indigo-50 border-indigo-200",
   },
   cyan: {
     pill: "bg-cyan-950 border-cyan-800 text-cyan-300",
@@ -81,6 +91,11 @@ const THEME: Record<
     accent: "text-cyan-300",
     stroke: "text-cyan-400",
     chip: "bg-cyan-500/15 border-cyan-400/60 text-cyan-200",
+    lightMarker: "bg-cyan-600 border-cyan-600",
+    lightMarkerText: "text-white",
+    lightLine: "bg-cyan-200",
+    lightLabel: "text-cyan-700",
+    lightPanel: "bg-cyan-50 border-cyan-200",
   },
   amber: {
     pill: "bg-amber-950 border-amber-800 text-amber-300",
@@ -90,8 +105,96 @@ const THEME: Record<
     accent: "text-amber-300",
     stroke: "text-amber-400",
     chip: "bg-amber-500/15 border-amber-400/60 text-amber-200",
+    lightMarker: "bg-amber-500 border-amber-500",
+    lightMarkerText: "text-slate-950",
+    lightLine: "bg-amber-200",
+    lightLabel: "text-amber-700",
+    lightPanel: "bg-amber-50 border-amber-200",
   },
 };
+
+type Theme = (typeof THEME)[IndustryTheme];
+
+/**
+ * Slice 2 — the `timeline` pain story: four stages of a job being lost,
+ * read left to right on lg and top to bottom below. Every stage
+ * describes the BUSINESS'S problem — nothing here is a Remy action —
+ * and the numbered markers carry the meaning, so the story reads the
+ * same without colour. The connecting line is pure CSS, no SVG.
+ */
+function PainTimeline({ timeline, theme }: { timeline: NonNullable<IndustryPage["pain_points"]["timeline"]>; theme: Theme }) {
+  return (
+    <div data-pain-layout="timeline">
+      <ol className="relative grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-4">
+        {/* The rail: vertical on phones, horizontal across the top on lg. */}
+        <div
+          className={`absolute left-4 top-2 bottom-2 w-px lg:left-0 lg:right-0 lg:top-4 lg:bottom-auto lg:h-px lg:w-auto ${theme.lightLine}`}
+          aria-hidden="true"
+        />
+        {timeline.stages.map((stage, index) => (
+          <li key={stage.title} className="relative pl-12 lg:pl-0 lg:pt-12">
+            <span
+              className={`absolute left-0 top-0 lg:left-0 lg:top-0 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-bold font-mono ${theme.lightMarker} ${theme.lightMarkerText}`}
+            >
+              {index + 1}
+            </span>
+            <h3 className="text-slate-900 font-semibold text-base mb-1.5">{stage.title}</h3>
+            <p className="text-slate-500 text-sm leading-relaxed">{stage.body}</p>
+          </li>
+        ))}
+      </ol>
+      <p className={`mt-8 text-center text-base font-medium ${theme.lightLabel}`} data-timeline-outcome>
+        {timeline.outcome}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Slice 2 — the `contrast` pain story: two columns of caller-described
+ * enquiries, side by side on md and stacked below, then the one thing
+ * they share. The enquiries are quotations of what callers say, never a
+ * classification Remy made, and the column titles are plain text so the
+ * contrast survives without colour.
+ */
+function PainColumn({ column, theme }: { column: IndustryPainColumn; theme: Theme }) {
+  return (
+    <div className={`rounded-xl border p-5 sm:p-6 ${theme.lightPanel}`}>
+      <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${theme.lightLabel}`}>{column.title}</p>
+      <p className="text-slate-500 text-sm mb-4">{column.caption}</p>
+      <ul className="space-y-2.5">
+        {column.enquiries.map((enquiry) => (
+          <li key={enquiry} className="flex items-start gap-2.5 text-slate-800 text-sm leading-relaxed">
+            <span className="text-slate-400 shrink-0" aria-hidden="true">“</span>
+            <span>{enquiry}”</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PainContrast({ contrast, theme }: { contrast: NonNullable<IndustryPage["pain_points"]["contrast"]>; theme: Theme }) {
+  return (
+    <div data-pain-layout="contrast">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5" data-contrast-columns>
+        <PainColumn column={contrast.left} theme={theme} />
+        <PainColumn column={contrast.right} theme={theme} />
+      </div>
+      <p className="mt-8 max-w-3xl mx-auto text-center text-slate-700 text-base leading-relaxed" data-contrast-truth>
+        {contrast.shared_truth}
+      </p>
+    </div>
+  );
+}
+
+/** Picks the pain story. Absent presentation, or a variant without its data, renders nothing extra — the cards alone, as before. */
+function PainStory({ page, theme }: { page: IndustryPage; theme: Theme }) {
+  const layout = page.presentation?.pain_layout ?? "cards";
+  if (layout === "timeline" && page.pain_points.timeline) return <PainTimeline timeline={page.pain_points.timeline} theme={theme} />;
+  if (layout === "contrast" && page.pain_points.contrast) return <PainContrast contrast={page.pain_points.contrast} theme={theme} />;
+  return null;
+}
 
 /** The default hero visual: the owner's structured call-summary rows. Unchanged from before Slice 1. */
 function SummaryCard({ page, theme }: { page: IndustryPage; theme: (typeof THEME)[IndustryTheme] }) {
@@ -405,7 +508,11 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
         </section>
 
         {/* ── PAIN POINTS ── */}
-        <section className="bg-white py-16 sm:py-20 px-4 sm:px-6" data-pain-points>
+        <section
+          className="bg-white py-16 sm:py-20 px-4 sm:px-6"
+          data-pain-points
+          data-pain-layout-mode={page.presentation?.pain_layout ?? "cards"}
+        >
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-10 sm:mb-14">
               <Eyebrow>{page.pain_points.eyebrow}</Eyebrow>
@@ -414,6 +521,13 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
               </h2>
               <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{page.pain_points.lead}</p>
             </div>
+            {/* Slice 2: the story (timeline / contrast) sits above the cards when opted into; otherwise only the cards render, exactly as before. */}
+            {(page.presentation?.pain_layout === "timeline" && page.pain_points.timeline) ||
+            (page.presentation?.pain_layout === "contrast" && page.pain_points.contrast) ? (
+              <div className="mb-10 sm:mb-14">
+                <PainStory page={page} theme={theme} />
+              </div>
+            ) : null}
             <div className={CARD_GRID}>
               {page.pain_points.items.map((item, index) => (
                 <div

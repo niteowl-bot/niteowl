@@ -54,6 +54,7 @@ const ALL_TEXT = [
   page.pain_points.heading,
   page.pain_points.lead,
   ...page.pain_points.items.flatMap((i) => [i.title, i.body]),
+  ...(page.pain_points.timeline ? [...page.pain_points.timeline.stages.flatMap((s) => [s.title, s.body]), page.pain_points.timeline.outcome] : []),
   page.capabilities.heading,
   page.capabilities.lead,
   ...page.capabilities.items.flatMap((i) => [i.title, i.body, i.condition ?? ""]),
@@ -213,7 +214,7 @@ describe("the page invents nothing", () => {
   });
 
   test("conditional capabilities are stated as conditional", () => {
-    const booking = page.capabilities.items.find((i) => /booking/i.test(i.title));
+    const booking = page.capabilities.items.find((i) => i.condition);
     assert.ok(booking?.condition, "booking capability must carry its condition");
     assert.match(booking.condition, /Knowledge Base/);
     assert.match(booking.condition, /when your calendar is connected/);

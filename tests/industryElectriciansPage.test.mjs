@@ -52,6 +52,10 @@ const allText = (p) => [
   p.pain_points.heading,
   p.pain_points.lead,
   ...p.pain_points.items.flatMap((i) => [i.title, i.body]),
+  ...(p.pain_points.timeline ? [...p.pain_points.timeline.stages.flatMap((s) => [s.title, s.body]), p.pain_points.timeline.outcome] : []),
+  ...(p.pain_points.contrast
+    ? [p.pain_points.contrast.left.title, p.pain_points.contrast.left.caption, ...p.pain_points.contrast.left.enquiries, p.pain_points.contrast.right.title, p.pain_points.contrast.right.caption, ...p.pain_points.contrast.right.enquiries, p.pain_points.contrast.shared_truth]
+    : []),
   p.capabilities.heading,
   p.capabilities.lead,
   ...p.capabilities.items.flatMap((i) => [i.title, i.body, i.condition ?? ""]),
@@ -134,7 +138,7 @@ describe("the copy speaks to electrical contractors, not plumbers", () => {
     assert.match(page.hero.eyebrow, /electricians/i);
     assert.match(page.hero.headline + " " + page.hero.headline_accent, /Electrical Enquiry/);
     assert.match(page.hero.headline_accent, /On Site/);
-    assert.match(page.pain_points.heading, /Electrical Businesses/);
+    assert.match(page.pain_points.heading, /Electrical Enquiries/);
     assert.match(page.example.customer_says, /sockets|board|tripping/i);
     assert.ok(page.faqs.some((f) => /electrical fault/i.test(f.q)));
     assert.match(page.scan.heading, /Electrical Business/);
@@ -146,9 +150,9 @@ describe("the copy speaks to electrical contractors, not plumbers", () => {
   });
 
   test("the service categories named are general and expressed as the caller's own words", () => {
-    const capture = page.capabilities.items.find((i) => /detail capture/i.test(i.title));
-    assert.match(capture.body, /in their own words/);
-    for (const term of ["fault", "sockets and switches", "lighting", "rewire", "consumer unit", "EV charger", "installation"]) {
+    const capture = page.capabilities.items.find((i) => /Captures the enquiry/i.test(i.title));
+    assert.match(capture.body, /as the caller describes it/);
+    for (const term of ["tripping board", "dead socket", "flickering light", "rewire", "consumer-unit", "EV charger"]) {
       assert.match(capture.body, new RegExp(term, "i"), term);
     }
   });
@@ -227,7 +231,7 @@ describe("the page invents nothing and claims no electrical expertise", () => {
     assert.match(joined, /doesn’t transfer live calls/);
     assert.match(joined, /doesn’t promise a response time/);
     assert.match(joined, /hang up and call 999/);
-    const booking = page.capabilities.items.find((i) => /booking/i.test(i.title));
+    const booking = page.capabilities.items.find((i) => i.condition);
     assert.match(booking.condition, /Knowledge Base/);
     assert.match(booking.condition, /when your calendar is connected/);
   });
