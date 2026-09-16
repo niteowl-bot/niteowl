@@ -43,6 +43,12 @@ const allText = (p) => [
   p.hero.summary_card.title,
   p.hero.summary_card.note,
   ...p.hero.summary_card.rows.flatMap((r) => [r.label, r.value]),
+  ...(p.hero.job_ticket
+    ? [p.hero.job_ticket.title, p.hero.job_ticket.urgency_label, p.hero.job_ticket.problem, p.hero.job_ticket.problem_caption, p.hero.job_ticket.status, p.hero.job_ticket.illustrative_note, ...p.hero.job_ticket.rows.flatMap((r) => [r.label, r.value])]
+    : []),
+  ...(p.hero.enquiry_panel
+    ? [p.hero.enquiry_panel.title, p.hero.enquiry_panel.types_caption, ...p.hero.enquiry_panel.enquiry_types, p.hero.enquiry_panel.status, p.hero.enquiry_panel.illustrative_note, ...p.hero.enquiry_panel.rows.flatMap((r) => [r.label, r.value])]
+    : []),
   p.pain_points.heading,
   p.pain_points.lead,
   ...p.pain_points.items.flatMap((i) => [i.title, i.body]),
@@ -126,7 +132,8 @@ describe("metadata follows the site pattern and is electrician-specific", () => 
 describe("the copy speaks to electrical contractors, not plumbers", () => {
   test("hero, pain points, example and FAQ are electrician-specific", () => {
     assert.match(page.hero.eyebrow, /electricians/i);
-    assert.match(page.hero.headline_accent, /Electrical/);
+    assert.match(page.hero.headline + " " + page.hero.headline_accent, /Electrical Enquiry/);
+    assert.match(page.hero.headline_accent, /On Site/);
     assert.match(page.pain_points.heading, /Electrical Businesses/);
     assert.match(page.example.customer_says, /sockets|board|tripping/i);
     assert.ok(page.faqs.some((f) => /electrical fault/i.test(f.q)));
