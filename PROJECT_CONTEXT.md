@@ -685,8 +685,19 @@ marketing / acquisition surfaces (one content constant each in `src/lib/site/ind
 rendered by the shared `IndustryPageView`), not separate Remy implementations; the reusable
 `IndustryPage` pattern is now proven across two industries. **Industry-specific wording — the FAQ
 heading included — belongs in the industry content object, never hard-coded in the shared view**
-(PR #119, merge `b731acd`, closed the one defect that rule prevents). Closeouts are in
-`CHANGELOG.md`.
+(PR #119, merge `b731acd`, closed the one defect that rule prevents). **The shared pattern now
+carries a typed presentation contract, proven in production (PR #121, merge `8838934`,
+2026-09-16):** an optional `presentation` on `IndustryPage` — `theme` (`indigo` / `cyan` / `amber`)
+and `hero_visual` (`summary_card` / `job_ticket` / `enquiry_panel`), closed unions mapped to
+static class strings — so industry presentation may vary through **controlled typed variants**
+while there remains **ONE Remy and ONE shared industry-page architecture**; a page with no
+`presentation` renders the default summary card unchanged. **Slice 1 introduced only this
+presentation-contract + hero-visual layer.** Plumbers currently use `job_ticket` with the cyan
+cue; electricians use `enquiry_panel` with the amber cue. **Truthfulness rule for presentation:
+a visual must never imply booked, dispatched, diagnosed, certified or any other completed outcome
+Remy has not actually produced** — a hero visual shows the request or captured state, and the
+`tests/industryPresentation.test.mjs` guard pins it. **Slice 2 (pain layouts) is NOT STARTED.**
+Closeouts are in `CHANGELOG.md`.
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
 `…/problems/booking-back-and-forth`; do not repeat that check.**
 
