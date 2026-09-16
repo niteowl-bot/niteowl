@@ -53,6 +53,9 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = [
   // A-2b — the Lost Revenue framing / entry page into the same nine-question
   // Scan (src/lib/site/lostRevenuePage.ts). Entry only; it sizes nothing.
   { path: "/free-tools/lost-revenue", changeFrequency: "monthly", priority: 0.8 },
+  // Industry landing pages — marketing only, one Remy
+  // (src/lib/site/industryPages.ts). Plumbers is the first and only one.
+  { path: "/ai-receptionist-for-plumbers", changeFrequency: "monthly", priority: 0.8 },
   { path: "/privacy", changeFrequency: "yearly", priority: 0.3 },
   { path: "/terms", changeFrequency: "yearly", priority: 0.3 },
 ];
