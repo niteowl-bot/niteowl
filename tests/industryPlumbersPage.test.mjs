@@ -325,6 +325,22 @@ describe("the homepage links to the page, and to no industry page that does not 
     assert.match(home, /href="\/ai-receptionist-for-plumbers"/);
   });
 
+  test("the high-visibility industry section below the hero lists exactly the live industry pages", () => {
+    const block = home.match(/const INDUSTRY_PAGES = \[([\s\S]*?)\r?\n\];/);
+    assert.ok(block, "INDUSTRY_PAGES constant present");
+    const entries = [...block[1].matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(entries, ["/ai-receptionist-for-plumbers"]);
+    assert.match(block[1], /name: "Plumbers"/);
+    assert.match(block[1], /cta: "Explore Remy for Plumbers"/);
+    assert.match(home, /Built for your industry/);
+    assert.match(home, /INDUSTRY_PAGES\.map\(/);
+    // The section sits directly after the hero and before "Perfect For".
+    const hero = home.indexOf("<HeroDemo />");
+    const section = home.indexOf("Built for your industry");
+    const perfectFor = home.indexOf("Built for local businesses");
+    assert.ok(hero < section && section < perfectFor);
+  });
+
   test("no other industry is linked until its page exists — no placeholder routes", () => {
     const industryHrefs = [...home.matchAll(/href(?:=|: )"(\/ai-receptionist-for-[^"]+)"/g)].map((m) => m[1]);
     assert.ok(industryHrefs.length >= 2);
