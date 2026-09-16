@@ -677,9 +677,11 @@ problem pages take their wording from `SCAN_RECOMMENDATIONS` **verbatim** and `w
 is excluded because it would diagnose a stranger; **`enquiry.no_followup` keeps its canonical
 `recommended_product: null` truth visible**; every CTA is the literal Scan path with **no query
 string, hash, prefill or carried state**; and the Lost Revenue page **calculates nothing**.
-The sitemap now carries **ten** approved public URLs. **`isPrivatePath` is segment-aware — a
-substring check wrongly flags `/booking` inside `…/problems/booking-back-and-forth`; do not
-repeat that check.**
+The sitemap now carries **eleven** approved public URLs — the ten above plus
+`/ai-receptionist-for-plumbers`, the first industry marketing page (PR #112, merge `e8a26e6`,
+production-verified 2026-09-16; marketing only, one Remy, see `CHANGELOG.md`).
+**`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
+`…/problems/booking-back-and-forth`; do not repeat that check.**
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
