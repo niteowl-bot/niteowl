@@ -97,6 +97,8 @@ export interface IndustryPage {
     readonly heading: string;
     readonly steps: readonly { readonly title: string; readonly body: string }[];
   };
+  /** The FAQ section heading, per industry — never hard-coded in the view. */
+  readonly faq_heading: string;
   readonly faqs: readonly IndustryFaq[];
   readonly final_cta: {
     readonly heading: string;
@@ -273,6 +275,7 @@ export const PLUMBERS_PAGE: IndustryPage = {
     ],
   },
 
+  faq_heading: "Questions plumbers ask about Remy",
   faqs: [
     {
       q: "Can Remy answer calls while I’m working on a job?",
@@ -476,6 +479,7 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
     ],
   },
 
+  faq_heading: "Questions electricians ask about Remy",
   faqs: [
     {
       q: "Can Remy answer calls while I’m on a job?",

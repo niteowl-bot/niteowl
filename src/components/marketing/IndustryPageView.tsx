@@ -354,7 +354,7 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
             <div className="text-center mb-10 sm:mb-12">
               <Eyebrow>FAQ</Eyebrow>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight text-balance">
-                Questions plumbers ask about Remy
+                {page.faq_heading}
               </h2>
             </div>
             <div className="divide-y divide-slate-200 border-y border-slate-200">

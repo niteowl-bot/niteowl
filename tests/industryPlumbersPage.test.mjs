@@ -359,3 +359,18 @@ describe("the homepage links to the page, and to no industry page that does not 
     assert.doesNotMatch(home, /label: "(HVAC|Dentists|Physiotherapists|Veterinary Clinics|Landscapers|Cleaning Services)", href/);
   });
 });
+
+// ── 8. FAQ heading — rendered from content, not the shared view ────
+
+describe("the FAQ heading is the plumbers one, rendered from the content object", () => {
+  test("the rendered plumbers page carries its own FAQ heading and not the electricians one", () => {
+    const html = textOf(render());
+    assert.match(html, /Questions plumbers ask about Remy/);
+    assert.doesNotMatch(html, /Questions electricians ask about Remy/);
+    assert.equal(page.faq_heading, "Questions plumbers ask about Remy");
+  });
+
+  test("the rendered plumbers page contains no electrical wording anywhere", () => {
+    assert.doesNotMatch(textOf(render()), /electric/i);
+  });
+});
