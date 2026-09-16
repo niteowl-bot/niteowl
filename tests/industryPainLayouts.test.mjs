@@ -31,15 +31,18 @@ const unescape = (html) =>
 const renderPage = (Page) => unescape(renderToStaticMarkup(createElement(Page)));
 const renderView = (page) => unescape(renderToStaticMarkup(createElement(IndustryPageView, { page })));
 const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ");
-const section = (html, from, to) => {
+// One <section> by its data attribute: from the attribute to the section
+// close. Slice 3 reorders sections, so the next section can no longer be
+// assumed.
+const section = (html, from) => {
   const s = html.indexOf(from);
-  const e = html.indexOf(to);
-  assert.ok(s > 0 && e > s, `${from} … ${to} present`);
+  const e = html.indexOf("</section>", s);
+  assert.ok(s > 0 && e > s, `${from} section present`);
   return html.slice(s, e);
 };
-const painOf = (html) => section(html, "data-pain-points", "data-capabilities");
-const capsOf = (html) => section(html, "data-capabilities", "data-example");
-const heroOf = (html) => section(html, "data-hero", "data-pain-points");
+const painOf = (html) => section(html, "data-pain-points");
+const capsOf = (html) => section(html, "data-capabilities");
+const heroOf = (html) => section(html, "data-hero");
 
 const PLUMBING = /plumb|pipe|sink|drain|hot water|boiler|leak|bathroom|tap\b/i;
 const ELECTRICAL = /electric|socket|switch|lighting|rewire|consumer[- ]unit|EV charger|fit-out|board (keeps|that) trip|tripping/i;

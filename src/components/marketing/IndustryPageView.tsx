@@ -1,10 +1,15 @@
+import { Fragment } from "react";
 import Link from "next/link";
-import type {
-  IndustryEnquiryPanel,
-  IndustryJobTicket,
-  IndustryPage,
-  IndustryPainColumn,
-  IndustryTheme,
+import {
+  DEFAULT_SECTION_ORDER,
+  type IndustryEnquiryPanel,
+  type IndustryJobTicket,
+  type IndustryMidCta,
+  type IndustryPage,
+  type IndustryPainColumn,
+  type IndustrySection,
+  type IndustryTheme,
+  type IndustryWorkflow,
 } from "@/lib/site/industryPages";
 import { webPageJsonLd } from "@/lib/site/structuredData";
 
@@ -362,6 +367,135 @@ function HeroVisual({ page, theme }: { page: IndustryPage; theme: (typeof THEME)
   return <SummaryCard page={page} theme={theme} />;
 }
 
+/**
+ * Slice 3 — the `flow_curve` workflow: four numbered nodes along a
+ * flowing S-curve. On lg the nodes sit in a row with the curve drawn
+ * behind them; below lg they stack with a plain vertical rail. The curve
+ * is inline SVG, decorative and aria-hidden — the numbered markers and
+ * titles carry the sequence, so it reads the same without colour or SVG.
+ */
+function WorkflowCurve({ workflow, theme }: { workflow: IndustryWorkflow; theme: Theme }) {
+  return (
+    <div className="relative" data-workflow-motif="flow_curve">
+      <svg
+        className={`hidden lg:block pointer-events-none absolute inset-x-0 top-0 h-8 w-full opacity-70 ${theme.stroke}`}
+        viewBox="0 0 1000 64"
+        preserveAspectRatio="none"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="M0 32 C 125 32, 125 8, 250 8 S 375 56, 500 56 S 625 8, 750 8 S 875 32, 1000 32" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M0 40 C 125 40, 125 16, 250 16 S 375 64, 500 64 S 625 16, 750 16 S 875 40, 1000 40" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.4" />
+      </svg>
+      <ol className="relative grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-6">
+        <div className={`lg:hidden absolute left-4 top-2 bottom-2 w-px ${theme.lightLine}`} aria-hidden="true" />
+        {workflow.nodes.map((node, index) => (
+          <li key={node.title} className="relative pl-12 lg:pl-0 lg:pt-14 lg:text-center">
+            <span
+              className={`absolute left-0 top-0 lg:left-1/2 lg:-translate-x-1/2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-md text-sm font-bold font-mono ${theme.lightMarker} ${theme.lightMarkerText}`}
+            >
+              {index + 1}
+            </span>
+            <h3 className="text-slate-900 font-semibold text-base mb-1.5">{node.title}</h3>
+            <p className="text-slate-500 text-sm leading-relaxed">{node.body}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/**
+ * Slice 3 — the `flow_circuit` workflow: four square nodes on an
+ * orthogonal trace. On lg the trace steps between the nodes; below lg
+ * they stack against a straight rail with square markers. Structurally
+ * different from the curve — right angles, square nodes, a stepped
+ * path — and equally readable without colour or the SVG.
+ */
+function WorkflowCircuit({ workflow, theme }: { workflow: IndustryWorkflow; theme: Theme }) {
+  return (
+    <div className="relative" data-workflow-motif="flow_circuit">
+      <svg
+        className={`hidden lg:block pointer-events-none absolute inset-x-0 top-0 h-8 w-full opacity-70 ${theme.stroke}`}
+        viewBox="0 0 1000 64"
+        preserveAspectRatio="none"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="M0 16 H125 V48 H375 V16 H625 V48 H875 V16 H1000" stroke="currentColor" strokeWidth="2" strokeLinejoin="miter" />
+        <path d="M0 24 H117 V56 H367 V24 H617 V56 H867 V24 H1000" stroke="currentColor" strokeWidth="1" opacity="0.4" strokeLinejoin="miter" />
+        {[125, 375, 625, 875].map((x, i) => (
+          <rect key={x} x={x - 4} y={(i % 2 === 0 ? 48 : 16) - 4} width="8" height="8" fill="currentColor" />
+        ))}
+      </svg>
+      <ol className="relative grid grid-cols-1 lg:grid-cols-4 gap-6 lg:gap-6">
+        <div className={`lg:hidden absolute left-4 top-2 bottom-2 w-px ${theme.lightLine}`} aria-hidden="true" />
+        {workflow.nodes.map((node, index) => (
+          <li key={node.title} className="relative pl-12 lg:pl-0 lg:pt-14 lg:text-center">
+            <span
+              className={`absolute left-0 top-0 lg:left-1/2 lg:-translate-x-1/2 flex h-8 w-8 items-center justify-center rounded border-2 border-white shadow-md text-sm font-bold font-mono ${theme.lightMarker} ${theme.lightMarkerText}`}
+            >
+              {index + 1}
+            </span>
+            <h3 className="text-slate-900 font-semibold text-base mb-1.5">{node.title}</h3>
+            <p className="text-slate-500 text-sm leading-relaxed">{node.body}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** The workflow section. Renders nothing when the page has no motif or no data. */
+function WorkflowSection({ page, theme }: { page: IndustryPage; theme: Theme }) {
+  const motif = page.presentation?.workflow ?? "none";
+  const workflow = page.workflow;
+  if (motif === "none" || !workflow) return null;
+  return (
+    <section className="bg-white border-b border-slate-200 py-16 sm:py-20 px-4 sm:px-6" data-workflow data-workflow-variant={motif}>
+      <div className="max-w-6xl mx-auto">
+        <div className="text-center mb-10 sm:mb-14">
+          <Eyebrow>{workflow.eyebrow}</Eyebrow>
+          <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">{workflow.heading}</h2>
+          <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{workflow.lead}</p>
+        </div>
+        {motif === "flow_curve" ? <WorkflowCurve workflow={workflow} theme={theme} /> : <WorkflowCircuit workflow={workflow} theme={theme} />}
+        <p className="mt-10 max-w-3xl mx-auto text-center text-slate-500 text-sm leading-relaxed" data-workflow-footnote>
+          {workflow.footnote}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/** The mid-page Scan CTA: trade-specific framing, the same indigo button and the same Scan destination. */
+function MidCtaSection({ cta }: { cta: IndustryMidCta }) {
+  return (
+    <section className="bg-slate-50 border-b border-slate-200 py-12 sm:py-14 px-4 sm:px-6" data-mid-cta>
+      <div className="max-w-3xl mx-auto text-center">
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight mb-3 text-balance">{cta.heading}</h2>
+        <p className="text-slate-500 text-base leading-relaxed mb-6">{cta.body}</p>
+        <Link href={cta.href} className={CTA_PRIMARY} data-mid-cta-link>
+          {cta.label}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Slice 3 — the order the sections render in. A page's own order is
+ * used when present; any shared section it omits is appended in default
+ * order so no page can silently lose its Scan section, how-it-works or
+ * FAQ. `workflow` and `mid_cta` are opt-in and drop out when their data
+ * or variant is absent.
+ */
+function resolveSectionOrder(page: IndustryPage): readonly IndustrySection[] {
+  const own = page.presentation?.section_order ?? DEFAULT_SECTION_ORDER;
+  const missing = DEFAULT_SECTION_ORDER.filter((id) => !own.includes(id));
+  return [...own, ...missing].filter((id, i, all) => all.indexOf(id) === i);
+}
+
 function Eyebrow({ children, dark = false }: { children: React.ReactNode; dark?: boolean }) {
   return (
     <p
@@ -418,6 +552,202 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
         })),
       },
     ],
+  };
+
+  // Each shared section, keyed by its id, exactly as it rendered before
+  // Slice 3; the two opt-in sections return null when not configured.
+  const renderSection = (id: IndustrySection) => {
+    switch (id) {
+      case "workflow":
+        return <WorkflowSection page={page} theme={theme} />;
+      case "mid_cta":
+        return page.mid_cta ? <MidCtaSection cta={page.mid_cta} /> : null;
+      case "pain":
+        return (
+        <section
+          className="bg-white py-16 sm:py-20 px-4 sm:px-6"
+          data-pain-points
+          data-pain-layout-mode={page.presentation?.pain_layout ?? "cards"}
+        >
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-10 sm:mb-14">
+              <Eyebrow>{page.pain_points.eyebrow}</Eyebrow>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
+                {page.pain_points.heading}
+              </h2>
+              <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{page.pain_points.lead}</p>
+            </div>
+            {/* Slice 2: the story (timeline / contrast) sits above the cards when opted into; otherwise only the cards render, exactly as before. */}
+            {(page.presentation?.pain_layout === "timeline" && page.pain_points.timeline) ||
+            (page.presentation?.pain_layout === "contrast" && page.pain_points.contrast) ? (
+              <div className="mb-10 sm:mb-14">
+                <PainStory page={page} theme={theme} />
+              </div>
+            ) : null}
+            <div className={CARD_GRID}>
+              {page.pain_points.items.map((item, index) => (
+                <div
+                  key={item.title}
+                  className={`bg-slate-50 border border-slate-200 rounded-2xl p-5 sm:p-6 h-full ${cardPlacement(index, page.pain_points.items.length)}`}
+                >
+                  <h3 className="text-slate-900 font-semibold text-base mb-2">{item.title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        );
+      case "capabilities":
+        return (
+        <section className="bg-slate-50 border-y border-slate-200 py-16 sm:py-20 px-4 sm:px-6" data-capabilities>
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-10 sm:mb-14">
+              <Eyebrow>{page.capabilities.eyebrow}</Eyebrow>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
+                {page.capabilities.heading}
+              </h2>
+              <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{page.capabilities.lead}</p>
+            </div>
+            <div className={CARD_GRID}>
+              {page.capabilities.items.map((item, index) => (
+                <div
+                  key={item.title}
+                  className={`bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 h-full ${cardPlacement(index, page.capabilities.items.length)}`}
+                >
+                  <p className="text-slate-300 font-bold text-3xl mb-3 font-mono">
+                    {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <h3 className="text-slate-900 font-semibold text-base mb-2">{item.title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{item.body}</p>
+                  {item.condition && (
+                    <p className="text-slate-500 text-xs leading-relaxed mt-3 border-l-2 border-indigo-200 pl-3" data-condition>
+                      {item.condition}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+        );
+      case "example":
+        return (
+        <section className="bg-white py-16 sm:py-20 px-4 sm:px-6" data-example>
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-8 sm:mb-10">
+              <Eyebrow>{page.example.eyebrow}</Eyebrow>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
+                {page.example.heading}
+              </h2>
+              <p className="text-slate-500 text-sm max-w-xl mx-auto" data-disclaimer>
+                {page.example.disclaimer}
+              </p>
+            </div>
+            <div className="bg-slate-950 rounded-2xl p-5 sm:p-8 shadow-xl ring-1 ring-indigo-500/30">
+              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-2">Customer</p>
+              <p className="text-white text-base sm:text-lg leading-relaxed mb-6">“{page.example.customer_says}”</p>
+              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-3">Remy</p>
+              <ol className="space-y-2.5">
+                {page.example.remy_does.map((step, index) => (
+                  <li key={step} className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
+                    <span className="text-slate-500 font-mono text-xs mt-1 shrink-0">{index + 1}</span>
+                    {step}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </section>
+        );
+      case "scan":
+        return (
+        <section className="bg-slate-950 py-16 sm:py-20 px-4 sm:px-6" data-scan>
+          <div className="max-w-3xl mx-auto text-center">
+            <Eyebrow dark>{page.scan.eyebrow}</Eyebrow>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4 text-balance">
+              {page.scan.heading}
+            </h2>
+            <p className="text-slate-400 text-base sm:text-lg leading-relaxed mb-4">{page.scan.lead}</p>
+            <p className="text-slate-500 text-sm leading-relaxed mb-8">{page.scan.promise}</p>
+            <Link href={page.scan.cta.href} className={CTA_PRIMARY} data-scan-cta>
+              {page.scan.cta.label}
+            </Link>
+            <p className="text-slate-500 text-sm mt-10 mb-2">Read about the problems the scan looks for:</p>
+            <ul className="flex flex-col sm:flex-row sm:flex-wrap justify-center items-center gap-x-6 gap-y-1">
+              {page.scan.problem_links.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="inline-block py-2.5 text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                  >
+                    {link.label}&nbsp;→
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+        );
+      case "how_it_works":
+        return (
+        <section className="bg-slate-50 border-b border-slate-200 py-16 sm:py-20 px-4 sm:px-6" data-how-it-works>
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-10 sm:mb-14">
+              <Eyebrow>{page.how_it_works.eyebrow}</Eyebrow>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight text-balance">
+                {page.how_it_works.heading}
+              </h2>
+            </div>
+            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+              {page.how_it_works.steps.map((step, index) => (
+                <li key={step.title} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 h-full">
+                  <p className="text-slate-300 font-bold text-3xl mb-3 font-mono">
+                    {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <h3 className="text-slate-900 font-semibold text-base mb-2">{step.title}</h3>
+                  <p className="text-slate-500 text-sm leading-relaxed">{step.body}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+        );
+      case "faq":
+        return (
+        <section className="bg-white py-16 sm:py-24 px-4 sm:px-6" data-faq>
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-10 sm:mb-12">
+              <Eyebrow>FAQ</Eyebrow>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight text-balance">
+                {page.faq_heading}
+              </h2>
+            </div>
+            <div className="divide-y divide-slate-200 border-y border-slate-200">
+              {page.faqs.map((item) => (
+                <details key={item.q} className="group py-3">
+                  {/* py-2.5 on the summary itself keeps the tap target ≥ 44px. */}
+                  <summary className="flex cursor-pointer items-center justify-between gap-4 list-none py-2.5 text-slate-900 font-semibold text-[15px] sm:text-base marker:content-none">
+                    {item.q}
+                    <svg
+                      className="w-5 h-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                    </svg>
+                  </summary>
+                  <p className="mt-1 pb-2 text-slate-500 text-sm sm:text-[15px] leading-relaxed">{item.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+        );
+    }
   };
 
   return (
@@ -507,184 +837,10 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
           </div>
         </section>
 
-        {/* ── PAIN POINTS ── */}
-        <section
-          className="bg-white py-16 sm:py-20 px-4 sm:px-6"
-          data-pain-points
-          data-pain-layout-mode={page.presentation?.pain_layout ?? "cards"}
-        >
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-10 sm:mb-14">
-              <Eyebrow>{page.pain_points.eyebrow}</Eyebrow>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
-                {page.pain_points.heading}
-              </h2>
-              <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{page.pain_points.lead}</p>
-            </div>
-            {/* Slice 2: the story (timeline / contrast) sits above the cards when opted into; otherwise only the cards render, exactly as before. */}
-            {(page.presentation?.pain_layout === "timeline" && page.pain_points.timeline) ||
-            (page.presentation?.pain_layout === "contrast" && page.pain_points.contrast) ? (
-              <div className="mb-10 sm:mb-14">
-                <PainStory page={page} theme={theme} />
-              </div>
-            ) : null}
-            <div className={CARD_GRID}>
-              {page.pain_points.items.map((item, index) => (
-                <div
-                  key={item.title}
-                  className={`bg-slate-50 border border-slate-200 rounded-2xl p-5 sm:p-6 h-full ${cardPlacement(index, page.pain_points.items.length)}`}
-                >
-                  <h3 className="text-slate-900 font-semibold text-base mb-2">{item.title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">{item.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── CAPABILITIES ── */}
-        <section className="bg-slate-50 border-y border-slate-200 py-16 sm:py-20 px-4 sm:px-6" data-capabilities>
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-10 sm:mb-14">
-              <Eyebrow>{page.capabilities.eyebrow}</Eyebrow>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
-                {page.capabilities.heading}
-              </h2>
-              <p className="text-slate-500 text-base sm:text-lg max-w-2xl mx-auto">{page.capabilities.lead}</p>
-            </div>
-            <div className={CARD_GRID}>
-              {page.capabilities.items.map((item, index) => (
-                <div
-                  key={item.title}
-                  className={`bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 h-full ${cardPlacement(index, page.capabilities.items.length)}`}
-                >
-                  <p className="text-slate-300 font-bold text-3xl mb-3 font-mono">
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <h3 className="text-slate-900 font-semibold text-base mb-2">{item.title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">{item.body}</p>
-                  {item.condition && (
-                    <p className="text-slate-500 text-xs leading-relaxed mt-3 border-l-2 border-indigo-200 pl-3" data-condition>
-                      {item.condition}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── ILLUSTRATIVE CALL EXAMPLE ── */}
-        <section className="bg-white py-16 sm:py-20 px-4 sm:px-6" data-example>
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-8 sm:mb-10">
-              <Eyebrow>{page.example.eyebrow}</Eyebrow>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight mb-4 text-balance">
-                {page.example.heading}
-              </h2>
-              <p className="text-slate-500 text-sm max-w-xl mx-auto" data-disclaimer>
-                {page.example.disclaimer}
-              </p>
-            </div>
-            <div className="bg-slate-950 rounded-2xl p-5 sm:p-8 shadow-xl ring-1 ring-indigo-500/30">
-              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-2">Customer</p>
-              <p className="text-white text-base sm:text-lg leading-relaxed mb-6">“{page.example.customer_says}”</p>
-              <p className="text-indigo-300 text-xs font-semibold uppercase tracking-widest mb-3">Remy</p>
-              <ol className="space-y-2.5">
-                {page.example.remy_does.map((step, index) => (
-                  <li key={step} className="flex items-start gap-3 text-slate-300 text-sm leading-relaxed">
-                    <span className="text-slate-500 font-mono text-xs mt-1 shrink-0">{index + 1}</span>
-                    {step}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-        </section>
-
-        {/* ── BUSINESS OPPORTUNITY SCAN ── */}
-        <section className="bg-slate-950 py-16 sm:py-20 px-4 sm:px-6" data-scan>
-          <div className="max-w-3xl mx-auto text-center">
-            <Eyebrow dark>{page.scan.eyebrow}</Eyebrow>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-4 text-balance">
-              {page.scan.heading}
-            </h2>
-            <p className="text-slate-400 text-base sm:text-lg leading-relaxed mb-4">{page.scan.lead}</p>
-            <p className="text-slate-500 text-sm leading-relaxed mb-8">{page.scan.promise}</p>
-            <Link href={page.scan.cta.href} className={CTA_PRIMARY} data-scan-cta>
-              {page.scan.cta.label}
-            </Link>
-            <p className="text-slate-500 text-sm mt-10 mb-2">Read about the problems the scan looks for:</p>
-            <ul className="flex flex-col sm:flex-row sm:flex-wrap justify-center items-center gap-x-6 gap-y-1">
-              {page.scan.problem_links.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="inline-block py-2.5 text-indigo-400 hover:text-indigo-300 text-sm font-medium"
-                  >
-                    {link.label}&nbsp;→
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        {/* ── HOW IT WORKS ── */}
-        <section className="bg-slate-50 border-b border-slate-200 py-16 sm:py-20 px-4 sm:px-6" data-how-it-works>
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-10 sm:mb-14">
-              <Eyebrow>{page.how_it_works.eyebrow}</Eyebrow>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight text-balance">
-                {page.how_it_works.heading}
-              </h2>
-            </div>
-            <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-              {page.how_it_works.steps.map((step, index) => (
-                <li key={step.title} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 h-full">
-                  <p className="text-slate-300 font-bold text-3xl mb-3 font-mono">
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <h3 className="text-slate-900 font-semibold text-base mb-2">{step.title}</h3>
-                  <p className="text-slate-500 text-sm leading-relaxed">{step.body}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        </section>
-
-        {/* ── FAQ ── */}
-        <section className="bg-white py-16 sm:py-24 px-4 sm:px-6" data-faq>
-          <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-10 sm:mb-12">
-              <Eyebrow>FAQ</Eyebrow>
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 tracking-tight text-balance">
-                {page.faq_heading}
-              </h2>
-            </div>
-            <div className="divide-y divide-slate-200 border-y border-slate-200">
-              {page.faqs.map((item) => (
-                <details key={item.q} className="group py-3">
-                  {/* py-2.5 on the summary itself keeps the tap target ≥ 44px. */}
-                  <summary className="flex cursor-pointer items-center justify-between gap-4 list-none py-2.5 text-slate-900 font-semibold text-[15px] sm:text-base marker:content-none">
-                    {item.q}
-                    <svg
-                      className="w-5 h-5 shrink-0 text-slate-400 transition-transform group-open:rotate-180"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      aria-hidden="true"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-                    </svg>
-                  </summary>
-                  <p className="mt-1 pb-2 text-slate-500 text-sm sm:text-[15px] leading-relaxed">{item.a}</p>
-                </details>
-              ))}
-            </div>
-          </div>
-        </section>
+        {/* ── BODY SECTIONS, in the page's order (Slice 3) ── */}
+        {resolveSectionOrder(page).map((id) => (
+          <Fragment key={id}>{renderSection(id)}</Fragment>
+        ))}
 
         {/* ── FINAL CTA ── */}
         <section className="bg-indigo-600 py-14 sm:py-16 px-4 sm:px-6" data-final-cta>

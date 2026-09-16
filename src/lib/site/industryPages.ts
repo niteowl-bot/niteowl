@@ -79,11 +79,77 @@ export type IndustryHeroVisual = "summary_card" | "job_ticket" | "enquiry_panel"
  */
 export type IndustryPainLayout = "cards" | "timeline" | "contrast";
 
+/**
+ * The workflow section's motif — Slice 3.
+ *   - `none`: the default — no workflow section is rendered
+ *   - `flow_curve`: four nodes on a flowing S-curve (requires `workflow`)
+ *   - `flow_circuit`: four nodes on an orthogonal circuit trace (requires `workflow`)
+ * The motif is decorative; the numbered nodes carry the sequence.
+ */
+export type IndustryWorkflowMotif = "none" | "flow_curve" | "flow_circuit";
+
+/**
+ * The sections a page may order — Slice 3. A CLOSED set of the sections
+ * that already exist; the hero always comes first and the final CTA
+ * always last, so neither is listed. `workflow` and `mid_cta` render
+ * only when their data and variant are present. A section id that is
+ * absent from an order is simply not rendered, and any id the order
+ * omits from the shared set is appended in default order so a page can
+ * never lose its Scan section or FAQ by accident.
+ */
+export type IndustrySection =
+  | "pain"
+  | "workflow"
+  | "mid_cta"
+  | "capabilities"
+  | "example"
+  | "scan"
+  | "how_it_works"
+  | "faq";
+
+/** The order every page renders unless it opts into its own. Exactly the pre-Slice-3 page. */
+export const DEFAULT_SECTION_ORDER: readonly IndustrySection[] = [
+  "pain",
+  "capabilities",
+  "example",
+  "scan",
+  "how_it_works",
+  "faq",
+];
+
 export interface IndustryPresentation {
   readonly theme: IndustryTheme;
   readonly hero_visual: IndustryHeroVisual;
   /** Optional. Absent means `cards`. */
   readonly pain_layout?: IndustryPainLayout;
+  /** Optional. Absent means `none`. */
+  readonly workflow?: IndustryWorkflowMotif;
+  /** Optional. Absent means DEFAULT_SECTION_ORDER. */
+  readonly section_order?: readonly IndustrySection[];
+}
+
+/** One node of the workflow — what happens at that step, truthfully. The last node is a REQUEST state, never a completed outcome. */
+export interface IndustryWorkflowNode {
+  readonly title: string;
+  readonly body: string;
+}
+
+export interface IndustryWorkflow {
+  readonly eyebrow: string;
+  readonly heading: string;
+  readonly lead: string;
+  /** Exactly four, in order. */
+  readonly nodes: readonly IndustryWorkflowNode[];
+  /** The truthfulness footnote under the nodes — what the endpoint does and does not mean. */
+  readonly footnote: string;
+}
+
+/** The mid-page Scan CTA — same destination as every other Scan CTA, trade-specific framing. */
+export interface IndustryMidCta {
+  readonly heading: string;
+  readonly body: string;
+  readonly label: string;
+  readonly href: string;
 }
 
 /** One stage of the `timeline` pain story. It describes the business's problem, never a Remy action. */
@@ -167,6 +233,10 @@ export interface IndustryPage {
   };
   /** Optional. Absent means the default rendering — summary card, indigo. */
   readonly presentation?: IndustryPresentation;
+  /** Rendered only when `presentation.workflow` is a motif and `section_order` includes `workflow`. */
+  readonly workflow?: IndustryWorkflow;
+  /** Rendered only when `section_order` includes `mid_cta`. */
+  readonly mid_cta?: IndustryMidCta;
   readonly pain_points: {
     readonly eyebrow: string;
     readonly heading: string;
@@ -283,7 +353,45 @@ export const PLUMBERS_PAGE: IndustryPage = {
       illustrative_note: "Illustrative — not a real caller. Anything Remy couldn’t confirm is left blank rather than guessed.",
     },
   },
-  presentation: { theme: "cyan", hero_visual: "job_ticket", pain_layout: "timeline" },
+  presentation: {
+    theme: "cyan",
+    hero_visual: "job_ticket",
+    pain_layout: "timeline",
+    workflow: "flow_curve",
+    section_order: ["pain", "workflow", "mid_cta", "capabilities", "example", "scan", "how_it_works", "faq"],
+  },
+  workflow: {
+    eyebrow: "From ringing phone to booking request",
+    heading: "What happens to the next urgent call",
+    lead:
+      "One continuous flow, with nothing written on a receipt in between. Each step is something Remy actually does on the call — and the last one is a request, not a promise.",
+    nodes: [
+      {
+        title: "Call answered",
+        body: "Remy picks up on your dedicated number while you’re under the sink, and asks what’s wrong before it asks who’s calling.",
+      },
+      {
+        title: "Job & address captured",
+        body: "The leak in the caller’s own words, the address where the work is needed, a confirmed callback number and an email — read back where it’s easy to mishear.",
+      },
+      {
+        title: "Time checked against your calendar",
+        body: "Once the caller names a day and time, Remy checks it against your business hours and calendar and offers alternatives if that slot isn’t free.",
+      },
+      {
+        title: "Booking request submitted",
+        body: "After the call, a booking request is created for a service your Knowledge Base lists. The customer is told to look out for the confirmation email — which arrives only once the booking is actually made.",
+      },
+    ],
+    footnote:
+      "A free slot is not a booking. Remy never tells a caller the booking is done, never promises that a plumber will be there at a set time, and never diagnoses the problem — it captures the job and gets the time checked; the booking, and the plumbing, stay yours.",
+  },
+  mid_cta: {
+    heading: "See where your plumbing jobs are being lost",
+    body: "Nine questions about how calls reach you and what happens next. Free, nothing stored, no account — and an honest “can’t tell” where the answers don’t support an estimate.",
+    label: "Get Your Free Business Scan",
+    href: SCAN_PATH,
+  },
 
   pain_points: {
     eyebrow: "The job that can’t wait",
@@ -507,7 +615,45 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
       illustrative_note: "Illustrative — not a real caller. Remy records what was described; it doesn’t diagnose the fault.",
     },
   },
-  presentation: { theme: "amber", hero_visual: "enquiry_panel", pain_layout: "contrast" },
+  presentation: {
+    theme: "amber",
+    hero_visual: "enquiry_panel",
+    pain_layout: "contrast",
+    workflow: "flow_circuit",
+    section_order: ["workflow", "mid_cta", "pain", "capabilities", "example", "scan", "how_it_works", "faq"],
+  },
+  workflow: {
+    eyebrow: "Call → classify → capture → route",
+    heading: "How an enquiry reaches you while you’re on site",
+    lead:
+      "Every enquiry follows the same path, whatever kind of job it is. Remy classifies it by what the caller describes — never by what it thinks is wrong — and routes it truthfully.",
+    nodes: [
+      {
+        title: "Call",
+        body: "Remy answers on your dedicated number with the power off and your hands in a board, and asks about the job before the caller’s details.",
+      },
+      {
+        title: "Classify",
+        body: "The enquiry is noted as the caller describes it — a fault, sockets, lighting, a rewire, a consumer unit, an EV charger, domestic or commercial when they say so. That is context for you, not a diagnosis.",
+      },
+      {
+        title: "Capture",
+        body: "The problem in the caller’s words, the address where the work is needed, a confirmed callback number, an email and the time they’d like — read back where it’s easy to mishear.",
+      },
+      {
+        title: "Route",
+        body: "Where the service is one your Knowledge Base lists and a time has been checked against your calendar, Remy submits a booking request after the call. Otherwise the enquiry is captured and flagged for your review — it never guesses whether you can take the job.",
+      },
+    ],
+    footnote:
+      "Remy doesn’t diagnose faults, certify work, decide what is safe, or send an electrician anywhere. A booking request is a request: the customer hears “look out for the confirmation email”, and the confirmation arrives only once the booking is actually made.",
+  },
+  mid_cta: {
+    heading: "See which enquiries your electrical business is losing",
+    body: "Nine questions about how enquiries reach you and what happens next. Free, nothing stored, no account — and an honest “can’t tell” where the answers don’t support an estimate.",
+    label: "Get Your Free Business Scan",
+    href: SCAN_PATH,
+  },
 
   pain_points: {
     eyebrow: "Every enquiry needs to be captured and understood",
