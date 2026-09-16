@@ -1,5 +1,10 @@
 import Link from "next/link";
-import type { IndustryPage } from "@/lib/site/industryPages";
+import type {
+  IndustryEnquiryPanel,
+  IndustryJobTicket,
+  IndustryPage,
+  IndustryTheme,
+} from "@/lib/site/industryPages";
 import { webPageJsonLd } from "@/lib/site/structuredData";
 
 // ── Industry landing page view — marketing only ─────────────────────
@@ -47,6 +52,213 @@ function CheckIcon() {
   );
 }
 
+// ── Presentation — Slice 1 ─────────────────────────────────────────
+//
+// STATIC CLASS MAPS. Every class Tailwind needs is written out here as a
+// literal, keyed by the closed IndustryTheme union; nothing is built from
+// a string at runtime. A theme tints only the hero's SECONDARY cues —
+// the eyebrow pill, the visual's ring and badges, the decorative stroke.
+// The CTA classes above are untouched by it: indigo is the brand and
+// the action colour on every page.
+const THEME: Record<
+  IndustryTheme,
+  { pill: string; dot: string; ring: string; badge: string; accent: string; stroke: string; chip: string }
+> = {
+  indigo: {
+    pill: "bg-indigo-950 border-indigo-800 text-indigo-300",
+    dot: "bg-indigo-400",
+    ring: "ring-indigo-500/20",
+    badge: "text-indigo-300 bg-indigo-950 border-indigo-800",
+    accent: "text-indigo-300",
+    stroke: "text-indigo-400",
+    chip: "bg-indigo-500/15 border-indigo-400/60 text-indigo-200",
+  },
+  cyan: {
+    pill: "bg-cyan-950 border-cyan-800 text-cyan-300",
+    dot: "bg-cyan-400",
+    ring: "ring-cyan-400/30",
+    badge: "text-cyan-300 bg-cyan-950 border-cyan-800",
+    accent: "text-cyan-300",
+    stroke: "text-cyan-400",
+    chip: "bg-cyan-500/15 border-cyan-400/60 text-cyan-200",
+  },
+  amber: {
+    pill: "bg-amber-950 border-amber-800 text-amber-300",
+    dot: "bg-amber-400",
+    ring: "ring-amber-400/30",
+    badge: "text-amber-300 bg-amber-950 border-amber-800",
+    accent: "text-amber-300",
+    stroke: "text-amber-400",
+    chip: "bg-amber-500/15 border-amber-400/60 text-amber-200",
+  },
+};
+
+/** The default hero visual: the owner's structured call-summary rows. Unchanged from before Slice 1. */
+function SummaryCard({ page, theme }: { page: IndustryPage; theme: (typeof THEME)[IndustryTheme] }) {
+  return (
+    <div
+      className={`w-full max-w-2xl mx-auto xl:max-w-none bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 shadow-xl ring-1 ${theme.ring}`}
+      data-summary-card
+      data-hero-visual="summary_card"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-5">
+        <p className="text-white font-semibold">{page.hero.summary_card.title}</p>
+        <span className={`text-xs font-medium uppercase tracking-wider border px-2 py-1 rounded-full whitespace-nowrap ${theme.badge}`}>
+          Call summary
+        </span>
+      </div>
+      <dl className="divide-y divide-slate-800">
+        {page.hero.summary_card.rows.map((row) => (
+          <div key={row.label} className="py-3 grid grid-cols-1 gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3 text-sm">
+            <dt className="text-slate-500">{row.label}</dt>
+            <dd className="text-slate-200">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="text-slate-500 text-xs leading-relaxed mt-4 sm:mt-5">{page.hero.summary_card.note}</p>
+    </div>
+  );
+}
+
+/**
+ * The plumbers-style visual: one incoming job as it reaches the owner —
+ * soft geometry (rounded ticket, a curved decorative flow line), an
+ * urgency chip attributed to the caller, the problem as a quotation, the
+ * captured rows, and the REQUEST state as its footer. The flow line is
+ * inline SVG, decorative, hidden from assistive tech and hidden below
+ * `sm` so it never affects layout.
+ */
+function JobTicket({ ticket, theme }: { ticket: IndustryJobTicket; theme: (typeof THEME)[IndustryTheme] }) {
+  return (
+    <div
+      className={`relative overflow-hidden w-full max-w-2xl mx-auto xl:max-w-none bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-7 shadow-xl ring-1 ${theme.ring}`}
+      data-hero-visual="job_ticket"
+    >
+      <svg
+        className={`hidden sm:block pointer-events-none absolute -top-10 -right-12 w-56 h-28 opacity-25 ${theme.stroke}`}
+        viewBox="0 0 256 160"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="M0 120 C 60 120, 70 30, 130 30 S 200 120, 256 40" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <path d="M0 140 C 60 140, 70 50, 130 50 S 200 140, 256 60" stroke="currentColor" strokeWidth="1" strokeLinecap="round" opacity="0.5" />
+      </svg>
+
+      <div className="relative">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <p className={`text-xs font-semibold uppercase tracking-widest ${theme.accent}`}>{ticket.title}</p>
+          <span className={`inline-flex items-center gap-1.5 text-xs font-medium border px-2.5 py-1 rounded-full whitespace-nowrap ${theme.badge}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} aria-hidden="true" />
+            {ticket.urgency_label}
+          </span>
+        </div>
+
+        <blockquote className="border-l-2 border-slate-700 pl-4 mb-5">
+          <p className="text-white text-lg sm:text-xl font-medium leading-snug">“{ticket.problem}”</p>
+          <p className="text-slate-500 text-xs mt-1.5">{ticket.problem_caption}</p>
+        </blockquote>
+
+        <dl className="divide-y divide-slate-800 border-y border-slate-800">
+          {ticket.rows.map((row) => (
+            <div key={row.label} className="py-2.5 grid grid-cols-1 gap-0.5 sm:grid-cols-[8.5rem_1fr] sm:gap-3 text-sm">
+              <dt className="text-slate-500">{row.label}</dt>
+              <dd className="text-slate-200">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="flex items-start gap-2 text-sm text-slate-200 mt-4" data-visual-status>
+          <svg className={`w-4 h-4 mt-0.5 shrink-0 ${theme.stroke}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h12m0 0l-4-4m4 4l-4 4" />
+          </svg>
+          {ticket.status}
+        </p>
+        <p className="text-slate-500 text-xs leading-relaxed mt-3">{ticket.illustrative_note}</p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The electricians-style visual: the enquiry types a caller may describe,
+ * one highlighted, above the structured details — square geometry (a
+ * panel, square-cornered chips, an orthogonal circuit trace) against the
+ * ticket's curves. The chips are caller-described service context; the
+ * caption says so, and the footer is a neutral capture state. The trace
+ * is inline SVG, decorative, hidden from assistive tech and below `sm`.
+ */
+function EnquiryPanel({ panel, theme }: { panel: IndustryEnquiryPanel; theme: (typeof THEME)[IndustryTheme] }) {
+  return (
+    <div
+      className={`relative overflow-hidden w-full max-w-2xl mx-auto xl:max-w-none bg-slate-900 border border-slate-800 rounded-xl p-5 sm:p-7 shadow-xl ring-1 ${theme.ring}`}
+      data-hero-visual="enquiry_panel"
+    >
+      <svg
+        className={`hidden sm:block pointer-events-none absolute -top-2 -right-2 w-40 h-20 opacity-25 ${theme.stroke}`}
+        viewBox="0 0 224 144"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path d="M224 20 H150 V60 H100 V100 H40 V144" stroke="currentColor" strokeWidth="2" />
+        <path d="M224 44 H170 V84 H120 V124 H80 V144" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+        <rect x="146" y="16" width="8" height="8" fill="currentColor" />
+        <rect x="96" y="56" width="8" height="8" fill="currentColor" />
+        <rect x="36" y="96" width="8" height="8" fill="currentColor" />
+      </svg>
+
+      <div className="relative">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <p className={`text-xs font-semibold uppercase tracking-widest ${theme.accent}`}>{panel.title}</p>
+          <span className={`text-xs font-medium uppercase tracking-wider border px-2 py-1 rounded whitespace-nowrap ${theme.badge}`}>
+            Enquiry
+          </span>
+        </div>
+
+        <p className="text-slate-500 text-xs mb-2">{panel.types_caption}</p>
+        <ul className="flex flex-wrap gap-1.5 mb-5" data-enquiry-types>
+          {panel.enquiry_types.map((type) => {
+            const active = type === panel.highlighted_type;
+            return (
+              <li
+                key={type}
+                className={`text-xs font-medium border px-2 py-1 rounded ${active ? theme.chip : "border-slate-700 text-slate-400"}`}
+                data-active={active ? "true" : undefined}
+              >
+                {type}
+              </li>
+            );
+          })}
+        </ul>
+
+        <dl className="border border-slate-800 rounded-lg divide-y divide-slate-800">
+          {panel.rows.map((row) => (
+            <div key={row.label} className="px-3 py-2.5 grid grid-cols-1 gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3 text-sm">
+              <dt className="text-slate-500">{row.label}</dt>
+              <dd className="text-slate-200">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <p className="flex items-start gap-2 text-sm text-slate-200 mt-4" data-visual-status>
+          <svg className={`w-4 h-4 mt-0.5 shrink-0 ${theme.stroke}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          {panel.status}
+        </p>
+        <p className="text-slate-500 text-xs leading-relaxed mt-3">{panel.illustrative_note}</p>
+      </div>
+    </div>
+  );
+}
+
+/** Picks the hero visual. Absent presentation, or a variant without its data, is the summary card. */
+function HeroVisual({ page, theme }: { page: IndustryPage; theme: (typeof THEME)[IndustryTheme] }) {
+  const variant = page.presentation?.hero_visual ?? "summary_card";
+  if (variant === "job_ticket" && page.hero.job_ticket) return <JobTicket ticket={page.hero.job_ticket} theme={theme} />;
+  if (variant === "enquiry_panel" && page.hero.enquiry_panel) return <EnquiryPanel panel={page.hero.enquiry_panel} theme={theme} />;
+  return <SummaryCard page={page} theme={theme} />;
+}
+
 function Eyebrow({ children, dark = false }: { children: React.ReactNode; dark?: boolean }) {
   return (
     <p
@@ -81,6 +293,7 @@ const CTA_SECONDARY =
   "inline-flex items-center justify-center w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold px-6 sm:px-7 py-3.5 rounded-lg transition-colors text-[15px] sm:text-base text-center sm:whitespace-nowrap";
 
 export default function IndustryPageView({ page }: { page: IndustryPage }) {
+  const theme = THEME[page.presentation?.theme ?? "indigo"];
   // The builder carries its own @context; inside a @graph the outer one
   // applies, so the inner copy is dropped rather than repeated.
   const { "@context": _context, ...webPage } = webPageJsonLd({
@@ -154,8 +367,8 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
         <section className="bg-slate-950 pt-28 sm:pt-32 pb-16 sm:pb-24 px-4 sm:px-6" data-hero>
           <div className="max-w-6xl mx-auto grid xl:grid-cols-[1.1fr_0.9fr] gap-10 sm:gap-12 xl:gap-16 items-center">
             <div className="text-center xl:text-left">
-              <div className="inline-flex items-center gap-2 bg-indigo-950 border border-indigo-800 text-indigo-300 text-xs font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 sm:mb-8">
-                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full shrink-0" aria-hidden="true" />
+              <div className={`inline-flex items-center gap-2 border text-xs font-semibold uppercase tracking-widest px-3 py-1.5 rounded-full mb-6 sm:mb-8 ${theme.pill}`}>
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${theme.dot}`} aria-hidden="true" />
                 {page.hero.eyebrow}
               </div>
 
@@ -186,30 +399,8 @@ export default function IndustryPageView({ page }: { page: IndustryPage }) {
               </div>
             </div>
 
-            {/* Product-led visual: the structured rows the owner really receives. */}
-            <div
-              className="w-full max-w-2xl mx-auto xl:max-w-none bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-8 shadow-xl ring-1 ring-indigo-500/20"
-              data-summary-card
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4 sm:mb-5">
-                <p className="text-white font-semibold">{page.hero.summary_card.title}</p>
-                <span className="text-xs font-medium uppercase tracking-wider text-indigo-300 bg-indigo-950 border border-indigo-800 px-2 py-1 rounded-full whitespace-nowrap">
-                  Call summary
-                </span>
-              </div>
-              <dl className="divide-y divide-slate-800">
-                {page.hero.summary_card.rows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="py-3 grid grid-cols-1 gap-0.5 sm:grid-cols-[9rem_1fr] sm:gap-3 text-sm"
-                  >
-                    <dt className="text-slate-500">{row.label}</dt>
-                    <dd className="text-slate-200">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="text-slate-500 text-xs leading-relaxed mt-4 sm:mt-5">{page.hero.summary_card.note}</p>
-            </div>
+            {/* Product-led visual: the summary card by default, or the industry's opted-in ticket / panel. */}
+            <HeroVisual page={page} theme={theme} />
           </div>
         </section>
 

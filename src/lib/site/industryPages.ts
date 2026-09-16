@@ -44,6 +44,75 @@ export interface IndustryCapability {
   readonly condition?: string;
 }
 
+// ── Presentation contract — Slice 1 ─────────────────────────────────
+//
+// CONTROLLED VARIATION, NOT A PAGE BUILDER. An industry may opt into a
+// secondary accent and a hero visual from a closed set; everything is a
+// literal union the view maps to STATIC class strings, so Tailwind can
+// see every class and no name is ever built at runtime. A page with no
+// `presentation` renders exactly as before — the summary card, the
+// indigo accent — which is the regression guard for every page that has
+// not opted in. Indigo stays the brand and CTA colour on every page; a
+// theme only tints the hero's secondary cues (eyebrow pill, visual
+// ring and badges, the decorative stroke).
+
+/** Secondary accent for the hero's trade cues. Never the CTA colour. */
+export type IndustryTheme = "indigo" | "cyan" | "amber";
+
+/**
+ * The hero's right-hand visual.
+ *   - `summary_card`: the default — the owner's structured call-summary rows
+ *   - `job_ticket`: an incoming-job ticket (requires `hero.job_ticket`)
+ *   - `enquiry_panel`: a classified enquiry panel (requires `hero.enquiry_panel`)
+ * A variant whose data is absent falls back to the summary card.
+ */
+export type IndustryHeroVisual = "summary_card" | "job_ticket" | "enquiry_panel";
+
+export interface IndustryPresentation {
+  readonly theme: IndustryTheme;
+  readonly hero_visual: IndustryHeroVisual;
+}
+
+/** One labelled row on a hero visual. Values are descriptive or in the caller's words — never a real person. */
+export interface IndustryVisualRow {
+  readonly label: string;
+  readonly value: string;
+}
+
+/**
+ * The plumbers-style hero visual: one incoming job, as it reaches the
+ * owner. `status` is the REQUEST state and must never read as booked,
+ * confirmed, dispatched or diagnosed.
+ */
+export interface IndustryJobTicket {
+  readonly title: string;
+  /** e.g. "Caller said: urgent" — always attributed to the caller. */
+  readonly urgency_label: string;
+  /** The problem in the caller's own words, rendered as a quotation. */
+  readonly problem: string;
+  readonly problem_caption: string;
+  readonly rows: readonly IndustryVisualRow[];
+  readonly status: string;
+  readonly illustrative_note: string;
+}
+
+/**
+ * The electricians-style hero visual: the enquiry types a caller may
+ * describe, one highlighted, above the structured details. The types are
+ * caller-described service context, never a diagnosis or a
+ * certification, and the caption must say so.
+ */
+export interface IndustryEnquiryPanel {
+  readonly title: string;
+  readonly types_caption: string;
+  readonly enquiry_types: readonly string[];
+  /** Must be one of `enquiry_types`. */
+  readonly highlighted_type: string;
+  readonly rows: readonly IndustryVisualRow[];
+  readonly status: string;
+  readonly illustrative_note: string;
+}
+
 export interface IndustryPage {
   readonly slug: string;
   readonly path: string;
@@ -58,13 +127,19 @@ export interface IndustryPage {
     readonly bullets: readonly string[];
     readonly primary_cta: { readonly label: string; readonly href: string };
     readonly secondary_cta: { readonly label: string; readonly href: string };
-    /** The structured rows the owner actually receives after a call. */
+    /** The structured rows the owner actually receives after a call — the default visual. */
     readonly summary_card: {
       readonly title: string;
-      readonly rows: readonly { readonly label: string; readonly value: string }[];
+      readonly rows: readonly IndustryVisualRow[];
       readonly note: string;
     };
+    /** Rendered only when `presentation.hero_visual` is `job_ticket`. */
+    readonly job_ticket?: IndustryJobTicket;
+    /** Rendered only when `presentation.hero_visual` is `enquiry_panel`. */
+    readonly enquiry_panel?: IndustryEnquiryPanel;
   };
+  /** Optional. Absent means the default rendering — summary card, indigo. */
+  readonly presentation?: IndustryPresentation;
   readonly pain_points: {
     readonly eyebrow: string;
     readonly heading: string;
@@ -134,10 +209,9 @@ export const PLUMBERS_PAGE: IndustryPage = {
     lead:
       "Remy answers the phone and your website chat when you can’t — under a sink, on a roof, or after hours. It finds out what the customer needs, takes their details and the job address, and helps book the work into your calendar where booking is set up for your business.",
     bullets: [
-      "Handle calls while you’re on a job",
-      "Capture customer and job details",
-      "Help book jobs into your calendar",
-      "Reduce missed enquiries",
+      "The burst-pipe call is answered while your hands are full",
+      "The job, the address and when they need you — taken down, not scribbled",
+      "Urgent callers are flagged so you see them first",
     ],
     primary_cta: { label: "Get Your Free Business Scan", href: SCAN_PATH },
     secondary_cta: { label: "Watch How Remy Works", href: HOMEPAGE_WALKTHROUGH_HREF },
@@ -153,7 +227,22 @@ export const PLUMBERS_PAGE: IndustryPage = {
       ],
       note: "Each row comes from what the caller actually said. Anything Remy couldn’t confirm is left blank rather than guessed.",
     },
+    job_ticket: {
+      title: "Incoming job",
+      urgency_label: "Caller said: urgent",
+      problem: "Leaking pipe under the kitchen sink — it’s dripping into the cupboard.",
+      problem_caption: "The problem, in the caller’s own words",
+      rows: [
+        { label: "Address", value: "The address where the work is needed, read back if unclear" },
+        { label: "Requested time", value: "“Tomorrow, first thing” — kept in the caller’s words" },
+        { label: "Callback number", value: "Confirmed with the caller" },
+        { label: "Email", value: "Read back and confirmed" },
+      ],
+      status: "Booking request submitted — look out for the confirmation email",
+      illustrative_note: "Illustrative — not a real caller. Anything Remy couldn’t confirm is left blank rather than guessed.",
+    },
   },
+  presentation: { theme: "cyan", hero_visual: "job_ticket" },
 
   pain_points: {
     eyebrow: "The problem",
@@ -333,15 +422,14 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
 
   hero: {
     eyebrow: "AI receptionist for electricians",
-    headline: "Never Miss Another",
-    headline_accent: "Electrical Job",
+    headline: "Every Electrical Enquiry,",
+    headline_accent: "Captured While You’re On Site",
     lead:
-      "Remy answers the phone and your website chat when you can’t — up a ladder, in a loft, or with the power off. It finds out what the customer needs, takes their details and the address where the work is, and helps book the job into your calendar where booking is set up for your business.",
+      "Remy answers the phone and your website chat when you can’t — up a ladder, in a loft, or with the power off. It takes down what the caller describes, where the work is and when they need you, and helps book the job into your calendar where booking is set up for your business.",
     bullets: [
-      "Handle calls while you’re on a job",
-      "Capture customer and job details",
-      "Help book jobs into your calendar",
-      "Reduce missed enquiries",
+      "Faults, sockets, lighting, rewires, EV chargers — captured as the caller describes them",
+      "Domestic or commercial, the address and the timing, all in one summary",
+      "Nothing diagnosed over the phone — the details reach you, the decision stays yours",
     ],
     primary_cta: { label: "Get Your Free Business Scan", href: SCAN_PATH },
     secondary_cta: { label: "Watch How Remy Works", href: HOMEPAGE_WALKTHROUGH_HREF },
@@ -357,7 +445,23 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
       ],
       note: "Each row comes from what the caller actually said. Anything Remy couldn’t confirm is left blank rather than guessed.",
     },
+    enquiry_panel: {
+      title: "Enquiry panel",
+      types_caption: "Enquiry types as callers describe them — not a diagnosis",
+      enquiry_types: ["Fault", "Sockets & switches", "Lighting", "Rewire", "Consumer unit", "EV charger", "Commercial"],
+      highlighted_type: "Fault",
+      rows: [
+        { label: "In the caller’s words", value: "“Half the sockets in the kitchen have stopped working and the board keeps tripping.”" },
+        { label: "Premises", value: "Domestic — only when the caller says so" },
+        { label: "Address", value: "The address where the work is needed" },
+        { label: "Requested time", value: "“This week, any afternoon” — kept in the caller’s words" },
+        { label: "Callback number", value: "Confirmed with the caller" },
+      ],
+      status: "Details captured and sent to you in the call summary",
+      illustrative_note: "Illustrative — not a real caller. Remy records what was described; it doesn’t diagnose the fault.",
+    },
   },
+  presentation: { theme: "amber", hero_visual: "enquiry_panel" },
 
   pain_points: {
     eyebrow: "The problem",

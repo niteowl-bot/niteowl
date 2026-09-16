@@ -48,6 +48,9 @@ const ALL_TEXT = [
   page.hero.summary_card.title,
   page.hero.summary_card.note,
   ...page.hero.summary_card.rows.flatMap((r) => [r.label, r.value]),
+  ...(page.hero.job_ticket
+    ? [page.hero.job_ticket.title, page.hero.job_ticket.urgency_label, page.hero.job_ticket.problem, page.hero.job_ticket.problem_caption, page.hero.job_ticket.status, page.hero.job_ticket.illustrative_note, ...page.hero.job_ticket.rows.flatMap((r) => [r.label, r.value])]
+    : []),
   page.pain_points.heading,
   page.pain_points.lead,
   ...page.pain_points.items.flatMap((i) => [i.title, i.body]),
