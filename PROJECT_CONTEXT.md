@@ -696,7 +696,17 @@ presentation-contract + hero-visual layer.** Plumbers currently use `job_ticket`
 cue; electricians use `enquiry_panel` with the amber cue. **Truthfulness rule for presentation:
 a visual must never imply booked, dispatched, diagnosed, certified or any other completed outcome
 Remy has not actually produced** — a hero visual shows the request or captured state, and the
-`tests/industryPresentation.test.mjs` guard pins it. **Slice 2 (pain layouts) is NOT STARTED.**
+`tests/industryPresentation.test.mjs` guard pins it. **Slice 2 (PR #123, merge `e06d266`,
+production-verified 2026-09-16) proves the same shared architecture also supports controlled
+industry-specific pain layouts, pain narratives, capability ordering and capability wording
+without industry-keying Remy core:** `presentation.pain_layout` (`cards` / `timeline` /
+`contrast`, default `cards`) with typed story data on `pain_points`, and capability order
+carried by the content arrays. Plumbers currently use `timeline` (a four-stage numbered
+missed-call story on a cyan rail); electricians use `contrast` (domestic / commercial panels of
+quoted caller enquiries). Differentiation therefore exists in two independent layers — hero
+(Slice 1) and body (Slice 2) — and is structural and content-specific, not colour alone.
+**Slice 3 — workflow motifs + section order + mid-page CTA — is NOT STARTED. Slice 4 — FAQ /
+how-it-works copy differentiation — is NOT STARTED.** Neither is approved or implemented.
 Closeouts are in `CHANGELOG.md`.
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
 `…/problems/booking-back-and-forth`; do not repeat that check.**
