@@ -132,9 +132,11 @@ export default function Home() {
             </p>
           </div>
 
+          {/* An industry with a dedicated landing page links to it; the rest
+              stay plain cards until their pages exist — no placeholder routes. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
-              { icon: "🔧", label: "Plumbers" },
+              { icon: "🔧", label: "Plumbers", href: "/ai-receptionist-for-plumbers" },
               { icon: "⚡", label: "Electricians" },
               { icon: "❄️", label: "HVAC" },
               { icon: "🦷", label: "Dentists" },
@@ -142,17 +144,31 @@ export default function Home() {
               { icon: "🐾", label: "Veterinary Clinics" },
               { icon: "🌿", label: "Landscapers" },
               { icon: "🧽", label: "Cleaning Services" },
-            ].map((item) => (
-              <div
-                key={item.label}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-5 text-center transition-colors hover:border-indigo-200"
-              >
-                <div className="text-2xl mb-2" aria-hidden="true">
-                  {item.icon}
+            ].map((item) =>
+              item.href ? (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  className="block bg-slate-50 border border-slate-200 rounded-xl px-4 py-5 text-center transition-colors hover:border-indigo-300 hover:bg-indigo-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+                >
+                  <div className="text-2xl mb-2" aria-hidden="true">
+                    {item.icon}
+                  </div>
+                  <p className="text-slate-700 text-sm font-medium">{item.label}</p>
+                  <p className="text-indigo-600 text-xs font-medium mt-1">See how Remy helps →</p>
+                </a>
+              ) : (
+                <div
+                  key={item.label}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-5 text-center transition-colors hover:border-indigo-200"
+                >
+                  <div className="text-2xl mb-2" aria-hidden="true">
+                    {item.icon}
+                  </div>
+                  <p className="text-slate-700 text-sm font-medium">{item.label}</p>
                 </div>
-                <p className="text-slate-700 text-sm font-medium">{item.label}</p>
-              </div>
-            ))}
+              )
+            )}
           </div>
         </div>
       </section>
@@ -380,7 +396,13 @@ export default function Home() {
           <span className="text-white font-bold text-lg tracking-tight">
             niteowl<span className="text-indigo-400">.</span>
           </span>
-          <div className="flex gap-6 text-slate-400 text-sm">
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-slate-400 text-sm">
+            <a
+              href="/ai-receptionist-for-plumbers"
+              className="hover:text-white transition-colors"
+            >
+              AI Receptionist for Plumbers
+            </a>
             <a href="/privacy" className="hover:text-white transition-colors">
               Privacy policy
             </a>
