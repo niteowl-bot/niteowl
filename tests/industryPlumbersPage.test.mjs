@@ -312,3 +312,26 @@ describe("the page reaches nothing that serves a tenant and changes nothing abou
     assert.equal(strip(render()), strip(render()));
   });
 });
+
+// ── 7. Discoverability from the existing site ──────────────────────
+
+describe("the homepage links to the page, and to no industry page that does not exist", () => {
+  // The homepage mounts client components through extensionless relative
+  // imports the test loader does not resolve, so it is read from SOURCE.
+  const home = stripComments(read("src/app/page.tsx"));
+
+  test("the Plumbers industry card and the footer both link to the live route", () => {
+    assert.match(home, /label: "Plumbers", href: "\/ai-receptionist-for-plumbers"/);
+    assert.match(home, /href="\/ai-receptionist-for-plumbers"/);
+  });
+
+  test("no other industry is linked until its page exists — no placeholder routes", () => {
+    const industryHrefs = [...home.matchAll(/href(?:=|: )"(\/ai-receptionist-for-[^"]+)"/g)].map((m) => m[1]);
+    assert.ok(industryHrefs.length >= 2);
+    for (const href of industryHrefs) {
+      assert.equal(href, "/ai-receptionist-for-plumbers");
+      assert.ok(statSync(`src/app${href}/page.tsx`).isFile(), `${href} has no page`);
+    }
+    assert.doesNotMatch(home, /label: "(Electricians|HVAC|Dentists|Physiotherapists|Veterinary Clinics|Landscapers|Cleaning Services)", href/);
+  });
+});
