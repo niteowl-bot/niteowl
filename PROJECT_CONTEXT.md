@@ -677,9 +677,16 @@ problem pages take their wording from `SCAN_RECOMMENDATIONS` **verbatim** and `w
 is excluded because it would diagnose a stranger; **`enquiry.no_followup` keeps its canonical
 `recommended_product: null` truth visible**; every CTA is the literal Scan path with **no query
 string, hash, prefill or carried state**; and the Lost Revenue page **calculates nothing**.
-The sitemap now carries **eleven** approved public URLs — the ten above plus
-`/ai-receptionist-for-plumbers`, the first industry marketing page (PR #112, merge `e8a26e6`,
-production-verified 2026-09-16; marketing only, one Remy, see `CHANGELOG.md`).
+The sitemap now carries **twelve** approved public URLs — the ten above plus the two
+**industry marketing pages**: `/ai-receptionist-for-plumbers` (PR #112, merge `e8a26e6`) and
+`/ai-receptionist-for-electricians` (PR #118, merge `9a17b2c`), both production-verified
+2026-09-16. **Exactly two shipped industry pages exist, and there is still ONE Remy** — they are
+marketing / acquisition surfaces (one content constant each in `src/lib/site/industryPages.ts`,
+rendered by the shared `IndustryPageView`), not separate Remy implementations; the reusable
+`IndustryPage` pattern is now proven across two industries. **Industry-specific wording — the FAQ
+heading included — belongs in the industry content object, never hard-coded in the shared view**
+(PR #119, merge `b731acd`, closed the one defect that rule prevents). Closeouts are in
+`CHANGELOG.md`.
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
 `…/problems/booking-back-and-forth`; do not repeat that check.**
 
