@@ -35,8 +35,8 @@ const textOf = (html) => html.replace(/<script[\s\S]*?<\/script>/g, "").replace(
 /** The hero <section> only. */
 const heroOf = (html) => {
   const start = html.indexOf("data-hero");
-  const end = html.indexOf("data-pain-points");
-  assert.ok(start > 0 && end > start, "hero and pain sections present");
+  const end = html.indexOf("</section>", start);
+  assert.ok(start > 0 && end > start, "hero section present");
   return html.slice(start, end);
 };
 /** The hero's right-hand visual only. */
