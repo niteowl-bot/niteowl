@@ -276,3 +276,30 @@ describe("one Remy: nothing is keyed by industry, and the plumbers page is uncha
     for (const text of allText(PLUMBERS_PAGE)) assert.doesNotMatch(text, /electric/i, text);
   });
 });
+
+// ── 8. FAQ heading — rendered per industry, never hard-coded ───────
+//
+// The defect this pins: the shared view once carried the literal
+// "Questions plumbers ask about Remy", so the electricians page rendered
+// plumbing wording that no content-level test could see. The checks
+// below read the RENDERED HTML of both pages and the view's source.
+
+describe("the FAQ heading is rendered from each industry's content object", () => {
+  test("the electricians page renders its own FAQ heading and no plumbing one", () => {
+    const html = textOf(render());
+    assert.match(html, /Questions electricians ask about Remy/);
+    assert.doesNotMatch(html, /Questions plumbers ask about Remy/);
+    assert.equal(page.faq_heading, "Questions electricians ask about Remy");
+  });
+
+  test("the rendered electricians page contains no plumbing wording anywhere", () => {
+    assert.doesNotMatch(textOf(render()), /plumb|boiler|leaking pipe|kitchen sink/i);
+  });
+
+  test("the shared view carries no industry-specific FAQ heading — it reads page.faq_heading", () => {
+    const view = stripComments(read("src/components/marketing/IndustryPageView.tsx"));
+    assert.match(view, /\{page\.faq_heading\}/);
+    assert.doesNotMatch(view, /Questions (plumbers|electricians|[a-z]+) ask about Remy/);
+    assert.doesNotMatch(view, /plumb|electric/i);
+  });
+});
