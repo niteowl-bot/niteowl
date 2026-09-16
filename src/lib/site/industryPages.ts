@@ -68,9 +68,36 @@ export type IndustryTheme = "indigo" | "cyan" | "amber";
  */
 export type IndustryHeroVisual = "summary_card" | "job_ticket" | "enquiry_panel";
 
+/**
+ * The pain section's layout — Slice 2.
+ *   - `cards`: the default — every pain point as an equal card
+ *   - `timeline`: a four-stage missed-call story, then the cards as
+ *     supporting points (requires `pain_points.timeline`)
+ *   - `contrast`: two columns of caller-described enquiries, then the
+ *     cards as supporting points (requires `pain_points.contrast`)
+ * A variant whose data is absent falls back to `cards`.
+ */
+export type IndustryPainLayout = "cards" | "timeline" | "contrast";
+
 export interface IndustryPresentation {
   readonly theme: IndustryTheme;
   readonly hero_visual: IndustryHeroVisual;
+  /** Optional. Absent means `cards`. */
+  readonly pain_layout?: IndustryPainLayout;
+}
+
+/** One stage of the `timeline` pain story. It describes the business's problem, never a Remy action. */
+export interface IndustryPainStage {
+  readonly title: string;
+  readonly body: string;
+}
+
+/** One column of the `contrast` pain story: what one kind of caller tends to ask for, in their words. */
+export interface IndustryPainColumn {
+  readonly title: string;
+  readonly caption: string;
+  /** Caller-described enquiries. Rendered as quotations; never a diagnosis. */
+  readonly enquiries: readonly string[];
 }
 
 /** One labelled row on a hero visual. Values are descriptive or in the caller's words — never a real person. */
@@ -144,7 +171,21 @@ export interface IndustryPage {
     readonly eyebrow: string;
     readonly heading: string;
     readonly lead: string;
+    /** The default layout renders these as equal cards; the story layouts render them as supporting cards beneath the story. */
     readonly items: readonly { readonly title: string; readonly body: string }[];
+    /** Rendered only when `presentation.pain_layout` is `timeline`. Exactly the story's stages, in order. */
+    readonly timeline?: {
+      readonly stages: readonly IndustryPainStage[];
+      /** The one-line consequence under the story. */
+      readonly outcome: string;
+    };
+    /** Rendered only when `presentation.pain_layout` is `contrast`. */
+    readonly contrast?: {
+      readonly left: IndustryPainColumn;
+      readonly right: IndustryPainColumn;
+      /** What both columns have in common — the actual problem. */
+      readonly shared_truth: string;
+    };
   };
   readonly capabilities: {
     readonly eyebrow: string;
@@ -242,72 +283,77 @@ export const PLUMBERS_PAGE: IndustryPage = {
       illustrative_note: "Illustrative — not a real caller. Anything Remy couldn’t confirm is left blank rather than guessed.",
     },
   },
-  presentation: { theme: "cyan", hero_visual: "job_ticket" },
+  presentation: { theme: "cyan", hero_visual: "job_ticket", pain_layout: "timeline" },
 
   pain_points: {
-    eyebrow: "The problem",
-    heading: "Built Around the Way Plumbing Businesses Actually Work",
+    eyebrow: "The job that can’t wait",
+    heading: "How a Plumbing Job Gets Lost While You’re Under a Sink",
     lead:
-      "Plumbing enquiries tend to arrive while you’re working. The phone rings mid-job, the caller gets voicemail, and by the time you ring back they may have tried someone else.",
+      "A leaking pipe, no hot water since this morning, a blocked drain — the caller wants someone today, and the first plumber to pick up usually gets the job. Here’s how it slips away while your hands are full.",
+    timeline: {
+      stages: [
+        {
+          title: "The phone rings on another job",
+          body: "You’re under a sink, up in a loft or halfway through fitting a bathroom. It isn’t a moment you can stop.",
+        },
+        {
+          title: "The call goes to voicemail",
+          body: "A caller with water coming through the ceiling rarely leaves a message. They want a person, now.",
+        },
+        {
+          title: "They ring the next plumber",
+          body: "Their search results have four more numbers on them. One of those will answer.",
+        },
+        {
+          title: "The job is gone before you call back",
+          body: "By the time you’re back in the van, someone else has the address and the afternoon slot.",
+        },
+      ],
+      outcome: "The missed call never shows up as a lost job — it just never shows up at all.",
+    },
     items: [
       {
-        title: "You can’t answer while you’re working",
-        body: "Hands full, on a ladder, under a floor — the call goes to voicemail, and a caller who gets voicemail may not leave one.",
+        title: "After-hours leaks don’t wait for Monday",
+        body: "A burst pipe at 9pm or no hot water on a Saturday morning is exactly the call that reaches nobody, and exactly the job you’d most want.",
       },
       {
-        title: "Urgent calls arrive when the team is busy",
-        body: "A burst pipe doesn’t wait for a quiet moment. The caller needs someone to pick up and take the details now.",
-      },
-      {
-        title: "After-hours calls go nowhere",
-        body: "Evenings and weekends bring some of the most urgent enquiries, and the ones that reach nobody are the easiest to lose.",
-      },
-      {
-        title: "Callers leave before you can respond",
-        body: "A missed call that nobody notices can’t be returned. Without a record of it, the enquiry is simply gone.",
-      },
-      {
-        title: "The same basic questions interrupt every job",
-        body: "Do you do bathroom fitting? Do you cover my area? What are your hours? Each one is a stop-and-start in the middle of real work.",
-      },
-      {
-        title: "Details get written down by hand",
-        body: "Name, address, what’s wrong, when they’re free — scribbled on whatever’s nearby, then typed up later or lost.",
+        title: "Details scribbled on a receipt in the van",
+        body: "Name, address, what’s leaking, when they’re home — written on a receipt in the van, then typed up later or not at all.",
       },
       {
         title: "Arranging the visit takes a chain of calls",
-        body: "Agreeing a day and time by phone tag or text means the job takes several conversations before it takes one visit.",
+        body: "Agreeing a day and time by phone tag or text means a straightforward job takes three conversations before it takes one visit.",
       },
     ],
   },
 
   capabilities: {
     eyebrow: "What Remy does",
-    heading: "One receptionist for calls and website enquiries",
+    heading: "The call is answered, the job is captured, the time is checked",
     lead:
-      "Remy is the same AI receptionist on the phone and in your website chat. It answers from the knowledge you give it, collects what a plumbing job needs, and hands anything unusual to you.",
+      "Remy is the same AI receptionist on the phone and in your website chat. For a plumbing business the order matters: pick up fast, take the job down properly, get a time checked — then everything else.",
     items: [
       {
-        title: "Call handling",
-        body: "Remy answers on a dedicated phone number set up for your business, whenever the call comes in. It asks about the job before it asks about the caller, clarifies a service it isn’t sure it heard, and doesn’t promise anything it can’t know.",
+        title: "Answers while your hands are full",
+        body: "Remy picks up on a dedicated phone number set up for your business, whenever the call comes in — mid-job, after hours, on a Sunday. It asks what’s wrong before it asks who’s calling, so a caller with a leak isn’t made to fill in a form first.",
       },
       {
-        title: "Customer & job detail capture",
-        body: "For work at the customer’s premises, Remy collects the job in their own words, the address where the work is needed, their name, a confirmed callback number and an email address — reading back the details that are easy to mishear.",
-      },
-      {
-        title: "Appointment / job booking",
-        body: "Once a caller has a day and time, Remy checks it against your business hours and calendar, offers alternatives if that slot isn’t free, and submits a booking request after the call. The customer gets a confirmation email once the booking is actually made.",
+        title: "Gets a time checked, not just promised",
+        body: "Once the caller names a day and time, Remy checks it against your business hours and calendar, offers alternatives if that slot isn’t free, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made — never an “I’ll be there at two” Remy can’t keep.",
         condition:
           "Booking applies to services listed in your Knowledge Base, and bookings sync to Google Calendar when your calendar is connected.",
       },
       {
-        title: "Business knowledge responses",
-        body: "Remy answers questions about your services, prices, hours and policies from a Knowledge Base you write and edit. It never invents details — anything it can’t answer confidently goes to you instead.",
+        title: "Takes the job down the way you’d write it",
+        body: "The problem in the caller’s own words — “the downstairs loo won’t stop running” — the address where the work is needed, their name, a confirmed callback number and an email, with the easily misheard details read back. Urgent callers are flagged so you see them first.",
       },
       {
-        title: "Lead / enquiry capture",
-        body: "Every call and chat is saved as a lead in your dashboard, and you receive a summary of each call with the caller’s details, what they need and the transcript. Anything that needs a human is flagged for review and you’re notified.",
+        title: "Nothing goes missing between the call and the van",
+        body: "Every call and chat is saved as a lead in your dashboard, and you receive a summary of each call with the caller’s details, the job and the transcript. A missed call at 9pm is a lead waiting for you at 7am, not a gap in the diary. Anything that needs a human is flagged for review and you’re notified.",
+      },
+      {
+        title: "Answers the questions that interrupt every job",
+        body: "Do you do bathroom fitting? Do you cover my area? Can you come out today? Remy answers from a Knowledge Base you write and edit — your services, prices, hours and policies — and never invents an answer. Anything it can’t answer confidently goes to you instead.",
       },
     ],
   },
@@ -461,72 +507,80 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
       illustrative_note: "Illustrative — not a real caller. Remy records what was described; it doesn’t diagnose the fault.",
     },
   },
-  presentation: { theme: "amber", hero_visual: "enquiry_panel" },
+  presentation: { theme: "amber", hero_visual: "enquiry_panel", pain_layout: "contrast" },
 
   pain_points: {
-    eyebrow: "The problem",
-    heading: "Built Around the Way Electrical Businesses Actually Work",
+    eyebrow: "Every enquiry needs to be captured and understood",
+    heading: "No Two Electrical Enquiries Are the Same Call",
     lead:
-      "Electrical enquiries tend to arrive while you’re working. The phone rings while you’re in a consumer unit, the caller gets voicemail, and by the time you ring back they may have tried someone else.",
+      "A homeowner with tripping sockets and a facilities manager pricing a fit-out ring the same number. Both need their enquiry taken down accurately — and both get voicemail while you’re on site.",
+    contrast: {
+      left: {
+        title: "Domestic",
+        caption: "What homeowners tend to describe",
+        enquiries: [
+          "Half the sockets in the kitchen have stopped working",
+          "The landing light flickers and then goes off",
+          "The consumer unit keeps tripping — can someone look at it?",
+          "Can you fit an EV charger on the driveway?",
+        ],
+      },
+      right: {
+        title: "Commercial",
+        caption: "What businesses and property managers tend to ask",
+        enquiries: [
+          "We need a quote for the electrics on a shop fit-out",
+          "Can you take on a maintenance contract for two units?",
+          "The office needs a rewire and a board upgrade before we move in",
+          "Are you available for out-of-hours commercial work?",
+        ],
+      },
+      shared_truth:
+        "Different jobs, different questions, different follow-up — and every one of them arrives while you’re in a board with the power off. Whoever answers has to get the details right for you, not guess what the job is.",
+    },
     items: [
       {
-        title: "You can’t answer while you’re working",
-        body: "Isolating a circuit, up a ladder, wiring in a loft — the call goes to voicemail, and a caller who gets voicemail may not leave one.",
+        title: "Evenings and weekends bring the urgent ones",
+        body: "A board that trips at 8pm or a shop with no power on a Saturday morning is the call that reaches nobody — and the customer who rings the next electrician.",
       },
       {
-        title: "Fault calls arrive when the team is busy",
-        body: "A tripping board or a socket that’s stopped working doesn’t wait for a quiet moment. The caller needs someone to pick up and take the details now.",
+        title: "Details get scribbled, then lost",
+        body: "Name, address, what’s tripping, domestic or commercial, when they’re there — written on the back of a test sheet, then typed up later or not at all.",
       },
       {
-        title: "After-hours calls go nowhere",
-        body: "Evenings and weekends bring some of the most urgent enquiries, and the ones that reach nobody are the easiest to lose.",
-      },
-      {
-        title: "Callers leave before you can respond",
-        body: "A missed call that nobody notices can’t be returned. Without a record of it, the enquiry is simply gone.",
-      },
-      {
-        title: "The same basic questions interrupt every job",
-        body: "Do you fit EV chargers? Do you do rewires? Are you available for commercial work? Each one is a stop-and-start in the middle of real work.",
-      },
-      {
-        title: "Details get written down by hand",
-        body: "Name, address, what’s wrong, when they’re free — scribbled on whatever’s nearby, then typed up later or lost.",
-      },
-      {
-        title: "Arranging the visit takes a chain of calls",
-        body: "Agreeing a day and time by phone tag or text means the job takes several conversations before it takes one visit.",
+        title: "The same questions interrupt every job",
+        body: "Do you fit EV chargers? Do you do rewires? Can you do a commercial job next week? Each one is a stop-and-start with a screwdriver in your hand.",
       },
     ],
   },
 
   capabilities: {
     eyebrow: "What Remy does",
-    heading: "One receptionist for calls and website enquiries",
+    heading: "The enquiry is captured as described, then the rest follows",
     lead:
-      "Remy is the same AI receptionist on the phone and in your website chat. It answers from the knowledge you give it, collects what an electrical job needs, and hands anything unusual to you.",
+      "Remy is the same AI receptionist on the phone and in your website chat. For an electrical business the order matters: get the enquiry down accurately and in context first, answer what can be answered, then get a time checked.",
     items: [
       {
-        title: "Call handling",
-        body: "Remy answers on a dedicated phone number set up for your business, whenever the call comes in. It asks about the job before it asks about the caller, clarifies a service it isn’t sure it heard, and doesn’t promise anything it can’t know.",
+        title: "Captures the enquiry in the caller’s words",
+        body: "A tripping board, a dead socket, a flickering light, a rewire, a consumer-unit upgrade, an EV charger — Remy takes the job down as the caller describes it, plus whether it’s a home or a business premises when they say so, the address where the work is needed, their name, a confirmed callback number and an email. It records what was described; it doesn’t diagnose the fault.",
       },
       {
-        title: "Customer & job detail capture",
-        body: "For work at the customer’s premises, Remy collects the job in their own words — a fault, sockets and switches, lighting, a rewire, a fuse board or consumer unit, an EV charger, an installation — plus the address where the work is needed, their name, a confirmed callback number and an email address, reading back the details that are easy to mishear.",
+        title: "Answers the questions you get asked every day",
+        body: "Do you fit EV chargers? Do you do rewires? Do you take commercial work? Remy answers from a Knowledge Base you write and edit — your services, prices, hours and policies — and never invents an answer or gives electrical advice. Anything it can’t answer confidently goes to you instead.",
       },
       {
-        title: "Appointment / job booking",
-        body: "Once a caller has a day and time, Remy checks it against your business hours and calendar, offers alternatives if that slot isn’t free, and submits a booking request after the call. The customer gets a confirmation email once the booking is actually made.",
+        title: "Answers while you’re on site",
+        body: "Remy picks up on a dedicated phone number set up for your business, whenever the call comes in — with the power off, up a ladder, in a loft. It asks about the job before it asks who’s calling, and clarifies a service it isn’t sure it heard.",
+      },
+      {
+        title: "Gets a time checked for the jobs you can book",
+        body: "Once the caller names a day and time, Remy checks it against your business hours and calendar, offers alternatives if that slot isn’t free, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made.",
         condition:
           "Booking applies to services listed in your Knowledge Base, and bookings sync to Google Calendar when your calendar is connected.",
       },
       {
-        title: "Business knowledge responses",
-        body: "Remy answers questions about your services, prices, hours and policies from a Knowledge Base you write and edit. It never invents details and doesn’t diagnose electrical faults — anything it can’t answer confidently goes to you instead.",
-      },
-      {
-        title: "Lead / enquiry capture",
-        body: "Every call and chat is saved as a lead in your dashboard, and you receive a summary of each call with the caller’s details, what they need and the transcript. Anything that needs a human is flagged for review and you’re notified.",
+        title: "Every enquiry lands in one place",
+        body: "Every call and chat is saved as a lead in your dashboard, and you receive a summary of each call with the caller’s details, the enquiry and the transcript. Domestic or commercial, fault or fit-out, anything that needs a human is flagged for review and you’re notified.",
       },
     ],
   },
