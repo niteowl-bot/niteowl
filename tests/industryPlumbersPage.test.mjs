@@ -91,11 +91,12 @@ describe("the route exists and is registered publicly through the A-1 foundation
     assert.equal(isPrivatePath(page.path), false);
   });
 
-  test("it is the only industry page: no second constant, no dynamic segment, no CMS", () => {
+  test("exactly two industry pages exist — plumbers and electricians — with no dynamic segment or CMS", () => {
     const src = stripComments(read("src/lib/site/industryPages.ts"));
-    assert.equal((src.match(/: IndustryPage = \{/g) ?? []).length, 1);
-    assert.doesNotMatch(src, /electrician|hvac|locksmith|garage|dentist/i);
+    assert.equal((src.match(/: IndustryPage = \{/g) ?? []).length, 2);
+    assert.doesNotMatch(src, /hvac|locksmith|garage|dentist|roofer/i);
     assert.equal(statSync("src/app/ai-receptionist-for-plumbers").isDirectory(), true);
+    assert.equal(statSync("src/app/ai-receptionist-for-electricians").isDirectory(), true);
     assert.throws(() => statSync("src/app/industries"));
     assert.throws(() => statSync("src/app/ai-receptionist-for-[industry]"));
   });
@@ -329,9 +330,13 @@ describe("the homepage links to the page, and to no industry page that does not 
     const block = home.match(/const INDUSTRY_PAGES = \[([\s\S]*?)\r?\n\];/);
     assert.ok(block, "INDUSTRY_PAGES constant present");
     const entries = [...block[1].matchAll(/href: "([^"]+)"/g)].map((m) => m[1]);
-    assert.deepEqual(entries, ["/ai-receptionist-for-plumbers"]);
+    // Plumbers first and unchanged, electricians second, nothing else.
+    assert.deepEqual(entries, ["/ai-receptionist-for-plumbers", "/ai-receptionist-for-electricians"]);
     assert.match(block[1], /name: "Plumbers"/);
     assert.match(block[1], /cta: "Explore Remy for Plumbers"/);
+    assert.match(block[1], /name: "Electricians"/);
+    assert.match(block[1], /cta: "Explore Remy for Electricians"/);
+    assert.doesNotMatch(block[1], /HVAC|Dentist|Roofer|Locksmith/i);
     assert.match(home, /Built for your industry/);
     assert.match(home, /INDUSTRY_PAGES\.map\(/);
     // The section sits directly after the hero and before "Perfect For".
@@ -343,11 +348,14 @@ describe("the homepage links to the page, and to no industry page that does not 
 
   test("no other industry is linked until its page exists — no placeholder routes", () => {
     const industryHrefs = [...home.matchAll(/href(?:=|: )"(\/ai-receptionist-for-[^"]+)"/g)].map((m) => m[1]);
-    assert.ok(industryHrefs.length >= 2);
+    // Three links each: the industry section, the Perfect For card, the footer.
+    assert.equal(industryHrefs.filter((h) => h === "/ai-receptionist-for-plumbers").length, 3);
+    assert.equal(industryHrefs.filter((h) => h === "/ai-receptionist-for-electricians").length, 3);
     for (const href of industryHrefs) {
-      assert.equal(href, "/ai-receptionist-for-plumbers");
+      assert.ok(["/ai-receptionist-for-plumbers", "/ai-receptionist-for-electricians"].includes(href), href);
       assert.ok(statSync(`src/app${href}/page.tsx`).isFile(), `${href} has no page`);
     }
-    assert.doesNotMatch(home, /label: "(Electricians|HVAC|Dentists|Physiotherapists|Veterinary Clinics|Landscapers|Cleaning Services)", href/);
+    assert.match(home, /label: "Electricians", href: "\/ai-receptionist-for-electricians"/);
+    assert.doesNotMatch(home, /label: "(HVAC|Dentists|Physiotherapists|Veterinary Clinics|Landscapers|Cleaning Services)", href/);
   });
 });

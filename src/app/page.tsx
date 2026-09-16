@@ -16,6 +16,14 @@ const INDUSTRY_PAGES = [
     cta: "Explore Remy for Plumbers",
     href: "/ai-receptionist-for-plumbers",
   },
+  {
+    icon: "⚡",
+    name: "Electricians",
+    description:
+      "See how Remy helps electrical businesses handle calls, capture enquiries and stay responsive.",
+    cta: "Explore Remy for Electricians",
+    href: "/ai-receptionist-for-electricians",
+  },
 ];
 
 // Objection-handling FAQ — every answer reflects real, shipped behaviour.
@@ -191,7 +199,7 @@ export default function Home() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[
               { icon: "🔧", label: "Plumbers", href: "/ai-receptionist-for-plumbers" },
-              { icon: "⚡", label: "Electricians" },
+              { icon: "⚡", label: "Electricians", href: "/ai-receptionist-for-electricians" },
               { icon: "❄️", label: "HVAC" },
               { icon: "🦷", label: "Dentists" },
               { icon: "💪", label: "Physiotherapists" },
@@ -456,6 +464,12 @@ export default function Home() {
               className="hover:text-white transition-colors"
             >
               AI Receptionist for Plumbers
+            </a>
+            <a
+              href="/ai-receptionist-for-electricians"
+              className="hover:text-white transition-colors"
+            >
+              AI Receptionist for Electricians
             </a>
             <a href="/privacy" className="hover:text-white transition-colors">
               Privacy policy
