@@ -314,3 +314,82 @@ describe("the FAQ heading is rendered from each industry's content object", () =
     assert.doesNotMatch(view, /plumb|electric/i);
   });
 });
+
+// ── 9. How-it-works — Slice 4a, trade-specific copy ───────────────
+//
+// The cross-page differentiation guard lives here because this suite
+// already reads both pages. It proves the sections genuinely differ,
+// that step 1 is deliberately identical, and that the structural
+// parity Slices 1-3 rely on is unchanged.
+
+describe("the how-it-works section speaks to electricians, and the two pages differ", () => {
+  test("the heading and steps 2-4 carry electrical vocabulary", () => {
+    assert.match(page.how_it_works.heading, /electrical/i);
+    const [, ...rest] = page.how_it_works.steps;
+    const joined = rest.flatMap((s) => [s.title, s.body]).join(" ");
+    assert.match(joined, /electrical/i);
+    assert.match(joined, /domestic and commercial/i);
+    assert.match(joined, /on site/i);
+  });
+
+  test("the enquiry is captured as the caller describes it, and Remy does not diagnose", () => {
+    const joined = page.how_it_works.steps.flatMap((s) => [s.title, s.body]).join(" ");
+    assert.match(joined, /what the caller says is happening/);
+    assert.match(joined, /in their words/);
+    assert.match(joined, /doesn’t diagnose the fault/);
+    assert.doesNotMatch(joined, ELECTRICAL_EXPERTISE_CLAIM);
+  });
+
+  test("step 1 is identical on both pages — the Scan is the same for everyone", () => {
+    assert.deepEqual(page.how_it_works.steps[0], PLUMBERS_PAGE.how_it_works.steps[0]);
+    assert.match(page.how_it_works.steps[0].body, /Nine questions, nothing stored, no account/);
+  });
+
+  test("the two how-it-works sections are genuinely different — steps 2-4 share no wording", () => {
+    assert.notDeepEqual(page.how_it_works, PLUMBERS_PAGE.how_it_works);
+    assert.notEqual(page.how_it_works.heading, PLUMBERS_PAGE.how_it_works.heading);
+    for (let i = 1; i < page.how_it_works.steps.length; i += 1) {
+      assert.notEqual(page.how_it_works.steps[i].title, PLUMBERS_PAGE.how_it_works.steps[i].title, "step " + (i + 1) + " title");
+      assert.notEqual(page.how_it_works.steps[i].body, PLUMBERS_PAGE.how_it_works.steps[i].body, "step " + (i + 1) + " body");
+    }
+  });
+
+  test("structural parity is unchanged — four steps and the shared eyebrow on both pages", () => {
+    assert.equal(page.how_it_works.steps.length, 4);
+    assert.equal(PLUMBERS_PAGE.how_it_works.steps.length, 4);
+    assert.equal(page.how_it_works.eyebrow, "How it works");
+    assert.equal(PLUMBERS_PAGE.how_it_works.eyebrow, "How it works");
+  });
+
+  test("no plumbing vocabulary leaks into any electricians copy", () => {
+    for (const text of ALL_TEXT) assert.doesNotMatch(text, /plumb|boiler|leaking pipe|kitchen sink/i, text);
+  });
+
+  test("the steps claim nothing Remy does not do", () => {
+    const joined = page.how_it_works.steps.flatMap((s) => [s.title, s.body]).join(" ");
+    assert.doesNotMatch(joined, UNSUPPORTED_FEATURE);
+    assert.doesNotMatch(joined, FABRICATED_CLAIM);
+    assert.doesNotMatch(
+      joined,
+      /(?<!nothing |not a |doesn.t |does not |never |no )\b(booked|confirmed|dispatched|diagnos(ed|is)|certif(ied|icate)|scheduled|made safe|on the way|will attend|guaranteed)\b/i
+    );
+    assert.match(joined, /booking requests/i);
+  });
+
+  test("the FAQ is untouched by Slice 4a on both pages — seven entries each, unchanged booking clauses", () => {
+    assert.equal(page.faqs.length, 7);
+    assert.equal(PLUMBERS_PAGE.faqs.length, 7);
+    for (const p of [page, PLUMBERS_PAGE]) {
+      const booking = p.faqs.find((f) => /book/i.test(f.q));
+      assert.match(booking.a, /submits a booking request after the call/);
+      assert.match(booking.a, /once the booking is actually made/);
+      assert.match(booking.a, /rather than confirming it/);
+    }
+  });
+
+  test("the rendered page shows the electrical how-it-works heading and not the plumbing one", () => {
+    const html = textOf(render());
+    assert.match(html, /From free scan to answered electrical enquiries/);
+    assert.doesNotMatch(html, /answered plumbing calls/);
+  });
+});

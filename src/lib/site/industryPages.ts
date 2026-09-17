@@ -497,23 +497,23 @@ export const PLUMBERS_PAGE: IndustryPage = {
 
   how_it_works: {
     eyebrow: "How it works",
-    heading: "From free scan to answered calls",
+    heading: "From free scan to answered plumbing calls",
     steps: [
       {
         title: "Run the free Business Opportunity Scan",
         body: "Nine questions, nothing stored, no account. See where enquiries may be getting lost before deciding anything.",
       },
       {
-        title: "Configure Remy for your business",
-        body: "Add your services, prices, hours and policies to the Knowledge Base, connect your calendar if you want bookings in it, and Remy answers from that.",
+        title: "Put your plumbing work into the Knowledge Base",
+        body: "List the jobs you take — call-outs, repairs, installations, servicing — with your prices, your hours and your policies. Connect your calendar if you want booking requests to land in it. Remy answers from what you’ve listed and nothing else.",
       },
       {
-        title: "Remy handles incoming enquiries",
-        body: "Calls and website chats are answered, the job and customer details are captured, and booking requests are made where they can be.",
+        title: "Remy answers while you’re on the tools",
+        body: "Calls and website chats are answered whether you’re under a sink or on a roof. Remy takes the problem in the caller’s own words, the job address and their number, and flags the call as urgent when the caller says it is.",
       },
       {
-        title: "Review enquiries and bookings in your dashboard",
-        body: "Every lead, call summary and booking is there to check and follow up, with anything unusual flagged for you.",
+        title: "Pick up the job from your dashboard",
+        body: "Every call summary, lead and booking request is waiting for you, with anything Remy couldn’t answer flagged for review — so the day’s enquiries are in one place instead of in your call log.",
       },
     ],
   },
@@ -762,23 +762,23 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
 
   how_it_works: {
     eyebrow: "How it works",
-    heading: "From free scan to answered calls",
+    heading: "From free scan to answered electrical enquiries",
     steps: [
       {
         title: "Run the free Business Opportunity Scan",
         body: "Nine questions, nothing stored, no account. See where enquiries may be getting lost before deciding anything.",
       },
       {
-        title: "Configure Remy for your business",
-        body: "Add your services, prices, hours and policies to the Knowledge Base, connect your calendar if you want bookings in it, and Remy answers from that.",
+        title: "List the electrical work you take on",
+        body: "Domestic and commercial, the jobs you’ll quote for and the ones you won’t, with your prices, hours and policies. Connect your calendar if you want booking requests in it. Remy only offers what you’ve listed.",
       },
       {
-        title: "Remy handles incoming enquiries",
-        body: "Calls and website chats are answered, the job and customer details are captured, and booking requests are made where they can be.",
+        title: "Remy answers and captures the enquiry as described",
+        body: "Calls and website chats are answered while you’re on site. Remy takes what the caller says is happening — in their words — with their address and number, and flags it as urgent if they say it is. It doesn’t diagnose the fault.",
       },
       {
-        title: "Review enquiries and bookings in your dashboard",
-        body: "Every lead, call summary and booking is there to check and follow up, with anything unusual flagged for you.",
+        title: "Decide what’s yours from the dashboard",
+        body: "Enquiries, call summaries and booking requests are in one place, with anything outside your listed work flagged for review — so you decide what needs a visit and what doesn’t.",
       },
     ],
   },
