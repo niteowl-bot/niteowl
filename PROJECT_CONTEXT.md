@@ -154,20 +154,14 @@ The standing behaviour each one established is in **`docs/REMY_BEHAVIOUR_RULES.m
 `97c37b9` · #56 `ea6c0bb` · #58 `eb4641a` · #60 `373cf3b` and `e001f0f` · #62 `6289418` · #66
 `837caa7` · #68 `a2c483f` · #70 `72717f5`.
 
-**Free products** — see *Free-Product Strategy* below: the Setup Kit (PRs #77, #78), the
-Business Opportunity Scan Phase 1 logic, recommendations, public surface, funnel diagnosis,
-clusters and hypotheses (PRs #84, #87, #89, #92, #94, #99), and the Organic Acquisition
-Engine A-1, A-2a and A-2b (PRs #101, #103, #105).
+**Free products and industry landing pages** — status and PRs in *Free-Product Strategy*
+§1–§3, §7 and §8 below; closeouts in `CHANGELOG.md`.
 
-**Deployment-to-merge correspondence is usually NOT SHA-verified.** `vercel inspect` exposed
-no Git-source metadata for PRs #54, #58, #60, #62, #66, #68, #70, #89, #92 and #94, so
-identification rests on the new production deployment appearing seconds after the merge and
-carrying the production aliases. PRs #40, #96, #97, #99, #101, #103, #105, #107 and #108
-could be SHA-verified from `githubCommitSha` or the build log; that is the stronger evidence,
-and the difference is recorded rather than glossed over.
-
-**The PRs #27–#40 live-production verification record — including the PR #34 regression and
-the lesson that generalises from it — is in `docs/REMY_BEHAVIOUR_RULES.md`.**
+**Deployment-to-merge correspondence — two evidence classes, recorded rather than glossed
+over.** PRs #54, #58, #60, #62, #66, #68, #70, #89, #92 and #94 could not be SHA-verified
+(`vercel inspect` exposed no Git metadata; identification rests on the deployment appearing
+seconds after the merge with the production aliases). PR #40 and every production PR from #96
+to #125 **was SHA-verified** from `githubCommitSha` or the build log's `Commit:` line.
 
 ## Standing behaviour rules — index
 
@@ -258,11 +252,6 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
   service its own caller transcript never contained. They were repaired by giving each
   scenario realistic caller speech; **no production invariant was weakened and no assertion
   was loosened to obtain green.**
-- **Deployment-to-merge correspondence is usually NOT SHA-verified.** `vercel inspect` exposed
-  no Git-source metadata for PRs #54, #58, #60, #62, #66, #68 and #70, so identification rests
-  on the new production deployment appearing seconds after the merge and carrying the
-  `niteowlhq.com` / `www` / `git-main` aliases. PR #40 could read `githubCommitSha` directly;
-  that is the stronger evidence, and the difference is recorded rather than glossed over.
 - **A deterministic code guard CAN be closed by tests driving the real `processCallEnded`; a
   model-behaviour prompt correction CANNOT.** PRs #43, #54, #58, #60, #62, #66, #68 and #70
   needed no live call. PRs #34 and #40 did — an all-green suite proved nothing there.
@@ -340,19 +329,12 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 reconciliation across PROJECT_CONTEXT.md, CHECKLIST.md and docs/ARCHITECTURE.md found no
 remaining production-reachable V1 implementation blocker.
 
-**One V1 blocker WAS found after that reconciliation, and is now CLOSED (2026-09-14).**
-The final Google OAuth verification pass exposed that password recovery did not work in
-production at all — first because no code path could consume Supabase's implicit-flow
-fragment (**PR #96**, merge `eeed1f7`), then because the remaining PKCE `?code=` path only
-worked in the browser that requested the reset (**PR #97**, merge `8ccddc6`, plus the
-production Reset Password template switched to the `token_hash` link **after** the route was
-live). **Cross-device password recovery is V1-verified in production**: a fresh reset link
-opened in a fresh Incognito session in another browser context reached *Choose a new
-password*, the update succeeded, and a new session signed in with the new password. Normal
-password sign-in is unchanged. Magic-link sign-in is **deferred to V1.1/later and is not a V1
-blocker**. Full record in `CHANGELOG.md` under 2026-09-14 and in the password-recovery rule
-above. This was judged by the canonical rule — a customer locked out of their account cannot
-use Remy V1 — not by appetite.
+**One V1 blocker WAS found after that reconciliation, and is now CLOSED (2026-09-14):**
+password recovery did not work in production — closed by **PR #96** (merge `eeed1f7`) and
+**PR #97** (merge `8ccddc6`), **V1-verified in production 2026-09-14**; judged by the canonical
+rule (a locked-out customer cannot use Remy V1), not by appetite. Magic-link sign-in is
+**deferred to V1.1/later and is not a V1 blocker**. Record: the *Password-recovery and
+auth-callback* rule in `docs/REMY_BEHAVIOUR_RULES.md`; `CHANGELOG.md` 2026-09-14.
 
 **The one remaining launch prerequisite is EXTERNAL and is not Remy work.**
 
@@ -455,12 +437,10 @@ orchestration and governed action → cross-product measured outcome learning �
 Decision Intelligence (`docs/ARCHITECTURE.md` §63.1, unchanged).
 
 **Status of everything below: NOT STARTED unless explicitly marked shipped.** Nothing here is
-Remy V1 or V1.1 work and nothing here is a NOW item. Four things have shipped: the Setup Kit
-(complete), the **Business Opportunity Scan's Phase 1 pure logic** (PR #84 — logic only, no
-product surface), the **Scan's Phase 1 recommendation layer** (PR #87 — likewise logic only)
-and the **Scan's Phase 1 public surface** (PR #89 — the questionnaire and report a visitor
-actually uses, live and production-verified 2026-09-12; see §1 below). Nothing else is
-started or approved for implementation.
+Remy V1 or V1.1 work and nothing here is a NOW item. What has shipped is recorded once, in the
+tables that own it: the Setup Kit (§3), the Business Opportunity Scan's six Phase 1 increments
+(§1 *What has shipped*), the Organic Acquisition Engine phases (§7) and the industry landing
+pages (§8). Nothing else is started or approved for implementation.
 
 ## 1. Flagship — NiteOwl Business Opportunity Scan
 
@@ -669,61 +649,13 @@ never on its own a NOW** (§78).
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
 **Full closeouts for A-1, A-2a and A-2b — files, tests, pinned guarantees, production
-verification — are in `CHANGELOG.md` at the dated entries for PRs #101, #103 and #105.** What
-they established and preserved, in one line each: the sitemap carries **no `lastModified`**
-because no reliable per-route date exists; the public and private route lists **partition the
-real `src/app` inventory**, so an unclassified new page fails before a crawler finds it;
-problem pages take their wording from `SCAN_RECOMMENDATIONS` **verbatim** and `why_it_matters`
-is excluded because it would diagnose a stranger; **`enquiry.no_followup` keeps its canonical
-`recommended_product: null` truth visible**; every CTA is the literal Scan path with **no query
-string, hash, prefill or carried state**; and the Lost Revenue page **calculates nothing**.
-The sitemap now carries **twelve** approved public URLs — the ten above plus the two
-**industry marketing pages**: `/ai-receptionist-for-plumbers` (PR #112, merge `e8a26e6`) and
-`/ai-receptionist-for-electricians` (PR #118, merge `9a17b2c`), both production-verified
-2026-09-16. **Exactly two shipped industry pages exist, and there is still ONE Remy** — they are
-marketing / acquisition surfaces (one content constant each in `src/lib/site/industryPages.ts`,
-rendered by the shared `IndustryPageView`), not separate Remy implementations; the reusable
-`IndustryPage` pattern is now proven across two industries. **Industry-specific wording — the FAQ
-heading included — belongs in the industry content object, never hard-coded in the shared view**
-(PR #119, merge `b731acd`, closed the one defect that rule prevents). **The shared pattern now
-carries a typed presentation contract, proven in production (PR #121, merge `8838934`,
-2026-09-16):** an optional `presentation` on `IndustryPage` — `theme` (`indigo` / `cyan` / `amber`)
-and `hero_visual` (`summary_card` / `job_ticket` / `enquiry_panel`), closed unions mapped to
-static class strings — so industry presentation may vary through **controlled typed variants**
-while there remains **ONE Remy and ONE shared industry-page architecture**; a page with no
-`presentation` renders the default summary card unchanged. **Slice 1 introduced only this
-presentation-contract + hero-visual layer.** Plumbers currently use `job_ticket` with the cyan
-cue; electricians use `enquiry_panel` with the amber cue. **Truthfulness rule for presentation:
-a visual must never imply booked, dispatched, diagnosed, certified or any other completed outcome
-Remy has not actually produced** — a hero visual shows the request or captured state, and the
-`tests/industryPresentation.test.mjs` guard pins it. **Slice 2 (PR #123, merge `e06d266`,
-production-verified 2026-09-16) proves the same shared architecture also supports controlled
-industry-specific pain layouts, pain narratives, capability ordering and capability wording
-without industry-keying Remy core:** `presentation.pain_layout` (`cards` / `timeline` /
-`contrast`, default `cards`) with typed story data on `pain_points`, and capability order
-carried by the content arrays. Plumbers currently use `timeline` (a four-stage numbered
-missed-call story on a cyan rail); electricians use `contrast` (domestic / commercial panels of
-quoted caller enquiries). **Slice 3 (PR #125, reviewed head `762bfb9`, merge `3565411`,
-production-verified 2026-09-16) adds a workflow-motif contract and controlled section ordering
-through the same typed presentation system:** `presentation.workflow` (`none` / `flow_curve` /
-`flow_circuit`, default `none`) with typed four-node `workflow` data and a truthfulness footnote;
-`presentation.section_order` over a closed `IndustrySection` set (hero always first, final CTA
-always last, omitted shared sections appended); and typed `mid_cta` data. Plumbers use
-`flow_curve` (round-node S-curve: call answered → job & address captured → time checked → booking
-request submitted) with the order pain → workflow → mid CTA → …; electricians use `flow_circuit`
-(square-node stepped trace: call → classify → capture → route, where route is KB-listed and
-time-checked → booking request, otherwise flagged for review) with the order workflow → mid CTA →
-pain → …. **Different section ordering and mid-page Scan CTA placement are controlled through
-the shared typed presentation system — there remains ONE Remy, ONE shared `IndustryPage`
-architecture and no per-industry implementation fork.** Differentiation now exists in three
-layers — hero (Slice 1), body (Slice 2), workflow / flow (Slice 3) — all structural and
-content-specific, not colour alone; **the truthfulness guard remains mandatory: no visual or
-workflow may imply booked, dispatched, diagnosed, certified or any outcome Remy did not
-produce** (`tests/industryWorkflow.test.mjs` pins it page-wide). Slices 1 and 2 remain intact.
-**Slice 4 — FAQ / how-it-works copy differentiation — is NOT STARTED and NOT APPROVED.**
-Closeouts are in `CHANGELOG.md`.
+verification — are in `CHANGELOG.md` at the dated entries for PRs #101, #103 and #105**, and
+every guarantee they established is pinned by `tests/organicDiscoverability.test.mjs` and
+`tests/organicLostRevenueEntry.test.mjs`. Two are **do-not-repeat rules that stay here**: every
+Scan CTA is the literal Scan path with **no query string, hash, prefill or carried state**; and
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
-`…/problems/booking-back-and-forth`; do not repeat that check.**
+`…/problems/booking-back-and-forth`; do not repeat that check.** The sitemap now carries
+**twelve** approved public URLs — the ten above plus the two industry pages in §8.
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
@@ -737,6 +669,38 @@ its §107.3 comparability consequences.
 its business wording from canonical constants, may explain general mechanisms in hedged terms,
 and **may not assert a cause for a specific business, a statistic, a benchmark, a customer
 result or a location**; no page exists without genuine content.
+
+## 8. Industry landing pages
+
+**Canonical as of 2026-09-16. Marketing / acquisition surfaces for the ONE Remy — not separate
+Remy implementations.** Each page is one content constant in `src/lib/site/industryPages.ts`
+rendered by the **ONE shared `IndustryPageView`**; presentation varies only through
+**controlled typed presentation variants** (closed unions, static classes, every default the
+plain shared page) and there is **no per-industry implementation fork** — a third industry is one
+more constant, never a bespoke view. Nothing under Remy core is keyed by industry (pinned by
+test). Funnel: industry page → the unchanged nine-question Scan → Remy. **Two live pages**, both
+in the sitemap: `/ai-receptionist-for-plumbers` (PR #112, merge `e8a26e6`) and
+`/ai-receptionist-for-electricians` (PR #118, merge `9a17b2c`), production-verified 2026-09-16.
+
+**Rules.** Industry-specific wording — the FAQ heading included — belongs in the content object,
+never hard-coded in the shared view (PR #119, merge `b731acd`). **The truthfulness guard is
+mandatory: no visual, workflow or copy may imply booked, dispatched, diagnosed, certified or any
+outcome Remy did not produce** — a visual shows the request or captured state; the
+`tests/industryPresentation`, `industryPainLayouts` and `industryWorkflow` suites pin it page-wide.
+
+**Differentiation ships in slices, each through the same typed contract:**
+
+| Slice | Status (each shipped slice production-verified 2026-09-16) |
+|---|---|
+| **1** — presentation contract + hero visuals (`theme`, `hero_visual`) | **SHIPPED** — PR #121, merge `8838934` |
+| **2** — pain layouts, capability priority, trade copy (`pain_layout`) | **SHIPPED** — PR #123, merge `e06d266` |
+| **3** — workflow motifs, section order, mid-page Scan CTA (`workflow`, `section_order`, `mid_cta`) | **SHIPPED** — PR #125, head `762bfb9`, merge `3565411` |
+| **4** — FAQ / how-it-works copy differentiation | **NOT STARTED and NOT APPROVED** |
+
+**Current variants:** plumbers = `job_ticket` + cyan + `timeline` + `flow_curve`; electricians =
+`enquiry_panel` + amber + `contrast` + `flow_circuit` — structural and content-specific
+differentiation, not colour alone. Union values, node sequences, section orders and per-slice
+verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125.
 ---
 
 # Architecture Rule
@@ -940,25 +904,13 @@ Shipped (previously listed as remaining or future):
 - **cross-device password recovery** (PRs #96 and #97, V1-verified in production 2026-09-14;
   magic-link sign-in deferred to V1.1/later)
 
-Free products (see *Free-Product Strategy* above — none of this is V1 work):
-
-**Status lives in *Free-Product Strategy* above; closeouts live in `CHANGELOG.md`.** None of
-it is V1 or V1.1 work.
-
-- **AI Receptionist Business Setup Kit — SHIPPED** (PRs #77, #78). **Do not rebuild**
-- **NiteOwl Business Opportunity Scan — Phase 1 SHIPPED and LIVE**: pure logic (#84),
-  recommendations (#87), public surface (#89), enquiry funnel diagnosis (#92), opportunity
-  clusters (#94) and diagnostic hypotheses (#99). **All six Part XIV contracts are built.**
-  Persistence, run identity, the consent flow, outcome measurement, any Part XIII runtime and
-  every later phase are **NOT started and not approved**
-- **Lost Revenue Scan** — a module and acquisition hook inside the Scan; its Phase 1 sizing
-  logic shipped inside #84, and A-2b added a framing / entry page (#105). There is still **no
-  separate Lost Revenue questionnaire, and creating one needs an approved
-  `SCAN_QUESTION_SET_VERSION` decision**
-- **FAQ / Knowledge Builder** — retained as a *supporting* free tool, no longer the flagship.
-  **NOT started**
-- **Organic Acquisition Engine** — **A-1 (#101), A-2a (#103) and A-2b (#105) SHIPPED, LIVE and
-  production-verified**; **B, C and D NOT started**
+Free products and acquisition surfaces (none of it V1 or V1.1 work; **status in *Free-Product
+Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not rebuild** (§3) ·
+**Scan Phase 1 SHIPPED and LIVE; persistence, consent, outcome measurement and every later
+phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
+without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
+NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b SHIPPED; B, C, D NOT started**
+(§7) · **Industry landing pages — Slices 1–3 SHIPPED, Slice 4 NOT STARTED and NOT APPROVED** (§8)
 Future:
 
 - Outlook Calendar
@@ -1012,3 +964,7 @@ How that is kept:
    never *summarise it away*. A safety rule is moved verbatim, never paraphrased into
    something weaker.
 6. **Every move leaves a pointer**, and the pointer names the document and the section.
+
+*Maintenance passes:* 2026-09-15 (165,612 → under budget; material moved to canonical owners) ·
+2026-09-16 (70,042 → under 65,000; duplicates merged, two stale statements corrected, the
+industry-page record given §8 — no rule paraphrased, every moved fact left a pointer).
