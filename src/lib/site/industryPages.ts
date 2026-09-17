@@ -521,16 +521,16 @@ export const PLUMBERS_PAGE: IndustryPage = {
   faq_heading: "Questions plumbers ask about Remy",
   faqs: [
     {
-      q: "Can Remy answer calls while I’m working on a job?",
-      a: "Yes. Remy answers on a dedicated phone number set up for your business whenever a call comes in, takes the job and customer details, and sends you a summary of the call — so you can look at it when you’ve got a free hand.",
+      q: "Can Remy answer the phone when your hands are full?",
+      a: "Yes — the burst-pipe call at eight in the evening doesn’t wait for you to be free. Remy answers on a dedicated phone number set up for your business whenever a call comes in, takes the job details and customer details, and sends you a summary of the call — so you can read it when you’re out from under the sink.",
     },
     {
       q: "Can Remy collect information about an urgent plumbing problem?",
       a: "Yes. Remy asks what the problem is in the caller’s own words, notes that it’s urgent, still collects their name, address and contact number, and flags the enquiry as urgent in your summary. It tells the caller the team will be in touch as quickly as possible rather than promising a response time, and it doesn’t transfer live calls. If someone describes a life-threatening emergency, Remy tells them to hang up and call 999.",
     },
     {
-      q: "Can Remy help book jobs?",
-      a: "Yes, for the services listed in your Knowledge Base. Once a caller gives a day and time, Remy checks it against your business hours and availability, offers alternatives if that slot is taken, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made, and it appears in your dashboard — and in Google Calendar when your calendar is connected. If a caller asks for something you don’t list, Remy takes the details and passes the request to you rather than confirming it.",
+      q: "Can Remy help with booking requests for jobs in my week?",
+      a: "Yes, for the services listed in your Knowledge Base — a call-out, a repair, a service, whatever you’ve said you take. Once a caller gives a day and time, Remy checks it against your business hours and availability, offers alternatives if that slot is taken, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made, and it appears in your dashboard — and in Google Calendar when your calendar is connected. If a caller asks for something you don’t list, Remy takes the details and passes the request to you rather than confirming it.",
     },
     {
       q: "Can I control what Remy tells customers?",
@@ -542,7 +542,7 @@ export const PLUMBERS_PAGE: IndustryPage = {
     },
     {
       q: "Can Remy handle calls outside normal hours?",
-      a: "Yes. Remy answers whenever the call comes in, day or night. The appointment times it offers respect the business hours you set, and any after-hours enquiry is waiting in your dashboard and your summary email.",
+      a: "Yes. The eleven-o’clock leak is answered the same way the eleven-o’clock-in-the-morning one is. Remy answers whenever the call comes in, day or night. The appointment times it offers respect the business hours you set, and any after-hours enquiry is waiting in your dashboard and your summary email. Remy doesn’t transfer live calls and doesn’t promise a response time — it tells the caller the team will be in touch as quickly as possible.",
     },
     {
       q: "Do I need to change my existing business phone number?",
@@ -786,16 +786,16 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
   faq_heading: "Questions electricians ask about Remy",
   faqs: [
     {
-      q: "Can Remy answer calls while I’m on a job?",
-      a: "Yes. Remy answers on a dedicated phone number set up for your business whenever a call comes in, takes the job and customer details, and sends you a summary of the call — so you can look at it when you’re off the ladder.",
+      q: "Can Remy answer calls while I’m on site?",
+      a: "Yes — you can’t take a call with a board open and the power off. Remy answers on a dedicated phone number set up for your business whenever a call comes in, takes the job details and customer details, and sends you a summary of the call — so you can read it when you’re back down the ladder.",
     },
     {
       q: "Can Remy take details about an electrical fault?",
       a: "Yes — in the caller’s own words. Remy asks what’s happening, notes it as described, collects their name, address and contact number, and flags the enquiry as urgent if the caller says it is. It doesn’t diagnose the fault or tell the caller what’s wrong; that stays with you. If someone describes a life-threatening emergency, Remy tells them to hang up and call 999.",
     },
     {
-      q: "Can Remy help book jobs?",
-      a: "Yes, for the services listed in your Knowledge Base. Once a caller gives a day and time, Remy checks it against your business hours and availability, offers alternatives if that slot is taken, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made, and it appears in your dashboard — and in Google Calendar when your calendar is connected. If a caller asks for something you don’t list, Remy takes the details and passes the request to you rather than confirming it.",
+      q: "Can Remy handle booking requests for domestic and commercial work?",
+      a: "Yes, for the services listed in your Knowledge Base — and only those, so the work you don’t take is never offered on your behalf. Once a caller gives a day and time, Remy checks it against your business hours and availability, offers alternatives if that slot is taken, and submits a booking request after the call. The customer receives a confirmation email once the booking is actually made, and it appears in your dashboard — and in Google Calendar when your calendar is connected. If a caller asks for something you don’t list, Remy takes the details and passes the request to you rather than confirming it.",
     },
     {
       q: "Can I control what Remy tells customers?",
@@ -807,7 +807,7 @@ export const ELECTRICIANS_PAGE: IndustryPage = {
     },
     {
       q: "Can Remy handle calls outside normal hours?",
-      a: "Yes. Remy answers whenever the call comes in, day or night. The appointment times it offers respect the business hours you set, and any after-hours enquiry is waiting in your dashboard and your summary email. Remy doesn’t transfer live calls and doesn’t promise a response time — it tells the caller the team will be in touch as quickly as possible.",
+      a: "Yes — the Monday-morning call about a unit with no power comes in before you’ve opened the van. Remy answers whenever the call comes in, day or night. The appointment times it offers respect the business hours you set, and any after-hours enquiry is waiting in your dashboard and your summary email. Remy doesn’t transfer live calls and doesn’t promise a response time — it tells the caller the team will be in touch as quickly as possible.",
     },
     {
       q: "Do I need to change my existing business phone number?",
