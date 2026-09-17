@@ -690,17 +690,27 @@ outcome Remy did not produce** — a visual shows the request or captured state;
 
 **Differentiation ships in slices, each through the same typed contract:**
 
-| Slice | Status (each shipped slice production-verified 2026-09-16) |
+| Slice | Status (each shipped slice production-verified on its dated entry) |
 |---|---|
 | **1** — presentation contract + hero visuals (`theme`, `hero_visual`) | **SHIPPED** — PR #121, merge `8838934` |
 | **2** — pain layouts, capability priority, trade copy (`pain_layout`) | **SHIPPED** — PR #123, merge `e06d266` |
 | **3** — workflow motifs, section order, mid-page Scan CTA (`workflow`, `section_order`, `mid_cta`) | **SHIPPED** — PR #125, head `762bfb9`, merge `3565411` |
-| **4** — FAQ / how-it-works copy differentiation | **NOT STARTED and NOT APPROVED** |
+| **4a** — how-it-works copy differentiation | **SHIPPED** — PR #128, head `374b4d6`, merge `f6a03cb`, production-verified 2026-09-17 |
+| **4b** — FAQ copy differentiation | **NOT STARTED and NOT APPROVED** |
 
 **Current variants:** plumbers = `job_ticket` + cyan + `timeline` + `flow_curve`; electricians =
 `enquiry_panel` + amber + `contrast` + `flow_circuit` — structural and content-specific
 differentiation, not colour alone. Union values, node sequences, section orders and per-slice
-verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125.
+verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125, #128.
+
+**Slice 4a (PR #128, reviewed head `374b4d6`, merge `f6a03cb`, production-verified 2026-09-17) is a
+CONTENT-ONLY change through the existing `how_it_works` field** — a differentiated heading and
+steps 2–4 per trade, with **no new union, interface, presentation variant, renderer or view
+branch and no per-industry implementation fork**. **Step 1 stays canonical and byte-identical on
+both pages** (the Scan is the same unchanged nine questions for everyone) and **both pages keep
+exactly four steps**. **The FAQ is untouched** — seven entries and the same `faq_heading` on each
+page, so the rendered `FAQPage` JSON-LD is unchanged — and every truthfulness guard above is
+preserved. **Slice 4 as a whole is NOT complete: 4b has not started and is not approved.**
 ---
 
 # Architecture Rule
@@ -910,7 +920,7 @@ Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not reb
 phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
 without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
 NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b SHIPPED; B, C, D NOT started**
-(§7) · **Industry landing pages — Slices 1–3 SHIPPED, Slice 4 NOT STARTED and NOT APPROVED** (§8)
+(§7) · **Industry landing pages — Slices 1–3 and 4a SHIPPED, Slice 4b NOT STARTED and NOT APPROVED** (§8)
 Future:
 
 - Outlook Calendar
