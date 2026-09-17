@@ -1,6 +1,7 @@
 import SalesChatWidget from "./SalesChatWidget";
 import PricingPrice from "./PricingPrice";
 import HeroDemo from "./HeroDemo";
+import { SCAN_PATH } from "@/lib/site/problemPages";
 
 // Industry landing pages that actually exist. Each entry is a live route
 // under src/app; the "Built for your industry" section below the hero
@@ -317,6 +318,20 @@ export default function Home() {
             </a>
             <p className="text-slate-500 text-sm mt-4">
               No credit card required • Cancel anytime
+            </p>
+            {/* The flagship free product, one click from the homepage. The
+                href is the canonical SCAN_PATH exactly as every other Scan
+                CTA links it — bare path, no query string, hash, prefill or
+                carried state. The nav’s general "Free tools" link stays. */}
+            <p className="text-slate-600 text-sm mt-6">
+              Not ready to start?{" "}
+              <a
+                href={SCAN_PATH}
+                className="text-indigo-600 hover:text-indigo-500 font-semibold underline underline-offset-4 transition-colors"
+              >
+                Run the free Business Opportunity Scan
+              </a>
+              {" "}— nine questions, no account, nothing stored.
             </p>
           </div>
         </div>
