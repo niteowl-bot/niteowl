@@ -378,3 +378,63 @@ describe("the FAQ heading is the plumbers one, rendered from the content object"
     assert.doesNotMatch(textOf(render()), /electric/i);
   });
 });
+
+// ── 9. How-it-works — Slice 4a, trade-specific copy ───────────────
+//
+// Slice 4a differentiates the how-it-works section through the EXISTING
+// per-page `how_it_works` field — no presentation variant, no union, no
+// view branch. Step 1 stays canonical on both pages because the Scan it
+// describes is the same unchanged nine questions for every visitor.
+
+describe("the how-it-works section speaks to plumbers", () => {
+  test("the heading and steps 2-4 carry plumbing vocabulary", () => {
+    assert.match(page.how_it_works.heading, /plumbing/i);
+    const [, ...rest] = page.how_it_works.steps;
+    const joined = rest.flatMap((s) => [s.title, s.body]).join(" ");
+    assert.match(joined, /plumbing/i);
+    assert.match(joined, /call-outs?/i);
+    assert.match(joined, /repairs|installations|servicing/i);
+    assert.match(joined, /sink|roof|tools/i);
+  });
+
+  test("step 1 is the canonical Scan step, unchanged", () => {
+    const [first] = page.how_it_works.steps;
+    assert.match(first.title, /Run the free Business Opportunity Scan/);
+    assert.match(first.body, /Nine questions, nothing stored, no account/);
+  });
+
+  test("there are exactly four steps and the eyebrow is the shared one", () => {
+    assert.equal(page.how_it_works.steps.length, 4);
+    assert.equal(page.how_it_works.eyebrow, "How it works");
+  });
+
+  test("no electrical vocabulary leaks into any plumbers copy", () => {
+    for (const text of ALL_TEXT) {
+      assert.doesNotMatch(text, /electric|consumer unit|EICR|rewire|EV charger/i, text);
+    }
+  });
+
+  test("the steps claim nothing Remy does not do", () => {
+    const joined = page.how_it_works.steps.flatMap((s) => [s.title, s.body]).join(" ");
+    assert.doesNotMatch(joined, UNSUPPORTED_FEATURE);
+    assert.doesNotMatch(joined, FABRICATED_CLAIM);
+    // A booking is a REQUEST here; nothing is booked, confirmed or dispatched.
+    assert.doesNotMatch(
+      joined,
+      /(?<!nothing |not a |doesn.t |does not |never |no )\b(booked|confirmed|dispatched|diagnos(ed|is)|certif(ied|icate)|scheduled|on the way|will attend|guaranteed)\b/i
+    );
+    assert.match(joined, /booking request/i);
+  });
+
+  test("the FAQ is untouched by Slice 4a — seven entries, unchanged booking clauses", () => {
+    assert.equal(page.faqs.length, 7);
+    const booking = page.faqs.find((f) => /book/i.test(f.q));
+    assert.match(booking.a, /submits a booking request after the call/);
+    assert.match(booking.a, /once the booking is actually made/);
+    assert.match(booking.a, /rather than confirming it/);
+  });
+
+  test("the rendered page shows the plumbing how-it-works heading", () => {
+    assert.match(textOf(render()), /From free scan to answered plumbing calls/);
+  });
+});
