@@ -2672,6 +2672,132 @@ Public tool UI
   input in the entire architecture and must be labelled as such forever (§20.6).
 - **Findings carry confidence and their evidence.** "You may be losing ~£2,400/month"
   requires the assumptions to be visible, or it is a sales figure, not a finding.
+- **NO FREE-TOOL OUTPUT TRAVELS WITH A CONTACT, AND NONE IS EVER JOINED TO ONE.** Where a
+  free tool offers an optional way to get in touch, the request body and the stored row
+  carry **only what the visitor typed into that form** — no answer, finding,
+  recommendation, estimate, `estimate_basis`, condition code, funnel stage, cluster,
+  hypothesis, dependency, evidence gap, version stamp, as-of instant, run id, session id or
+  visitor identifier. **There is no prefill from the assessment in either direction.** A
+  visitor who describes their own result in a free-text message has made their own
+  disclosure, in their own words; it is stored as message text and joined to nothing. This
+  is what keeps an optional contact from becoming the promotion of §89 by the back door —
+  **promotion is explicit, recorded, scoped and revocable, and a contact form is none of
+  those things.**
+- **A CONTACT IS A NITEOWL FUNNEL RECORD, NOT ASSESSMENT DATA.** It belongs in the existing
+  `sales_leads` separation (§3.7) — not in the free-product assessment namespace, not in a
+  second lead store, never with an `org_id`, and **never matched against `organisations`**
+  (the cross-tenant join this document forbids outright). The two live under different
+  rules for a reason: an assessment run expires by default and may be promoted only by
+  explicit consent, while a contact is someone asking NiteOwl to reply to them. **Keeping
+  them apart is what allows the assessment to stay ephemeral while the contact is
+  actionable.** Retention is declared with the record class before the first row of that
+  class is written (**M22**, §112).
+
+### 26.1 Phase B — the optional post-result contact (BC-0 contract, approved 2026-09-20)
+
+**A contract, not a plan. The contract is APPROVED; the implementation is NOT STARTED.**
+*Current status is carried once, in `PROJECT_CONTEXT.md` §7.*
+Nothing below is built: BC-1, BC-2 and BC-3 do not exist, and no source, test, schema,
+migration or configuration file has been changed. **Remy V1 and the Business Opportunity
+Scan are untouched by this contract.**
+
+**Phase B adds exactly one thing: an optional contact card shown after a complete Business
+Opportunity Scan report.** It adds no measurement, no identity, no continuity and no product
+routing.
+
+**The report is untouched and unconditional.** It renders in full — every finding, funnel,
+cluster, hypothesis, dependency, evidence gap, estimate and success criterion — and stays
+fully visible, complete and printable **whether the card is used or ignored**. The card sits
+**below** the finished report, never over it, never before it, never inside it. **No gate, no
+blur, no teaser, no "unlock", no urgency, no trial pressure, no countdown, no obligation.** A
+visitor who ignores it loses nothing and is asked nothing twice. **The anti-funnel suite must
+pass unmodified; if it has to be loosened, the design is wrong.**
+
+**The contact is entirely optional and requires no account.** Fields: **name (required)**,
+**exactly one of email or phone (the visitor's choice)**, **business name (optional)**,
+**message (optional)**. Nothing else is collected, and no field is pre-ticked or pre-filled.
+
+**No Scan output travels with a contact, and none is ever joined to one** — the
+non-negotiable §26 rule above, applied to this product. The request body and the
+stored row carry **no** Scan answer, finding, recommendation, estimate, `estimate_basis`,
+condition code, funnel stage, cluster, hypothesis, dependency, evidence gap, question-set /
+rule-set / prioritisation / cluster / hypothesis version stamp, `answered_at` / `computed_at`,
+run id, session id or visitor identifier. **There is no prefill from Scan answers in either
+direction.** A visitor who types something about their result into the free-text message has
+made their own disclosure, in their own words; it is stored as message text and joined to
+nothing.
+
+**A contact is a NiteOwl funnel record, not assessment data** — also §26 above. It is
+stored through the **existing `sales_leads` path**: no second lead store, no new table, no
+assessment namespace, no `org_id`, and never matched against `organisations`.
+
+**Nothing is tracked.** No analytics, telemetry, beacon, cookie, fingerprint, persistent
+visitor identifier or anonymous funnel counter is introduced by Phase B.
+
+**The intro wording is corrected in the same increment that ships the card**, because a form
+makes today's sentence ambiguous: *"Your answers stay in this browser tab and are never sent
+to NiteOwl. If you choose to contact us at the end, we receive only what you type into that
+form."*
+
+#### The three approved owner decisions
+
+- **`sales_leads.source` — approved, nullable, backward-compatible.** A nullable `text`
+  column: **no default, no backfill, no `NOT NULL` constraint.** Existing rows stay valid
+  with `source IS NULL`; only new Scan-originated contacts write an explicit value. Nothing
+  reads `source` to make a decision. **The migration must be verified against the confirmed
+  production Supabase project — the target project is never assumed** (`CHECKLIST.md`
+  records production once running against a different, un-migrated project that was missing
+  `sales_leads` itself).
+- **Retention — approved, Scan-originated contact leads only.** **A Scan-originated contact
+  lead is retained for 12 months from creation, then deleted**, unless it becomes a customer
+  relationship, in which case whatever rule then governs that relationship applies. Declared
+  with the record class **before the first row of that class is written** (**M22**, §112); no
+  regulatory period is invented. **The retention of pre-existing sales-chat leads and every
+  other `sales_leads` row is UNCHANGED and is deliberately not covered here.** This is a
+  **documented rule only — no deletion or purge automation is built in Phase B**, and a
+  company-wide `sales_leads` retention policy is a **separate architecture / privacy
+  decision** that this does not make.
+- **Abuse handling — approved, existing pattern reused.** The existing `checkRateLimit`
+  (`src/lib/rateLimit.ts`) with a Scan-specific key and a conservative limit, exactly as
+  every other public route already uses it. **Request-header / IP information is transient
+  rate-limit input only: never persisted, never attached to the lead, never a cookie, never a
+  fingerprint, never treated as visitor identity**, and **no new provider or tracking system
+  is introduced.**
+
+#### Unchanged and untouched by Phase B
+
+**Remy V1** · the Scan engine and every rule module under `src/lib/freetools/` · the nine
+questions and `SCAN_QUESTION_SET_VERSION` · `validateScanAnswers` as the sole refusal
+authority · `buildScanReport` · findings, recommendations, prioritisation, impact
+classification, evidence and provenance · the canonical `SCAN_PATH` and the bare-path CTA
+rule · routing, metadata, canonicals, JSON-LD and the sitemap · the truthfulness rules ·
+provider independence · the Sovereignty Principle.
+
+#### Deferred and excluded — by name
+
+- **Scan Next-Action Routing (`scan-next-action`) — DEFERRED and NOT APPROVED.** Linking a
+  completed report to Remy or another product, even where `recommendation.recommended_product`
+  is already non-null. It needs its own post-report contract decision first, and **approving
+  Phase B does not authorise it.** It deliberately carries **no BC number**, so that deferring
+  it can never be read as deferring BC-2.
+- **Anonymous funnel measurement — EXCLUDED from Phase B**, and its own later decision.
+- Also excluded: Scan run persistence · bearer-token run identity and repeat-run comparison
+  (**Phase C**) · §89 consent and canonical promotion · emailing the report to the visitor ·
+  `DecisionRecord`, Spine event, Business Memory or Business Graph writes · **Stage 1**
+  `business_events` · **Phase D**.
+
+#### The BC increments — naming is load-bearing
+
+**`BC` = Business-scan Contact.** The deferred capability above carries no letter code at all,
+so "defer Scan Next-Action Routing" can never reach the BC series and "approve BC-0…BC-3" can
+never authorise product routing. **BC-2 is REQUIRED — the contact card depends on it.**
+
+| Increment | Scope | Status |
+|---|---|---|
+| **BC-0** | This contract, plus the two §26 rules and the retention declaration | **APPROVED 2026-09-20** |
+| **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes. No surface, no route, no network, no Scan import | **NOT STARTED** |
+| **BC-2** | The intake: `/api/free-tools/scan-contact`, an additive direct-contact entry point beside `captureSalesLead`, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED, not deferrable** | **NOT STARTED** |
+| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, the extended surface pins, print-hidden | **NOT STARTED** |
 
 ### The outcome loop
 

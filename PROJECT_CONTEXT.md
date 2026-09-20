@@ -87,7 +87,9 @@ Three contracts were added, and all three are **documentation only**:
   invented**; erasure-by-reference and the existing consent boundaries are preserved.
 
 **§114's staged implementation sequence is DOCUMENTED AND NOT STARTED.**
-**Phase B is NOT STARTED.**
+**§114 Phase B (Outcome Learning) is NOT STARTED.** *(Distinct from the Business
+Opportunity Scan's acquisition Phase B in §7, whose BC-0 contract is approved and whose
+implementation is likewise not started — two different things that share a letter.)*
 **Stage 1 — one append-only tenant-scoped `business_events` mechanism beginning with
 `appointment.booked` at the existing booking choke point — is NOT STARTED and NOT APPROVED**,
 and its trigger is unchanged and qualitative: the first paying business and sufficient live
@@ -645,7 +647,7 @@ never on its own a NOW** (§78).
 | **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR **#103** `adb30c7`, production-verified 2026-09-14 |
 | **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
 | **Homepage direct Scan entry** (not a new phase — one marketing line on an existing page) | the flagship free product one click from the homepage: a secondary CTA beneath the existing primary free-trial CTA, linking the canonical `SCAN_PATH` bare | **SHIPPED** — PR **#131** `a25ccfd`, production-verified 2026-09-20 |
-| **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, a field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
+| **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20), IMPLEMENTATION NOT STARTED** — scope locked below; BC-1 / BC-2 / BC-3 not built. Aggregate measurement was **removed from Phase B** and is excluded |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
@@ -672,6 +674,50 @@ Opportunity Scan itself is unchanged and remains the canonical free acquisition 
 no Scan implementation, question set, `SCAN_QUESTION_SET_VERSION`, route, metadata, sitemap
 entry or product architecture changed, and **no Remy V1 code was touched.** Phase B is still
 **NOT STARTED** — a homepage link is not a contact capture or a measurement mechanism.
+
+### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), NOT BUILT
+
+**The contract is approved and lives in `docs/ARCHITECTURE.md` §26.1 — read it before any
+Phase B work.** Nothing is implemented: **BC-1, BC-2 and BC-3 are NOT STARTED**, and no
+source, test, schema, migration or configuration file has been changed. **Remy V1 and the
+Business Opportunity Scan are untouched.**
+
+**Phase B adds exactly one thing: an optional contact card after a complete Scan report** —
+name, one of email or phone, optional business name, optional message — stored through the
+existing `sales_leads` path. **The report stays unconditional, complete and printable whether
+the card is used or ignored, and the anti-funnel suite must pass unmodified.** No measurement,
+no visitor identity, no continuity, no product routing, no analytics, cookie or fingerprint.
+
+**The two rules this rests on are promoted into `docs/ARCHITECTURE.md` §26 and are not
+restated in full here: NO FREE-TOOL OUTPUT TRAVELS WITH A CONTACT, AND NONE IS EVER JOINED
+TO ONE** — no answer, finding, recommendation, estimate, condition code, version stamp, run,
+session or visitor id, and **no prefill in either direction** — **and A CONTACT IS A NITEOWL
+FUNNEL RECORD, NOT ASSESSMENT DATA**, so it lives in the existing `sales_leads` separation,
+never in the assessment namespace, never with an `org_id`, never matched against
+`organisations`.
+
+**Three owner decisions, approved 2026-09-20 and recorded in full at §26.1:** a **nullable,
+no-default, no-backfill `sales_leads.source`** column, whose migration is **verified against
+the confirmed production Supabase project, never assumed** · **12-month retention for
+Scan-originated contact leads ONLY** — a documented rule with no purge automation, leaving
+every other `sales_leads` row's lifecycle **unchanged** · **the existing `checkRateLimit`
+pattern**, where request-header / IP data is transient rate-limit input that is never
+persisted, attached to the lead, cookied, fingerprinted or treated as visitor identity.
+
+**Deferred by name: Scan Next-Action Routing (`scan-next-action`)** — linking a report to Remy
+or another product. **NOT APPROVED, and approving Phase B does not authorise it.** It carries
+**no BC number on purpose**, so deferring it can never be read as deferring **BC-2, which is
+REQUIRED** — the card depends on that intake. **Anonymous funnel measurement is EXCLUDED from
+Phase B.** Still excluded: Scan run persistence · bearer-token run identity (**Phase C**) ·
+§89 consent and promotion · emailing the report · Spine / Memory / Graph writes · **Stage 1** ·
+**Phase D**.
+
+| Increment | Scope | Status |
+|---|---|---|
+| **BC-0** | The §26.1 contract, its two promoted §26 rules and the retention declaration | **APPROVED 2026-09-20** |
+| **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes | **NOT STARTED** |
+| **BC-2** | Intake: `/api/free-tools/scan-contact`, the additive `sales_leads` entry point, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED** | **NOT STARTED** |
+| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, extended surface pins, print-hidden | **NOT STARTED** |
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
