@@ -58,6 +58,7 @@ const SCAN_MODULES = [
   "src/lib/freetools/scanEvidenceGaps.ts",
   "src/lib/freetools/scanClusters.ts",
   "src/lib/freetools/scanHypotheses.ts",
+  "src/lib/freetools/scanContact.ts",
 ];
 
 /** Import statements only — comments discussing Remy are fine. */
