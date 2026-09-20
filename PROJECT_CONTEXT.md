@@ -644,18 +644,34 @@ never on its own a NOW** (§78).
 | **A-1 — Discoverability Foundation** | public-route inventory, `sitemap.xml`, `robots.txt`, per-free-tool canonical / OpenGraph / Twitter metadata, truthful JSON-LD, internal-link verification | **SHIPPED** — PR **#101** `fcd2e68`, production-verified 2026-09-14 |
 | **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR **#103** `adb30c7`, production-verified 2026-09-14 |
 | **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
+| **Homepage direct Scan entry** (not a new phase — one marketing line on an existing page) | the flagship free product one click from the homepage: a secondary CTA beneath the existing primary free-trial CTA, linking the canonical `SCAN_PATH` bare | **SHIPPED** — PR **#131** `a25ccfd`, production-verified 2026-09-20 |
 | **B — Optional post-value contact / aggregate measurement** | an explicit, optional, purpose-specific contact after the full report; aggregate (never per-visitor) usage counts | **NOT STARTED** — needs consent wording, a field list, the rule that **no Scan output travels with a contact**, a form path beside `sales_leads`, and S3 / P37 registration of any measurement provider with the cookie posture decided |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
-**Full closeouts for A-1, A-2a and A-2b — files, tests, pinned guarantees, production
-verification — are in `CHANGELOG.md` at the dated entries for PRs #101, #103 and #105**, and
-every guarantee they established is pinned by `tests/organicDiscoverability.test.mjs` and
-`tests/organicLostRevenueEntry.test.mjs`. Two are **do-not-repeat rules that stay here**: every
+**Full closeouts for A-1, A-2a, A-2b and the homepage Scan CTA — files, tests, pinned
+guarantees, production
+verification — are in `CHANGELOG.md` at the dated entries for PRs #101, #103, #105 and
+#131**, and every guarantee they established is pinned by `tests/organicDiscoverability.test.mjs`
+and `tests/organicLostRevenueEntry.test.mjs`. Two are **do-not-repeat rules that stay here**: every
 Scan CTA is the literal Scan path with **no query string, hash, prefill or carried state**; and
 **`isPrivatePath` is segment-aware — a substring check wrongly flags `/booking` inside
 `…/problems/booking-back-and-forth`; do not repeat that check.** The sitemap now carries
 **twelve** approved public URLs — the ten above plus the two industry pages in §8.
+
+**The homepage direct Scan CTA (PR #131, merge `a25ccfd`, production-verified 2026-09-20) is
+SHIPPED and is marketing content only.** One secondary line sits beneath the unchanged primary
+**Start Your Free 14-Day Trial** CTA — *"Not ready to start? Run the free Business Opportunity
+Scan — nine questions, no account, nothing stored."* — linking the canonical `SCAN_PATH`
+**bare**, under the same do-not-repeat rule above: no query string, hash, prefill, carried
+state, tracking parameter or visitor identifier, and the literal path is never written by hand
+on the page. The general **Free tools** navigation link is unchanged and remains the broader
+path. **No account, no storage and no tracking are introduced** — the merge added no analytics,
+cookie, storage, email, telemetry or PII collection, and the tests pin that. **The Business
+Opportunity Scan itself is unchanged and remains the canonical free acquisition product** (§1):
+no Scan implementation, question set, `SCAN_QUESTION_SET_VERSION`, route, metadata, sitemap
+entry or product architecture changed, and **no Remy V1 code was touched.** Phase B is still
+**NOT STARTED** — a homepage link is not a contact capture or a measurement mechanism.
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
@@ -696,12 +712,12 @@ outcome Remy did not produce** — a visual shows the request or captured state;
 | **2** — pain layouts, capability priority, trade copy (`pain_layout`) | **SHIPPED** — PR #123, merge `e06d266` |
 | **3** — workflow motifs, section order, mid-page Scan CTA (`workflow`, `section_order`, `mid_cta`) | **SHIPPED** — PR #125, head `762bfb9`, merge `3565411` |
 | **4a** — how-it-works copy differentiation | **SHIPPED** — PR #128, head `374b4d6`, merge `f6a03cb`, production-verified 2026-09-17 |
-| **4b** — FAQ copy differentiation | **NOT STARTED and NOT APPROVED** |
+| **4b** — FAQ copy differentiation | **SHIPPED** — PR #130, merge `fa0e542`, live-confirmed 2026-09-20 |
 
 **Current variants:** plumbers = `job_ticket` + cyan + `timeline` + `flow_curve`; electricians =
 `enquiry_panel` + amber + `contrast` + `flow_circuit` — structural and content-specific
 differentiation, not colour alone. Union values, node sequences, section orders and per-slice
-verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125, #128.
+verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125, #128, #130.
 
 **Slice 4a (PR #128, reviewed head `374b4d6`, merge `f6a03cb`, production-verified 2026-09-17) is a
 CONTENT-ONLY change through the existing `how_it_works` field** — a differentiated heading and
@@ -710,7 +726,23 @@ branch and no per-industry implementation fork**. **Step 1 stays canonical and b
 both pages** (the Scan is the same unchanged nine questions for everyone) and **both pages keep
 exactly four steps**. **The FAQ is untouched** — seven entries and the same `faq_heading` on each
 page, so the rendered `FAQPage` JSON-LD is unchanged — and every truthfulness guard above is
-preserved. **Slice 4 as a whole is NOT complete: 4b has not started and is not approved.**
+preserved.
+
+**Slice 4b (PR #130, reviewed head `893fb6e`, merge `fa0e542`, deployed from that SHA and
+live-confirmed 2026-09-20) is a CONTENT-ONLY change through the existing `faqs` field** —
+FAQ 1, 3 and 6 differentiated by trade, FAQ 2 already trade-specific and unchanged, and **FAQ 4,
+5 and 7 byte-identical across both pages** so the shared floor cannot silently fork. **Seven FAQs
+per page, the established order and both `faq_heading`s are unchanged**, so the rendered
+`FAQPage` JSON-LD still builds from the same `page.faqs` array. **No new union, interface,
+presentation variant, renderer or view branch and no per-industry implementation fork** —
+`IndustryPageView.tsx` is untouched — and every truthfulness guard above is preserved, the
+booking FAQ asking about booking **requests** under a books-it-itself guard. **Production
+verification was not recorded at merge time; this is deployed-and-live-confirmed, not
+backdated.**
+
+**Slice 4 is therefore COMPLETE — 4a is PR #128 and 4b is PR #130 — and that completes the
+approved four-slice differentiation plan. No Slice 5 exists, and none is created or approved by
+this closeout.**
 ---
 
 # Architecture Rule
@@ -919,8 +951,9 @@ Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not reb
 **Scan Phase 1 SHIPPED and LIVE; persistence, consent, outcome measurement and every later
 phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
 without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
-NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b SHIPPED; B, C, D NOT started**
-(§7) · **Industry landing pages — Slices 1–3 and 4a SHIPPED, Slice 4b NOT STARTED and NOT APPROVED** (§8)
+NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b and the homepage direct Scan CTA (#131) SHIPPED;
+B, C, D NOT started**
+(§7) · **Industry landing pages — Slices 1–4 SHIPPED; Slice 4 complete (4a PR #128, 4b PR #130)** (§8)
 Future:
 
 - Outlook Calendar
