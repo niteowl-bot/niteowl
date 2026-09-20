@@ -26,6 +26,7 @@ import {
   isPrivatePath,
   publicUrl,
 } from "@/lib/site/publicRoutes";
+import { SCAN_PATH } from "@/lib/site/problemPages";
 import {
   freeToolApplicationJsonLd,
   freeToolsHubJsonLd,
@@ -444,5 +445,56 @@ describe("no Scan rule or intelligence lives under src/app or src/lib/site", () 
       const imports = (stripComments(read(file)).match(/from\s+["'][^"']+["']/g) ?? []).join("\n");
       assert.doesNotMatch(imports, /@\/lib\/freetools/, `${file} imports Scan logic`);
     }
+  });
+});
+
+// ── The homepage’s direct Scan CTA ──────────────────────────────
+//
+// The flagship free product is reachable from the homepage in ONE
+// click. The CTA links the canonical SCAN_PATH constant, bare: no
+// query string, hash, prefill, carried state, tracking parameter or
+// visitor identifier — the same rule every other Scan CTA is held to.
+// The general "Free tools" nav link is a separate, broader path and
+// stays.
+
+describe("the homepage links directly to the Business Opportunity Scan", () => {
+  const homepage = readFileSync("src/app/page.tsx", "utf8");
+
+  test("the acquisition CTA uses the canonical SCAN_PATH constant, not a copied literal", () => {
+    assert.match(homepage, /import \{ SCAN_PATH \} from "@\/lib\/site\/problemPages";/);
+    assert.match(homepage, /href=\{SCAN_PATH\}/);
+    // The path is never written out by hand on this page.
+    assert.doesNotMatch(homepage, /"\/free-tools\/business-opportunity-scan/);
+  });
+
+  test("SCAN_PATH itself is the bare canonical path", () => {
+    assert.equal(SCAN_PATH, "/free-tools/business-opportunity-scan");
+    assert.ok(PUBLIC_ROUTES.some((r) => r.path === SCAN_PATH), "the Scan is a public route");
+    assert.equal(isPrivatePath(SCAN_PATH), false);
+  });
+
+  test("no query string, hash, prefill, tracking parameter or visitor id is attached", () => {
+    for (const href of [...homepage.matchAll(/href=\{?["\{]?([^"\}\s>]+)/g)].map((m) => m[1])) {
+      if (!href.includes("business-opportunity-scan")) continue;
+      assert.doesNotMatch(href, /[?#]/, href);
+    }
+    // Nothing on the page builds a Scan URL with state appended.
+    assert.doesNotMatch(homepage, /SCAN_PATH\s*\+/);
+    assert.doesNotMatch(homepage, /\$\{SCAN_PATH\}[^`"\s]/);
+  });
+
+  test("the general Free tools nav link is preserved", () => {
+    assert.match(homepage, /href="\/free-tools"/);
+  });
+
+  test("the CTA promises only what the shipped Scan does", () => {
+    assert.match(homepage, /Run the free Business Opportunity Scan/);
+    assert.match(homepage, /nine questions, no account, nothing stored/);
+  });
+
+  test("the homepage still introduces no storage, identity or measurement mechanism", () => {
+    assert.doesNotMatch(homepage, /localStorage|sessionStorage|document\.cookie|navigator\.sendBeacon/);
+    assert.doesNotMatch(homepage, /gtag|dataLayer|posthog|plausible|mixpanel|analytics\./i);
+    assert.doesNotMatch(homepage, /utm_[a-z]+/i);
   });
 });
