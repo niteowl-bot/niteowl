@@ -475,6 +475,19 @@ export async function sendBookingSelfServiceChangeNotification(
   return result;
 }
 
+/**
+ * Where a sales lead came from, for the one intro sentence that names it.
+ * Additive (BC-2): callers that omit it get the sales-chat wording they
+ * always had, so no existing call site changes behaviour.
+ */
+export type SalesLeadOrigin = "sales_chat" | "scan_contact";
+
+const SALES_LEAD_INTRO: Record<SalesLeadOrigin, string> = {
+  sales_chat: "A visitor completed the sales chat on the marketing site.",
+  scan_contact:
+    "A visitor asked to be contacted after running the free Business Opportunity Scan.",
+};
+
 interface SalesLeadNotificationParams {
   name: string | null;
   email: string | null;
@@ -482,18 +495,25 @@ interface SalesLeadNotificationParams {
   company: string | null;
   industry: string | null;
   preferredDemoTime: string | null;
+  /** Defaults to `sales_chat` — the only origin before BC-2. */
+  origin?: SalesLeadOrigin;
+  /** The visitor's own free-text message, rendered as they wrote it. Absent for sales chat. */
+  message?: string | null;
 }
 
 /**
  * Notifies the NiteOwl team when a sales-chat prospect completes all
- * required fields. Separate from sendNeedsReviewNotification, which
- * notifies a TENANT business owner about their own customer — this
- * always goes to the NiteOwl team, not a business's owner_id.
+ * required fields, or when a Scan visitor asks to be contacted (BC-2).
+ * Separate from sendNeedsReviewNotification, which notifies a TENANT
+ * business owner about their own customer — this always goes to the
+ * NiteOwl team, not a business's owner_id.
  */
 export async function sendSalesLeadNotification(
   params: SalesLeadNotificationParams
 ): Promise<boolean> {
   const { name, email, phone, company, industry, preferredDemoTime } = params;
+  const origin: SalesLeadOrigin = params.origin ?? "sales_chat";
+  const message = params.message ?? null;
   const notifyEmail = process.env.SALES_NOTIFICATION_EMAIL;
 
   console.log(
@@ -514,6 +534,9 @@ export async function sendSalesLeadNotification(
   const safeCompany = company ? escapeHtml(company) : null;
   const safeIndustry = industry ? escapeHtml(industry) : null;
   const safeDemoTime = preferredDemoTime ? escapeHtml(preferredDemoTime) : null;
+  // Escaped, then line breaks kept: the visitor wrote it, so it is shown
+  // as written and never interpreted as markup.
+  const safeMessage = message ? escapeHtml(message).replace(/\n/g, "<br>") : null;
 
   try {
     const data = await sendChecked({
@@ -521,7 +544,7 @@ export async function sendSalesLeadNotification(
       to: notifyEmail,
       subject: `New sales lead: ${name?.trim() || "A prospect"}${company ? ` — ${company}` : ""}`,
       html: renderEmailLayout(`
-        <p style="margin:0 0 4px;">A visitor completed the sales chat on the marketing site.</p>
+        <p style="margin:0 0 4px;">${SALES_LEAD_INTRO[origin]}</p>
         ${detailsBlock([
           ["Name", displayName],
           safeEmail ? ["Email", safeEmail] : null,
@@ -529,6 +552,7 @@ export async function sendSalesLeadNotification(
           safeCompany ? ["Company", safeCompany] : null,
           safeIndustry ? ["Industry", safeIndustry] : null,
           safeDemoTime ? ["Preferred demo time", safeDemoTime] : null,
+          safeMessage ? ["Message", safeMessage] : null,
         ])}
       `),
     });
