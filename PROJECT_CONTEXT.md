@@ -647,7 +647,7 @@ never on its own a NOW** (§78).
 | **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR **#103** `adb30c7`, production-verified 2026-09-14 |
 | **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
 | **Homepage direct Scan entry** (not a new phase — one marketing line on an existing page) | the flagship free product one click from the homepage: a secondary CTA beneath the existing primary free-trial CTA, linking the canonical `SCAN_PATH` bare | **SHIPPED** — PR **#131** `a25ccfd`, production-verified 2026-09-20 |
-| **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20); BC-1 SHIPPED (PR #135); BC-2 / BC-3 NOT STARTED** — scope locked below. Aggregate measurement was **removed from Phase B** and is excluded |
+| **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20); BC-1 SHIPPED (PR #135); BC-2 SHIPPED (PR #137, production-verified 2026-09-24); BC-3 NOT STARTED** — scope locked below. Aggregate measurement was **removed from Phase B** and is excluded |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
@@ -675,10 +675,10 @@ no Scan implementation, question set, `SCAN_QUESTION_SET_VERSION`, route, metada
 entry or product architecture changed, and **no Remy V1 code was touched.** Phase B is still
 **NOT STARTED** — a homepage link is not a contact capture or a measurement mechanism.
 
-### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), BC-1 SHIPPED, BC-2 / BC-3 NOT BUILT
+### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), BC-1 and BC-2 SHIPPED, BC-3 NOT BUILT
 
 **The contract is approved and lives in `docs/ARCHITECTURE.md` §26.1 — read it before any
-Phase B work.** **BC-1 is SHIPPED (PR #135, merge `6e4a40b`) — the pure validation module only. BC-2 and BC-3 are NOT STARTED**, and no route, schema, migration or configuration file has been changed. **Remy V1 and the
+Phase B work.** **BC-1 is SHIPPED (PR #135, merge `6e4a40b`) — the pure validation module only. BC-2 is SHIPPED (PR #137, merge `19d1274`, production-verified 2026-09-24) — the `/api/free-tools/scan-contact` intake and the nullable `sales_leads.source` column; closeout in `CHANGELOG.md`. BC-3 is NOT STARTED**: there is no contact card, so no visitor can reach the intake yet. **Remy V1 and the
 Business Opportunity Scan are untouched.**
 
 **Phase B adds exactly one thing: an optional contact card after a complete Scan report** —
@@ -715,7 +715,7 @@ Phase B.** Still excluded: Scan run persistence · bearer-token run identity (**
 |---|---|---|
 | **BC-0** | The §26.1 contract, its two promoted §26 rules and the retention declaration | **APPROVED 2026-09-20** |
 | **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes | **SHIPPED** — PR #135, head `54862d6`, merge `6e4a40b`, 2026-09-20 |
-| **BC-2** | Intake: `/api/free-tools/scan-contact`, the additive `sales_leads` entry point, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED** | **NOT STARTED** |
+| **BC-2** | Intake: `/api/free-tools/scan-contact`, the additive `sales_leads` entry point, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED** | **SHIPPED** — PR #137, head `36d271b`, merge `19d1274`, production-verified 2026-09-24 |
 | **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, extended surface pins, print-hidden | **NOT STARTED** |
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
