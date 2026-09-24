@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseDatetimeToIso } from "@/lib/parseDatetime";
 import { sendSalesLeadNotification } from "@/lib/email";
+import type { ScanContact } from "@/lib/freetools/scanContact";
 
 // ── Sales lead capture engine ────────────────────────────────────
 // Captures prospects chatting with the NiteOwl sales assistant
@@ -591,4 +592,87 @@ export async function captureSalesLead(
     notificationFailed,
     justCompleted,
   };
+}
+
+// ── Scan contact intake (Phase B, BC-2) ─────────────────────────────
+//
+// The ONE additive entry point for a visitor who asks to be contacted
+// after running the free Business Opportunity Scan
+// (docs/ARCHITECTURE.md §26.1). It sits BESIDE captureSalesLead rather
+// than inside it, because nothing the chat engine does applies here:
+// there is no conversation to merge by, no field to extract, no recap
+// to confirm and no model in the loop. A Scan contact is one complete,
+// already-validated submission, and it is written exactly once.
+//
+// DELIBERATELY NO MERGE BY EMAIL OR PHONE. captureSalesLead merges a
+// returning prospect by contact details because the chat is a
+// multi-turn flow that must survive a new browser session. Applying
+// that here would join a Scan contact to a sales-chat lead — an
+// inferred visitor identity, which §26 forbids. Two rows for the same
+// person is the correct outcome under the contract.
+//
+// THE ROW CARRIES THE CONTACT AND NOTHING ELSE. `source` is a server
+// constant, never read from the request; there is no run, session,
+// visitor or organisation reference, and nothing from the Scan report.
+// `conversation_id` is null because there was no conversation.
+
+
+/** The `sales_leads.source` value for Scan-originated contacts. Server-assigned. */
+export const SCAN_CONTACT_SOURCE = "scan_contact" as const;
+
+export interface RecordScanContactResult {
+  /** The new row's id, or null when the insert failed. */
+  readonly leadId: string | null;
+  /** Whether the team notification was delivered. Stored on the row too. */
+  readonly notified: boolean;
+}
+
+/**
+ * Notify the team, then write the row — in that order, so the stored
+ * `notification_sent` is a fact rather than a hope (the same gating the
+ * chat path settled on 2026-07-08). A failed send does NOT lose the
+ * lead: the row is still written with `notification_sent: false`, and
+ * it is visible on /admin/sales-leads either way.
+ */
+export async function recordScanContact(
+  supabase: DatabaseClient,
+  contact: ScanContact
+): Promise<RecordScanContactResult> {
+  const notified = await sendSalesLeadNotification({
+    name: contact.name,
+    email: contact.email,
+    phone: contact.phone,
+    company: contact.business_name,
+    industry: null,
+    preferredDemoTime: null,
+    origin: SCAN_CONTACT_SOURCE,
+    message: contact.message,
+  });
+
+  const { data, error } = await supabase
+    .from("sales_leads")
+    .insert({
+      conversation_id: null,
+      name: contact.name,
+      email: contact.email,
+      phone: contact.phone,
+      company: contact.business_name,
+      industry: null,
+      preferred_demo_time: null,
+      preferred_demo_datetime: null,
+      message: contact.message,
+      status: "new",
+      notification_sent: notified,
+      source: SCAN_CONTACT_SOURCE,
+      updated_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    console.error("[scan contact] insert failed:", error.message);
+    return { leadId: null, notified };
+  }
+
+  return { leadId: data?.id ?? null, notified };
 }
