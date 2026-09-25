@@ -8,6 +8,10 @@
 // leaving the page discards everything, and the visitor is told so
 // before they start (docs/ARCHITECTURE.md §26, §89.2).
 //
+// The one exception is not here: the optional contact card (Phase B,
+// BC-3) lives in ScanContactCard.tsx, takes no props, and sends only
+// what the visitor types into it — never an answer or the report.
+//
 // IT RENDERS, IT DOES NOT DECIDE. The questions come from
 // SCAN_QUESTIONS, the refusals from validateScanAnswers, the findings,
 // sizing and recommendations from buildScanReport — all shipped pure
@@ -91,6 +95,7 @@ import {
   valueLabel,
 } from "@/app/free-tools/business-opportunity-scan/scanPresentation";
 import type { CountDraft, DraftValue, MoneyDraft, ScanDraft } from "@/app/free-tools/business-opportunity-scan/scanPresentation";
+import ScanContactCard from "@/app/free-tools/business-opportunity-scan/ScanContactCard";
 
 /**
  * The nine questions in three screens, by POSITION in the canonical
@@ -957,7 +962,7 @@ export default function ScanClient() {
           about it, and how you would know it worked — in a few minutes, and you keep it.
         </p>
         <ul className="text-slate-400 text-[15px] leading-relaxed space-y-2 mb-8 list-disc pl-5">
-          <li>Nothing is stored, and nothing is sent to NiteOwl. Your answers stay in this browser tab.</li>
+          <li>Your answers stay in this browser tab and are never sent to NiteOwl. If you choose to contact us at the end, we receive only what you type into that form.</li>
           <li>Refreshing or closing the page clears the scan. Save a copy at the end if you want to keep it.</li>
           <li>No account, no card, no sales call. The report is complete either way.</li>
           <li>“Not sure” is always a fine answer. It will never count against you.</li>
@@ -1005,6 +1010,7 @@ export default function ScanClient() {
           <p className="text-slate-500 text-[13px] leading-relaxed mb-5">
             This report is not saved anywhere — closing or refreshing this page will clear it.
           </p>
+          <ScanContactCard />
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
@@ -1061,7 +1067,7 @@ export default function ScanClient() {
         </div>
         {step === 0 && (
           <p className={`${hintClass} mt-3`}>
-            Your answers stay in this browser tab only — nothing is saved or sent anywhere,
+            Your answers stay in this browser tab only — they are never saved or sent anywhere,
             so refreshing the page will clear them.
           </p>
         )}
