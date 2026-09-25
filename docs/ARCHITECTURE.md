@@ -2800,6 +2800,176 @@ never authorise product routing. **BC-2 is REQUIRED — the contact card depends
 | **BC-2** | The intake: `/api/free-tools/scan-contact`, an additive direct-contact entry point beside `captureSalesLead`, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED, not deferrable** | **SHIPPED** — PR #137, merge `19d1274`, production-verified 2026-09-24 |
 | **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, the extended surface pins, print-hidden | **SHIPPED** — PR #139, merge `f6a5ee6`, production-verified 2026-09-25 |
 
+### 26.2 Phase C — the optional saved result (C0 contract, approved 2026-09-26)
+
+**A contract, not a plan. C0 is APPROVED; C1, C2, C3 and C4 are NOT STARTED, and each needs
+its own approval before any code is written.** *Current status is carried once, in
+`PROJECT_CONTEXT.md` §7.* **Remy V1, the Business Opportunity Scan engine and Phase B (§26.1)
+are untouched by this contract.**
+
+**Phase C adds exactly one thing: an optional, anonymous *Keep this report* action after a
+complete Business Opportunity Scan report.** Choosing it stores that one run and gives the
+visitor a secret link that reopens it until it expires or the visitor deletes it. **It is save
+and return only.** This narrows the Phase C row in `PROJECT_CONTEXT.md` §7, which also named
+repeat-run comparison and a governed personalised share; both are deferred below.
+
+**Ephemeral remains the default.** A visitor who does not choose *Keep this report* gets
+exactly today's Scan: nothing about the run is stored by NiteOwl. The action is offered **only
+after the complete report has been shown**, **below** it, outside `ScanReportDocument` and
+hidden from print. **It is never required, never preselected and never a gate** — no blur, no
+teaser, no "unlock", no urgency. The report stays complete and printable whether the action is
+used or ignored, and **the anti-funnel suite must pass unmodified.**
+
+**Keeping a report is not §89 promotion.** It creates no business record, no account, no
+`org_id` and no `DecisionRecord`. A kept run is still anonymous assessment data under **G1**
+(§83.3) and §89.1–§89.2; choosing *Keep this report* grants nothing else.
+
+#### What a kept run stores, and what it never stores
+
+**Stored — the whole record class, and nothing else:**
+
+- the Scan inputs **as validated by `validateScanAnswers`** — re-validated on the server, and a
+  refused submission stores nothing
+- `answered_at` and `computed_at`
+- **every applicable version stamp** — `question_set_version`, `rule_set_version`,
+  `prioritisation_rule_set_version`, `cluster_rule_set_version`,
+  `hypothesis_rule_set_version`, and E1's `expression_version` wherever an `estimate_basis`
+  carries one
+- **an exact snapshot of the report** produced by `buildScanReport` for that run, so a returning
+  visitor sees the report they were shown, even after the rules change (**M15** as-of fidelity;
+  §107.3)
+- the **cryptographic hash** of the bearer secret, `created_at` and `expires_at`
+
+**Never stored:** `org_id` · any account or user identity · IP address · user-agent ·
+fingerprint · any cookie or cookie identifier · any business or contact identity · **any
+relationship to `sales_leads`** (§26's rule applies in both directions) · analytics or funnel
+data · `DecisionRecord`, Spine, Business Memory or Business Graph data · **the plaintext bearer
+secret.**
+
+**Namespace.** A dedicated free-product table (its name is fixed in C2), structurally separate
+as `AGENT_ACCESS_LAYER.md` §25.1 requires: **no `org_id` column**, RLS enabled, and no
+`anon` or `authenticated` policy, so only the server can read or write it. It is never joined
+to `organisations` or `sales_leads`. The Scan's question set holds no free text, so a kept run
+holds business answers and no personal data.
+
+#### Retention — declared before the first row (M22, §112)
+
+**A kept run is retained for 180 days from creation, then deleted.** Reading is refused once
+`expires_at` has passed, **whether or not the purge has run yet**. **Expired runs are purged
+automatically**, which physically deletes the row (the mechanism is chosen in C3). **Deletion by
+the bearer secret physically deletes the stored run** — not a flag and not a soft delete.
+Returning to a kept report does **not** extend or renew its expiry. No regulatory period is
+claimed; retention of every other record class is unchanged.
+
+#### The bearer secret, and the safe retrieval pattern
+
+- **Generation.** On the server at save time: 32 bytes (256 bits) from a cryptographically
+  secure source, base64url-encoded. **Never generated in the pure modules under
+  `src/lib/freetools/`**, whose boundary suite forbids identifier generation.
+- **At rest, only its hash.** SHA-256 of the secret is stored, and lookup is by hash. A
+  256-bit random secret needs no slow hash or salt. The plaintext is never written to the
+  database, a log or telemetry.
+- **The plaintext exists only transiently, and only where retrieval or deletion requires it**
+  — in the visitor's browser, in the one POST body that carries it, and in the server's memory
+  for the moment it takes to hash it. **It must never be persisted, logged, included in an
+  error message or request diagnostic, or appear in telemetry, analytics, Sentry events or
+  breadcrumbs, Vercel logs or any other observability payload. Only its cryptographic hash may
+  be stored.**
+- **Shown once.** The save response returns the secret once, in its JSON body, with
+  `Cache-Control: no-store`. The page shows the link once with a copy control. The wording
+  states that **anyone with the link can open the report** and that **the link cannot be shown
+  again or recovered.**
+- **The secret travels only in the URL fragment of the return page** — for example
+  `/free-tools/business-opportunity-scan/saved#<secret>`; the path is fixed in C4. A browser
+  never sends a fragment to the server or in a `Referer`, so the secret cannot reach Vercel
+  request logs or server-side Sentry.
+- **Retrieval and deletion.** The return page reads the fragment on the client and **removes it
+  from the address bar immediately** (`history.replaceState`), before any other work. It then
+  sends the secret **in a POST request body — never in a path, query string or header** — to a
+  retrieve route; deletion uses the same pattern. Responses are `no-store`. **The routes never
+  log the request body, the secret or its hash**; an error path logs a fixed code only.
+- **NiteOwl never persists the link.** It is not emailed and not placed in a sitemap,
+  canonical, redirect, cookie or storage, and the return page is `noindex`. Any copy the
+  visitor keeps is their own.
+- **Abuse handling.** `checkRateLimit` guards save, retrieve and delete, with request-header /
+  IP data as transient rate-limit input only (§26.1's rule).
+
+#### Telemetry redaction — one narrowly scoped requirement
+
+Verified against the installed `@sentry/nextjs` 10.63.0: a browser error event carries the full
+page URL **including its fragment** (`getLocationHref` → `document.location.href`), and
+navigation breadcrumbs record `from` / `to` **including the fragment** — including the
+`replaceState` call that strips it. **C4 must therefore not ship without a redaction in
+`src/instrumentation-client.ts`** that removes the return page's fragment from an event's request
+URL and from breadcrumb URLs before they are sent.
+
+**This is a hard dependency.** C4 must not ship, and must not expose a usable saved-report link,
+until that redaction is implemented **and verified by tests**. **The bearer fragment must not be
+observable through Sentry either before or after the application removes it from the browser
+URL.**
+
+**Its scope is exactly that and nothing more.** Sampling, session tracking, console capture,
+the server-side and edge configuration, and every Remy surface are unchanged. It is approved
+in principle here, and its exact code is approved within C4. No analytics exist and none is
+added.
+
+#### Wording — replaced in the increment that ships *Keep this report* (C4)
+
+The canonical sentence: ***"Your answers stay in this browser and aren't stored by NiteOwl
+unless you choose to keep your report after viewing your results."*** The report must make clear
+that **the report itself is not saved unless *Keep this report* is chosen.**
+
+Every current unconditional *"never saved / never stored / nothing stored"* claim must be
+reworded to accurately scoped language **in C4, the same increment that makes it untrue** — and
+not before, because today each one is true. They are: the Scan intro and step-one hint, the
+report's *"not saved anywhere"* note, the `/free-tools` index card (PR #142), the Scan
+metadata, the homepage Scan CTA, the industry pages and the Lost Revenue page. The exact
+short-form strings are approved in C4. The Phase B contact card's wording is unchanged.
+
+#### Unchanged and untouched by Phase C
+
+**Remy V1** · every module under `src/lib/freetools/` as it exists today · the nine questions
+and `SCAN_QUESTION_SET_VERSION` · `validateScanAnswers` · `buildScanReport` · findings,
+prioritisation, recommendations and Lost Revenue logic · `ScanReportDocument` and print
+behaviour · Phase B (BC-1–BC-3, the `sales_leads` path and the contact card) · the bare
+`SCAN_PATH` CTA rule and the sitemap · Sentry configuration other than the redaction above.
+§86.1's and §108.1's *persistence NOT IN* still describe the Phase 1 MVP; they are lifted only
+within this contract's scope, and only as each increment ships.
+
+#### Deferred and excluded — by name
+
+**Repeat-run comparison** (series linkage and §107.3's *not comparable* result) · **governed
+sharing** · accounts · §89 consent and promotion · analytics and funnel measurement · learning
+and outcome measurement · `DecisionRecord`, Spine, Business Memory and Business Graph writes ·
+emailing a link or a report · **Stage 1** · **Phase D**. **Approving C0 authorises none of
+them.**
+
+#### The C increments
+
+| Increment | Scope | Status |
+|---|---|---|
+| **C0** | This contract and its retention declaration | **APPROVED 2026-09-26** |
+| **C1** | A pure run-record module under `src/lib/freetools/` — the stored field whitelist, validation reusing `validateScanAnswers`, the report snapshot. No IO, clock or identifier | **NOT STARTED** |
+| **C2** | The table and its migration, **verified against the confirmed production Supabase project**; RLS; save, retrieve and delete routes; secret generation and hashing; expired runs refused on read; `checkRateLimit` | **NOT STARTED** |
+| **C3** | Automatic purge of expired runs. **Must ship before or with C4** | **NOT STARTED** |
+| **C4** | The *Keep this report* card, the return page, the delete control, the telemetry redaction and the wording replacement. **No usable saved-report link before the redaction is implemented and test-verified** | **NOT STARTED** |
+
+**What every increment must prove.** The existing Scan suites (boundary, findings, Lost
+Revenue, prioritisation, clusters, hypotheses, funnel, dependencies, evidence gaps, impact
+classification, recommendations, anti-funnel, surface) and the Phase B suites pass
+**unmodified**, except for C4's declared wording pins. No Remy import is reachable from any
+Phase C file. Then, as each increment introduces them:
+
+- a stored row carries only the whitelisted fields
+- no plaintext secret is ever stored, logged or present in any observability payload
+- the return-page fragment never appears in a Sentry event or breadcrumb, before or after it is
+  removed from the browser URL
+- an expired run is refused and purged
+- deletion removes the row
+- a returned report equals the kept snapshot
+- the report is reachable without keeping it
+- a visitor who ignores the action sees today's Scan
+
 ### The outcome loop
 
 `assessment → finding → recommendation → business acts → re-assessment → measured change`
