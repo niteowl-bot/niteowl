@@ -89,7 +89,7 @@ Three contracts were added, and all three are **documentation only**:
 **§114's staged implementation sequence is DOCUMENTED AND NOT STARTED.**
 **§114 Phase B (Outcome Learning) is NOT STARTED.** *(Distinct from the Business
 Opportunity Scan's acquisition Phase B in §7, whose BC-0 contract is approved and whose
-implementation is likewise not started — two different things that share a letter.)*
+BC-1–BC-3 increments have shipped — two different things that share a letter.)*
 **Stage 1 — one append-only tenant-scoped `business_events` mechanism beginning with
 `appointment.booked` at the existing booking choke point — is NOT STARTED and NOT APPROVED**,
 and its trigger is unchanged and qualitative: the first paying business and sufficient live
@@ -647,7 +647,7 @@ never on its own a NOW** (§78).
 | **A-2a — Problem-led discovery pages** | three indexable problem pages, one per canonical condition class, canonical wording only, every CTA into the unchanged nine-question Scan | **SHIPPED** — PR **#103** `adb30c7`, production-verified 2026-09-14 |
 | **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
 | **Homepage direct Scan entry** (not a new phase — one marketing line on an existing page) | the flagship free product one click from the homepage: a secondary CTA beneath the existing primary free-trial CTA, linking the canonical `SCAN_PATH` bare | **SHIPPED** — PR **#131** `a25ccfd`, production-verified 2026-09-20 |
-| **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20); BC-1 SHIPPED (PR #135); BC-2 SHIPPED (PR #137, production-verified 2026-09-24); BC-3 NOT STARTED** — scope locked below. Aggregate measurement was **removed from Phase B** and is excluded |
+| **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20); BC-1 SHIPPED (PR #135); BC-2 SHIPPED (PR #137, production-verified 2026-09-24); BC-3 SHIPPED (PR #139, production-verified 2026-09-25) — Phase B COMPLETE** — scope locked below. Aggregate measurement was **removed from Phase B** and is excluded |
 | **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
@@ -672,14 +672,21 @@ path. **No account, no storage and no tracking are introduced** — the merge ad
 cookie, storage, email, telemetry or PII collection, and the tests pin that. **The Business
 Opportunity Scan itself is unchanged and remains the canonical free acquisition product** (§1):
 no Scan implementation, question set, `SCAN_QUESTION_SET_VERSION`, route, metadata, sitemap
-entry or product architecture changed, and **no Remy V1 code was touched.** Phase B is still
-**NOT STARTED** — a homepage link is not a contact capture or a measurement mechanism.
+entry or product architecture changed, and **no Remy V1 code was touched.** Phase B was
+**NOT STARTED** at that merge — a homepage link is not a contact capture or a measurement
+mechanism; Phase B shipped later, below.
 
-### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), BC-1 and BC-2 SHIPPED, BC-3 NOT BUILT
+### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), BC-1, BC-2 and BC-3 SHIPPED — COMPLETE
 
 **The contract is approved and lives in `docs/ARCHITECTURE.md` §26.1 — read it before any
-Phase B work.** **BC-1 is SHIPPED (PR #135, merge `6e4a40b`) — the pure validation module only. BC-2 is SHIPPED (PR #137, merge `19d1274`, production-verified 2026-09-24) — the `/api/free-tools/scan-contact` intake and the nullable `sales_leads.source` column; closeout in `CHANGELOG.md`. BC-3 is NOT STARTED**: there is no contact card, so no visitor can reach the intake yet. **Remy V1 and the
-Business Opportunity Scan are untouched.**
+Phase B work.** **BC-1 is SHIPPED (PR #135, merge `6e4a40b`) — the pure validation module only. BC-2 is SHIPPED (PR #137, merge `19d1274`, production-verified 2026-09-24) — the `/api/free-tools/scan-contact` intake and the nullable `sales_leads.source` column; closeout in `CHANGELOG.md`. BC-3 is SHIPPED (PR #139, merge `f6a5ee6`, production-verified 2026-09-25)** — `ScanContactCard.tsx` below the complete report, screen-only, no props, posting only the validated contact; the intro wording corrected; closeout in `CHANGELOG.md`. **Phase B is COMPLETE; no further Phase B increment exists or is approved. Remy V1 and the
+Business Opportunity Scan engine are untouched.**
+
+**Observation, NOT a Phase B change and NOT approved work:** the site-wide client Sentry SDK
+(`src/instrumentation-client.ts`, since `79cf835`, 2026-07-04) sends `session` envelopes from
+every page, the Scan included. Verified 2026-09-25 to carry no answer, report or contact
+data — but it is a request to a third party that the Scan's "nothing is sent" wording does not
+mention. **Recorded for an owner decision; nothing was changed.**
 
 **Phase B adds exactly one thing: an optional contact card after a complete Scan report** —
 name, one of email or phone, optional business name, optional message — stored through the
@@ -716,7 +723,7 @@ Phase B.** Still excluded: Scan run persistence · bearer-token run identity (**
 | **BC-0** | The §26.1 contract, its two promoted §26 rules and the retention declaration | **APPROVED 2026-09-20** |
 | **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes | **SHIPPED** — PR #135, head `54862d6`, merge `6e4a40b`, 2026-09-20 |
 | **BC-2** | Intake: `/api/free-tools/scan-contact`, the additive `sales_leads` entry point, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED** | **SHIPPED** — PR #137, head `36d271b`, merge `19d1274`, production-verified 2026-09-24 |
-| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, extended surface pins, print-hidden | **NOT STARTED** |
+| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, extended surface pins, print-hidden | **SHIPPED** — PR #139, head `ccfb02b`, merge `f6a5ee6`, production-verified 2026-09-25 |
 
 **The unresolved A-2 decision, preserved rather than assumed: do NOT create a shorter
 Lost-Revenue questionnaire.** The Scan's input contract is nine load-bearing questions, six
@@ -996,8 +1003,8 @@ Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not reb
 **Scan Phase 1 SHIPPED and LIVE; persistence, consent, outcome measurement and every later
 phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
 without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
-NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b and the homepage direct Scan CTA (#131) SHIPPED;
-B, C, D NOT started**
+NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b, the homepage direct Scan CTA (#131) and
+Phase B (BC-1–BC-3, PRs #135, #137, #139) SHIPPED; C, D NOT started**
 (§7) · **Industry landing pages — Slices 1–4 SHIPPED; Slice 4 complete (4a PR #128, 4b PR #130)** (§8)
 Future:
 

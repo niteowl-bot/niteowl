@@ -2695,11 +2695,12 @@ Public tool UI
 
 ### 26.1 Phase B — the optional post-result contact (BC-0 contract, approved 2026-09-20)
 
-**A contract, not a plan. The contract is APPROVED; the implementation is NOT STARTED.**
-*Current status is carried once, in `PROJECT_CONTEXT.md` §7.*
-Nothing below is built: BC-1, BC-2 and BC-3 do not exist, and no source, test, schema,
-migration or configuration file has been changed. **Remy V1 and the Business Opportunity
-Scan are untouched by this contract.**
+**A contract, not a plan. The contract is APPROVED; BC-1, BC-2 and BC-3 are now BUILT and
+SHIPPED (PRs #135, #137, #139 — status corrected 2026-09-25; this line previously read
+"implementation NOT STARTED" and was not updated at the BC-1 or BC-2 closeouts).**
+*Current status is carried once, in `PROJECT_CONTEXT.md` §7; shipped detail in `CHANGELOG.md`.*
+The contract text below is unchanged by the implementation. **Remy V1 and the Business
+Opportunity Scan engine are untouched by this contract.**
 
 **Phase B adds exactly one thing: an optional contact card shown after a complete Business
 Opportunity Scan report.** It adds no measurement, no identity, no continuity and no product
@@ -2795,9 +2796,9 @@ never authorise product routing. **BC-2 is REQUIRED — the contact card depends
 | Increment | Scope | Status |
 |---|---|---|
 | **BC-0** | This contract, plus the two §26 rules and the retention declaration | **APPROVED 2026-09-20** |
-| **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes. No surface, no route, no network, no Scan import | **NOT STARTED** |
-| **BC-2** | The intake: `/api/free-tools/scan-contact`, an additive direct-contact entry point beside `captureSalesLead`, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED, not deferrable** | **NOT STARTED** |
-| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, the extended surface pins, print-hidden | **NOT STARTED** |
+| **BC-1** | `src/lib/freetools/scanContact.ts` — pure field list, validation, refusal codes. No surface, no route, no network, no Scan import | **SHIPPED** — PR #135, merge `6e4a40b`, 2026-09-20 |
+| **BC-2** | The intake: `/api/free-tools/scan-contact`, an additive direct-contact entry point beside `captureSalesLead`, the `source` migration, the existing email notification, `checkRateLimit`. **REQUIRED, not deferrable** | **SHIPPED** — PR #137, merge `19d1274`, production-verified 2026-09-24 |
+| **BC-3** | `ScanContactCard.tsx` below the report, the intro-wording correction, the extended surface pins, print-hidden | **SHIPPED** — PR #139, merge `f6a5ee6`, production-verified 2026-09-25 |
 
 ### The outcome loop
 
