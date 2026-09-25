@@ -69,7 +69,7 @@ const TOOLS = [
     summary:
       "Answer nine short questions about how enquiries reach your business and what happens to them, and get a plain report on where you may be missing work, what you could do about it, and how you would know it worked.",
     detail:
-      "Nothing is stored and nothing is sent — the report is complete without an account.",
+      "Your answers are never stored or sent — your report is generated without an account.",
     href: "/free-tools/business-opportunity-scan",
     cta: "Start the scan →",
   },
