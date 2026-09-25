@@ -510,8 +510,8 @@ decision, and the next Scan increment needs its own approval.**
   it as verified without actually performing it.**
 ## 2. Lost Revenue Scan
 
-**PHASE 1 SIZING LOGIC SHIPPED with PR #84 (`scanLostRevenue.ts` — E1 only); the standalone
-entry experience is NOT started.** A **major module and acquisition hook within** the Business Opportunity Scan —
+**PHASE 1 SIZING LOGIC SHIPPED with PR #84 (`scanLostRevenue.ts` — E1 only); the entry
+experience SHIPPED with PR #105 (A-2b, §7) — framing / entry only, no shorter questionnaire.** A **major module and acquisition hook within** the Business Opportunity Scan —
 not a separate product line. It may also be surfaced as a **narrower standalone entry
 experience** where that is commercially useful; the underlying finding is the same finding.
 
