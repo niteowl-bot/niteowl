@@ -648,7 +648,7 @@ never on its own a NOW** (§78).
 | **A-2b — Lost-Revenue entry** | a Lost-Revenue *framing / entry* page into the same nine-question Scan — no shorter questionnaire | **SHIPPED** — PR **#105** `31bbd45`, production-verified 2026-09-14 |
 | **Homepage direct Scan entry** (not a new phase — one marketing line on an existing page) | the flagship free product one click from the homepage: a secondary CTA beneath the existing primary free-trial CTA, linking the canonical `SCAN_PATH` bare | **SHIPPED** — PR **#131** `a25ccfd`, production-verified 2026-09-20 |
 | **B — Optional post-result contact** | one optional contact card after the complete report — **contact only**: no measurement, no visitor identity, no continuity, no product routing | **CONTRACT APPROVED (BC-0, 2026-09-20); BC-1 SHIPPED (PR #135); BC-2 SHIPPED (PR #137, production-verified 2026-09-24); BC-3 SHIPPED (PR #139, production-verified 2026-09-25) — Phase B COMPLETE** — scope locked below. Aggregate measurement was **removed from Phase B** and is excluded |
-| **C — Consented continuity** | save / return to a result, repeat-run comparison, governed personalised share — the `AAL §25.1` / §89.1 bearer-token run identity | **NOT STARTED** — its own approved increment; §86.1 / §108.1 NOT IN until then |
+| **C — Consented continuity** | **optional anonymous save + return of one Scan result only** — a bearer-secret link, hash-only at rest, 180-day expiry; repeat-run comparison and governed sharing **deferred**. Contract: `docs/ARCHITECTURE.md` §26.2 | **CONTRACT APPROVED (C0, 2026-09-26); C1–C4 NOT STARTED** — each needs its own approval; §86.1 / §108.1 persistence stays NOT IN until each ships |
 | **D — Governed outcome-based compounding** | measured conversion / outcome learning, privacy-safe cohorts, governed benchmarks and case studies, cross-product decision intelligence | **NOT STARTED** — only when paid products produce real measured outcomes on the Spine and canonical provenance permits it |
 
 **Full closeouts for A-1, A-2a, A-2b and the homepage Scan CTA — files, tests, pinned
@@ -1004,7 +1004,7 @@ Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not reb
 phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
 without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
 NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b, the homepage direct Scan CTA (#131) and
-Phase B (BC-1–BC-3, PRs #135, #137, #139) SHIPPED; C, D NOT started**
+Phase B (BC-1–BC-3, PRs #135, #137, #139) SHIPPED; C contract approved (C0), C1–C4 and D NOT started**
 (§7) · **Industry landing pages — Slices 1–4 SHIPPED; Slice 4 complete (4a PR #128, 4b PR #130)** (§8)
 Future:
 
