@@ -386,7 +386,11 @@ describe("the questionnaire is driven by SCAN_QUESTIONS", () => {
 
   test("the whole page mounts without a DOM and shows the intro's zero-persistence statements", () => {
     const html = renderToStaticMarkup(createElement(ScanClient));
-    assert.match(html, /Nothing is stored, and nothing is sent to NiteOwl/);
+    // BC-3 corrected this sentence (docs/ARCHITECTURE.md §26.1): the
+    // answers are still never sent; the optional contact form is named.
+    assert.match(html, /Your answers stay in this browser tab and are never sent to NiteOwl\./);
+    assert.match(html, /If you choose to contact us at the end, we receive only what you type into that form\./);
+    assert.doesNotMatch(html, /Nothing is stored, and nothing is sent to NiteOwl/);
     assert.match(html, /Refreshing or closing the page clears the scan/);
     assert.match(html, /No account/);
     assert.match(html, /never count against you/);
@@ -634,7 +638,7 @@ describe("the surface cannot persist, fetch, reach a provider, inject HTML or ro
       for (const s of specifiers) {
         assert.match(
           s,
-          /^(react|next\/link|next|@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)|\.\/ScanClient|@\/app\/free-tools\/business-opportunity-scan\/scanPresentation|@\/lib\/site\/(publicRoutes|structuredData))$/,
+          /^(react|next\/link|next|@\/lib\/freetools\/scan(Types|Questions|Validation|Findings|LostRevenue|Recommendations)|\.\/ScanClient|@\/app\/free-tools\/business-opportunity-scan\/(scanPresentation|ScanContactCard)|@\/lib\/site\/(publicRoutes|structuredData))$/,
           `${file} imports ${s}`
         );
       }
@@ -1109,5 +1113,51 @@ describe("clusters render inside the existing relate section", () => {
     );
     assert.deepEqual(cards, [...cards].sort((a, b) => a - b));
     assert.equal(count(html, /data-condition=/g), 3);
+  });
+});
+
+// ── 9. BC-3 — the optional contact card's place on the page ───────
+//
+// The card lives in its own file (tests/freeToolsScanContactCard.test.mjs
+// pins what it may do). What is pinned here is WHERE it is: after the
+// finished report, outside ScanReportDocument, inside the existing
+// screen-only action block, before the navigation buttons — and handed
+// nothing. The three SURFACE_FILES keep every no-fetch pin above.
+describe("BC-3: the contact card sits below the report and never inside it", () => {
+  const client = () => code(`${SURFACE_DIR}/ScanClient.tsx`);
+
+  test("it is rendered once, with no props", () => {
+    assert.equal(count(client(), /<ScanContactCard\b/g), 1);
+    assert.match(client(), /<ScanContactCard \/>/);
+  });
+
+  test("it is not part of ScanReportDocument, so the report and its print are unchanged", () => {
+    const src = client();
+    const docStart = src.indexOf("export function ScanReportDocument(");
+    const docEnd = src.indexOf("type SetDraft", docStart);
+    assert.ok(docStart > 0 && docEnd > docStart);
+    assert.doesNotMatch(src.slice(docStart, docEnd), /ScanContactCard/);
+    const { html } = renderReport(ALL_THREE_SIZED);
+    assert.doesNotMatch(html, /data-scan-contact|Want to talk it through/);
+  });
+
+  test("it comes after the report and the not-saved note, inside ft-no-print, before the buttons", () => {
+    const src = client();
+    const report = src.indexOf("<ScanReportDocument report={result.report}");
+    const noPrint = src.indexOf('<div className="ft-no-print border-t border-slate-800 mt-10 pt-6">');
+    const notSaved = src.indexOf("This report is not saved anywhere");
+    const card = src.indexOf("<ScanContactCard />");
+    const buttons = src.indexOf("Back to answers");
+    assert.ok(report > 0 && report < noPrint, "the report comes first");
+    assert.ok(noPrint < notSaved && notSaved < card, "after the not-saved note, inside the screen-only block");
+    assert.ok(card < buttons, "before the action buttons");
+    // Still inside the same block: no closing of the ft-no-print div
+    // between it and the card beyond the Save-a-copy box's own div.
+    const between = src.slice(noPrint, card);
+    assert.equal(count(between, /<div\b/g), count(between, /<\/div>/g) + 1);
+  });
+
+  test("the step-one hint still says the answers are never saved or sent", () => {
+    assert.match(read(`${SURFACE_DIR}/ScanClient.tsx`), /they are never saved or sent anywhere/);
   });
 });

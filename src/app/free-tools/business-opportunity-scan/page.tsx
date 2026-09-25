@@ -16,7 +16,10 @@ import { publicUrl } from "@/lib/site/publicRoutes";
 // and no stored identifier. The answers live in client memory for one
 // page view, and the full report is delivered there (§26: value before
 // any account exists). Persistence, consent and promotion are later,
-// separately approved work (§89).
+// separately approved work (§89). The one request this page can make
+// is the optional contact card's (Phase B, BC-3, ScanContactCard.tsx),
+// which sends only what the visitor types into it — never an answer or
+// the report (§26.1).
 //
 // NO REMY, NO PROVIDER. Nothing imports leadCapture, lib/voice,
 // availability, calendarSync, integrations, Supabase or a model SDK,
