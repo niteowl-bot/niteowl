@@ -54,7 +54,7 @@ Each is a pointer. **Do not restate a Part here** — read it in `docs/ARCHITECT
 | **XI** | The Business Opportunity Scan MVP contract — **a contract, not a plan** | Phase 1 logic has shipped; the persistence and consent flow it describes have not |
 | **XII** | The Scan's three Phase 1 contract decisions | — |
 | **XIII** | Decision, Outcome and Impact Provenance; the canonical ten-stage provenance chain — **T1–T3, P44–P46.** NOW: none | — |
-| **XIV** | The Scan's intelligence contracts — the funnel, clusters, hypotheses, dependencies, evidence gaps, impact classification. NOW: none | All six contracts are now built (PRs #92, #94, #99) |
+| **XIV** | The Scan's intelligence contracts — the funnel, clusters, hypotheses, dependencies, evidence gaps, impact classification. NOW: none | All six contracts are now built (PRs #92, #94, #99). **Settled:** an impact-classification change that can alter a result for the same inputs MUST bump `SCAN_RULE_SET_VERSION`; copy-only edits do not (§106). **Before C1:** align its `scanTypes.ts` comment, comment-only |
 | **XV** | **Outcome Learning and Cross-Product Decision Intelligence closeout** (PR #107, merge `3f292c1`, production-verified 2026-09-15; closed out by PR #108, merge `e4c53c7`) — §§109–115. NOW: none | See the standing entry below |
 
 **Parts VII–XV do not redraw §21**, and no Part has created a second `DecisionRecord`.

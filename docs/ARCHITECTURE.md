@@ -2831,10 +2831,10 @@ used or ignored, and **the anti-funnel suite must pass unmodified.**
 - the Scan inputs **as validated by `validateScanAnswers`** — re-validated on the server, and a
   refused submission stores nothing
 - `answered_at` and `computed_at`
-- **every applicable version stamp** — `question_set_version`, `rule_set_version`,
-  `prioritisation_rule_set_version`, `cluster_rule_set_version`,
-  `hypothesis_rule_set_version`, and E1's `expression_version` wherever an `estimate_basis`
-  carries one
+- **every applicable version stamp** — `question_set_version`, `rule_set_version` (which also
+  versions the impact classification, §106), `prioritisation_rule_set_version`,
+  `cluster_rule_set_version`, `hypothesis_rule_set_version`, and E1's `expression_version`
+  wherever an `estimate_basis` carries one
 - **an exact snapshot of the report** produced by `buildScanReport` for that run, so a returning
   visitor sees the report they were shown, even after the rules change (**M15** as-of fidelity;
   §107.3)
@@ -9226,6 +9226,21 @@ The three distinctions that must survive, all pre-existing:
   a free scan's estimate never becomes the baseline a later **paid** outcome is graded against
   (Part X **N2**).
 
+**Versioning — settled 2026-09-27.** The impact classification carries **no version stamp of
+its own**, and none is to be added. **`SCAN_RULE_SET_VERSION` (`rule_set_version`) is its
+version boundary**: it is the canonical version for the Scan's result-affecting rule logic,
+and that includes this classification. **`SCAN_RULE_SET_VERSION` MUST change whenever a change
+to the impact-classification logic, thresholds, mapping, interpretation or semantic meaning can
+change the classification or result produced for the same Scan inputs.** A pure copy, grammar,
+formatting or explanatory wording change that alters neither the classification, nor its
+semantic meaning, nor the resulting business conclusion **does not** require a version change —
+comparability exists to separate genuine rule and result changes, not harmless copy edits, and
+the exact wording a visitor was shown is already preserved by the stored snapshot. This is not
+in tension with §43.3, whose separate-version rule is for *orderings* — which keep
+`prioritisation_rule_set_version` — and it names the version §107.3 requires, rather than
+adding one. **A stored report snapshot stays authoritative for historical display** (§26.2): a
+returning visitor sees the classification they were shown, whatever the version is now.
+
 ## 107. Compatibility — provenance, learning and the anti-funnel rule
 
 ### 107.1 The chain is unchanged
@@ -9257,6 +9272,14 @@ A change to the ordering rules, the relation rules, the hypothesis rules or the 
 classification **breaks comparability between runs** and must be visible as a version change
 (`AGENT_ACCESS_LAYER.md` §25.2). Where two runs were produced under different versions, the
 honest comparison result is **not comparable** — never a silent difference.
+
+The version each one changes: the ordering rules, `prioritisation_rule_set_version`; the
+relation rules, `cluster_rule_set_version`; the hypothesis rules,
+`hypothesis_rule_set_version`; **the impact classification, `rule_set_version`** — for a change
+that can alter the classification produced for the same inputs, and not for a copy-only edit
+(§106, settled 2026-09-27). **Comparability is decided from the version stamps, never by
+comparing the outputs** — two runs whose stamps differ are not comparable even where their
+reports happen to agree.
 
 ### 107.4 The anti-funnel rule binds every contract in this part
 
