@@ -54,7 +54,7 @@ Each is a pointer. **Do not restate a Part here** — read it in `docs/ARCHITECT
 | **XI** | The Business Opportunity Scan MVP contract — **a contract, not a plan** | Phase 1 logic has shipped; the persistence and consent flow it describes have not |
 | **XII** | The Scan's three Phase 1 contract decisions | — |
 | **XIII** | Decision, Outcome and Impact Provenance; the canonical ten-stage provenance chain — **T1–T3, P44–P46.** NOW: none | — |
-| **XIV** | The Scan's intelligence contracts — the funnel, clusters, hypotheses, dependencies, evidence gaps, impact classification. NOW: none | All six contracts are now built (PRs #92, #94, #99). **Settled:** an impact-classification change that can alter a result for the same inputs MUST bump `SCAN_RULE_SET_VERSION`; copy-only edits do not (§106). **Before C1:** align its `scanTypes.ts` comment, comment-only |
+| **XIV** | The Scan's intelligence contracts — the funnel, clusters, hypotheses, dependencies, evidence gaps, impact classification. NOW: none | All six contracts are now built (PRs #92, #94, #99). **Settled 2026-09-27 (PR #145, merge `a2c10a2`):** an impact-classification change that can alter a result for the same inputs MUST bump `SCAN_RULE_SET_VERSION`; copy-only edits do not; no stamp of its own (§106, §107.3). **Before C1:** align its `scanTypes.ts` comment, comment-only |
 | **XV** | **Outcome Learning and Cross-Product Decision Intelligence closeout** (PR #107, merge `3f292c1`, production-verified 2026-09-15; closed out by PR #108, merge `e4c53c7`) — §§109–115. NOW: none | See the standing entry below |
 
 **Parts VII–XV do not redraw §21**, and no Part has created a second `DecisionRecord`.
@@ -210,11 +210,9 @@ Deferred and non-blocking (do **not** pick these up as part of other work):
 
 **CLOSED — recorded here only so a reader scanning the open items does not go looking for them.**
 
-Each closed item's **standing rule** is in the rules sections below. Historical detail (root
-cause, validation counts, mutation results, production closeout) is recoverable from Git
-history at the named merge commit and, where needed, from this file's pre-condensation
-revision using `git show <commit>^:PROJECT_CONTEXT.md`. `CHANGELOG.md` contains the earlier
-recorded history where applicable. **Do not re-litigate or re-open these.**
+Each closed item's **standing rule** is in `docs/REMY_BEHAVIOUR_RULES.md`; historical detail is
+in `CHANGELOG.md` and Git history at the named merge commit (`git show <commit>^:PROJECT_CONTEXT.md`
+for this file's pre-condensation text). **Do not re-litigate or re-open these.**
 
 | Item | Closed by | Standing rule / note |
 |---|---|---|
@@ -228,7 +226,7 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 | **Partial-`structuredData` EMAIL recovery** (1st field) | PR #62 `c2d48b7`, deployed 2026-09-04 | Caller-email evidence rule |
 | **Partial-`structuredData` REQUESTED-TIMING recovery** (2nd field) | PR #66 `bd5853a`, deployed 2026-09-07 | Caller-timing evidence rule |
 | **Urgency REPRESENTABILITY** (`true` / `false` / `null`) | PR #68 `c390f53`, deployed 2026-09-07 | Callback urgency rule. **Representation only — urgency RECOVERY is NOT closed and stays V1.1/later** |
-| **Returning-customer booking overwrite** (chat/widget; voice never affected) | PR #70 `8833896`, deployed 2026-09-07 | Cross-conversation lead matching rule. Documentation is now consistent: `docs/ARCHITECTURE.md` C3 records it **CLOSED by PR #70**, and `CHECKLIST.md` records it resolved — **no discrepancy remains for this finding** |
+| **Returning-customer booking overwrite** (chat/widget; voice never affected) | PR #70 `8833896`, deployed 2026-09-07 | Cross-conversation lead matching rule (`docs/ARCHITECTURE.md` C3 and `CHECKLIST.md` agree) |
 
 **Facts from those closures that are still live and must not be lost:**
 
@@ -326,17 +324,12 @@ recorded history where applicable. **Do not re-litigate or re-open these.**
 
 # Current Work
 
-**Remy V1 implementation is COMPLETE** under the canonical Definition of Done —
-*"Does this stop a normal paying customer from reliably using Remy V1?"* A read-only
-reconciliation across PROJECT_CONTEXT.md, CHECKLIST.md and docs/ARCHITECTURE.md found no
-remaining production-reachable V1 implementation blocker.
-
-**One V1 blocker WAS found after that reconciliation, and is now CLOSED (2026-09-14):**
-password recovery did not work in production — closed by **PR #96** (merge `eeed1f7`) and
-**PR #97** (merge `8ccddc6`), **V1-verified in production 2026-09-14**; judged by the canonical
-rule (a locked-out customer cannot use Remy V1), not by appetite. Magic-link sign-in is
-**deferred to V1.1/later and is not a V1 blocker**. Record: the *Password-recovery and
-auth-callback* rule in `docs/REMY_BEHAVIOUR_RULES.md`; `CHANGELOG.md` 2026-09-14.
+**Remy V1 is COMPLETE** (see *Current Status*). A read-only reconciliation across
+PROJECT_CONTEXT.md, CHECKLIST.md and docs/ARCHITECTURE.md found no remaining
+production-reachable V1 implementation blocker. **The one blocker found after it — password
+recovery — is CLOSED** by PRs #96 and #97 (table above), judged by the canonical rule (a
+locked-out customer cannot use Remy V1), not by appetite; magic-link sign-in is **V1.1/later,
+not a V1 blocker**.
 
 **The one remaining launch prerequisite is EXTERNAL and is not Remy work.**
 
@@ -421,17 +414,11 @@ It answers questions, books appointments, captures leads and gracefully hands un
 
 **Canonical as of 2026-09-09.** This section records the free-product **line-up, positioning
 and routing**. It deliberately adds **no architecture**: the architecture for free products
-already exists and is not restated here —
-
-- `docs/ARCHITECTURE.md` **§26** — the staged model, full value delivered before any account
-  exists, assessment data in its own namespace with no `org_id` until explicit consent,
-  self-reported inputs promoted as `business_provided` and never `verified`, and findings that
-  carry their confidence and their evidence
-- `docs/AGENT_ACCESS_LAYER.md` **§25** — repeat usage linked by a bearer token the visitor
-  holds and never by an inferred identity, structural namespace isolation, and the provenance
-  floor on cross-visitor learning
-- `docs/ARCHITECTURE.md` **§76 (N2)** and **§77 (N3)** — Part X's two rules about what a free
-  scan may assert and what may later be published about a named customer
+already exists and is not restated here — `docs/ARCHITECTURE.md` **§26** (the staged model;
+assessment data in its own namespace with no `org_id` until explicit consent),
+`docs/AGENT_ACCESS_LAYER.md` **§25** (bearer-token linkage, never an inferred identity;
+structural namespace isolation) and `docs/ARCHITECTURE.md` **§76 (N2)** / **§77 (N3)** (what a
+free scan may assert, and what may later be published about a named customer).
 
 **Free products are an extension of the canonical architecture, not a second one.** They sit
 under the same hierarchy: provider-neutral canonical data → Business Graph → Business Memory →
@@ -522,18 +509,10 @@ Business Opportunity Scan  →  Lost Revenue finding  →  recommended action
 ```
 
 **A finding needs no new artefact.** Everything the scan's findings must carry already has a
-canonical home, and duplicating it would create the rival record §48.3 exists to prevent:
-
-| A finding carries | Where it already lives |
-|---|---|
-| Evidence and provenance | §20.6, §20.7's `evidence_refs`, as-of per **M15** |
-| Diagnosis | The Finding profile — §42.2 |
-| Confidence | §20.6, on the assertion that carries it |
-| Estimated impact where appropriate | `expected_effect` — §43.2's range / direction / *unknown* rule |
-| Assumptions | §42.2 `assumptions`, source type `assumed` |
-| Recommended action | A `DecisionRecord` with `action_status: proposed`, `addresses_finding_id` — §43.1 |
-| Relevant NiteOwl product or capability | A **routing attribute** on the recommendation, expressible with the existing `source_product` / capability references — not a new record type |
-| Measurable success criteria | §20.7 rule 7 — **written before the outcome is known** |
+canonical home — mapped field by field in `docs/ARCHITECTURE.md` **§83.2** — and duplicating it
+would create the rival record §48.3 exists to prevent. The relevant NiteOwl product is a
+**routing attribute** on the recommendation, **not a new record type**, and success criteria
+are **written before the outcome is known** (§20.7 rule 7).
 
 ## 3. AI Receptionist Business Setup Kit — COMPLETE
 
@@ -662,25 +641,17 @@ Scan CTA is the literal Scan path with **no query string, hash, prefill or carri
 **twelve** approved public URLs — the ten above plus the two industry pages in §8.
 
 **The homepage direct Scan CTA (PR #131, merge `a25ccfd`, production-verified 2026-09-20) is
-SHIPPED and is marketing content only.** One secondary line sits beneath the unchanged primary
-**Start Your Free 14-Day Trial** CTA — *"Not ready to start? Run the free Business Opportunity
-Scan — nine questions, no account, nothing stored."* — linking the canonical `SCAN_PATH`
-**bare**, under the same do-not-repeat rule above: no query string, hash, prefill, carried
-state, tracking parameter or visitor identifier, and the literal path is never written by hand
-on the page. The general **Free tools** navigation link is unchanged and remains the broader
-path. **No account, no storage and no tracking are introduced** — the merge added no analytics,
-cookie, storage, email, telemetry or PII collection, and the tests pin that. **The Business
-Opportunity Scan itself is unchanged and remains the canonical free acquisition product** (§1):
-no Scan implementation, question set, `SCAN_QUESTION_SET_VERSION`, route, metadata, sitemap
-entry or product architecture changed, and **no Remy V1 code was touched.** Phase B was
-**NOT STARTED** at that merge — a homepage link is not a contact capture or a measurement
-mechanism; Phase B shipped later, below.
+marketing content only** — one secondary line beneath the unchanged primary free-trial CTA,
+linking the canonical `SCAN_PATH` **bare** under the do-not-repeat rule above, and **the
+literal path is never written by hand on the page**. It added no account, storage, analytics,
+cookie, email, telemetry or PII collection, and changed nothing in the Scan or Remy V1.
+Closeout: `CHANGELOG.md`, PR #131.
 
-### Phase B — the optional post-result contact: CONTRACT APPROVED (BC-0), BC-1, BC-2 and BC-3 SHIPPED — COMPLETE
+### Phase B — the optional post-result contact: COMPLETE
 
-**The contract is approved and lives in `docs/ARCHITECTURE.md` §26.1 — read it before any
-Phase B work.** **BC-1 is SHIPPED (PR #135, merge `6e4a40b`) — the pure validation module only. BC-2 is SHIPPED (PR #137, merge `19d1274`, production-verified 2026-09-24) — the `/api/free-tools/scan-contact` intake and the nullable `sales_leads.source` column; closeout in `CHANGELOG.md`. BC-3 is SHIPPED (PR #139, merge `f6a5ee6`, production-verified 2026-09-25)** — `ScanContactCard.tsx` below the complete report, screen-only, no props, posting only the validated contact; the intro wording corrected; closeout in `CHANGELOG.md`. **Phase B is COMPLETE; no further Phase B increment exists or is approved. Remy V1 and the
-Business Opportunity Scan engine are untouched.**
+**The contract lives in `docs/ARCHITECTURE.md` §26.1 — read it before any Phase B work.**
+**Phase B is COMPLETE (increments in the table below; closeouts in `CHANGELOG.md`); no further
+Phase B increment exists or is approved. Remy V1 and the Scan engine are untouched.**
 
 **Observation, NOT a Phase B change and NOT approved work:** the site-wide client Sentry SDK
 (`src/instrumentation-client.ts`, since `79cf835`, 2026-07-04) sends `session` envelopes from
@@ -688,35 +659,27 @@ every page, the Scan included. Verified 2026-09-25 to carry no answer, report or
 data — but it is a request to a third party that the Scan's "nothing is sent" wording does not
 mention. **Recorded for an owner decision; nothing was changed.**
 
-**Phase B adds exactly one thing: an optional contact card after a complete Scan report** —
-name, one of email or phone, optional business name, optional message — stored through the
-existing `sales_leads` path. **The report stays unconditional, complete and printable whether
-the card is used or ignored, and the anti-funnel suite must pass unmodified.** No measurement,
-no visitor identity, no continuity, no product routing, no analytics, cookie or fingerprint.
+**Phase B added exactly one thing: an optional contact card after a complete Scan report**,
+stored through the existing `sales_leads` path. **The report stays unconditional, complete and
+printable whether the card is used or ignored, and the anti-funnel suite must pass
+unmodified.** No measurement, visitor identity, continuity, product routing, analytics, cookie
+or fingerprint.
 
-**The two rules this rests on are promoted into `docs/ARCHITECTURE.md` §26 and are not
-restated in full here: NO FREE-TOOL OUTPUT TRAVELS WITH A CONTACT, AND NONE IS EVER JOINED
-TO ONE** — no answer, finding, recommendation, estimate, condition code, version stamp, run,
-session or visitor id, and **no prefill in either direction** — **and A CONTACT IS A NITEOWL
-FUNNEL RECORD, NOT ASSESSMENT DATA**, so it lives in the existing `sales_leads` separation,
-never in the assessment namespace, never with an `org_id`, never matched against
-`organisations`.
-
-**Three owner decisions, approved 2026-09-20 and recorded in full at §26.1:** a **nullable,
-no-default, no-backfill `sales_leads.source`** column, whose migration is **verified against
-the confirmed production Supabase project, never assumed** · **12-month retention for
-Scan-originated contact leads ONLY** — a documented rule with no purge automation, leaving
-every other `sales_leads` row's lifecycle **unchanged** · **the existing `checkRateLimit`
-pattern**, where request-header / IP data is transient rate-limit input that is never
-persisted, attached to the lead, cookied, fingerprinted or treated as visitor identity.
+**The two rules it rests on, in full at `docs/ARCHITECTURE.md` §26: NO FREE-TOOL OUTPUT
+TRAVELS WITH A CONTACT, AND NONE IS EVER JOINED TO ONE** — **no prefill in either direction** —
+**and A CONTACT IS A NITEOWL FUNNEL RECORD, NOT ASSESSMENT DATA**: `sales_leads` only, never
+the assessment namespace, never an `org_id`, never matched against `organisations`. **The three
+owner decisions, in full at §26.1:** a nullable, no-default, no-backfill `sales_leads.source`,
+its migration **verified against the confirmed production Supabase project, never assumed** ·
+**12-month retention for Scan-originated contact leads ONLY**, no purge automation, every other
+`sales_leads` row unchanged · `checkRateLimit`, request-header / IP data transient and never
+persisted or treated as visitor identity.
 
 **Deferred by name: Scan Next-Action Routing (`scan-next-action`)** — linking a report to Remy
-or another product. **NOT APPROVED, and approving Phase B does not authorise it.** It carries
-**no BC number on purpose**, so deferring it can never be read as deferring **BC-2, which is
-REQUIRED** — the card depends on that intake. **Anonymous funnel measurement is EXCLUDED from
-Phase B.** Still excluded: Scan run persistence · bearer-token run identity (**Phase C**) ·
-§89 consent and promotion · emailing the report · Spine / Memory / Graph writes · **Stage 1** ·
-**Phase D**.
+or another product — **NOT APPROVED**, deliberately with no BC number. **Anonymous funnel
+measurement is EXCLUDED.** Still excluded: §89 consent and promotion · emailing the report ·
+Spine / Memory / Graph writes · **Stage 1** · **Phase D**. Scan run persistence and
+bearer-token run identity stay outside Phase B — they are **Phase C** (§26.2), not started.
 
 | Increment | Scope | Status |
 |---|---|---|
@@ -771,30 +734,16 @@ outcome Remy did not produce** — a visual shows the request or captured state;
 differentiation, not colour alone. Union values, node sequences, section orders and per-slice
 verification: `CHANGELOG.md`, PRs #112, #114, #116, #118, #119, #121, #123, #125, #128, #130.
 
-**Slice 4a (PR #128, reviewed head `374b4d6`, merge `f6a03cb`, production-verified 2026-09-17) is a
-CONTENT-ONLY change through the existing `how_it_works` field** — a differentiated heading and
-steps 2–4 per trade, with **no new union, interface, presentation variant, renderer or view
-branch and no per-industry implementation fork**. **Step 1 stays canonical and byte-identical on
-both pages** (the Scan is the same unchanged nine questions for everyone) and **both pages keep
-exactly four steps**. **The FAQ is untouched** — seven entries and the same `faq_heading` on each
-page, so the rendered `FAQPage` JSON-LD is unchanged — and every truthfulness guard above is
-preserved.
-
-**Slice 4b (PR #130, reviewed head `893fb6e`, merge `fa0e542`, deployed from that SHA and
-live-confirmed 2026-09-20) is a CONTENT-ONLY change through the existing `faqs` field** —
-FAQ 1, 3 and 6 differentiated by trade, FAQ 2 already trade-specific and unchanged, and **FAQ 4,
-5 and 7 byte-identical across both pages** so the shared floor cannot silently fork. **Seven FAQs
-per page, the established order and both `faq_heading`s are unchanged**, so the rendered
-`FAQPage` JSON-LD still builds from the same `page.faqs` array. **No new union, interface,
-presentation variant, renderer or view branch and no per-industry implementation fork** —
-`IndustryPageView.tsx` is untouched — and every truthfulness guard above is preserved, the
-booking FAQ asking about booking **requests** under a books-it-itself guard. **Production
-verification was not recorded at merge time; this is deployed-and-live-confirmed, not
-backdated.**
-
-**Slice 4 is therefore COMPLETE — 4a is PR #128 and 4b is PR #130 — and that completes the
-approved four-slice differentiation plan. No Slice 5 exists, and none is created or approved by
-this closeout.**
+**Slices 4a and 4b are CONTENT-ONLY**, through the existing `how_it_works` and `faqs` fields —
+**no new union, interface, presentation variant, renderer or view branch and no per-industry
+implementation fork**; `IndustryPageView.tsx` untouched. The invariants they pin: **how-it-works
+step 1 stays canonical and byte-identical on both pages, and both keep exactly four steps** ·
+**FAQ 4, 5 and 7 stay byte-identical across both pages**, seven FAQs per page in the
+established order and both `faq_heading`s unchanged, so the `FAQPage` JSON-LD still builds from
+the same `page.faqs` · the booking FAQ asks about booking **requests**. **4b's production
+verification was not recorded at merge time — it is deployed-and-live-confirmed 2026-09-20,
+not backdated.** **Slice 4, and with it the approved four-slice plan, is COMPLETE; no Slice 5
+exists or is approved.** Full closeouts: `CHANGELOG.md`, PRs #128 and #130.
 ---
 
 # Architecture Rule
@@ -1000,12 +949,12 @@ Shipped (previously listed as remaining or future):
 
 Free products and acquisition surfaces (none of it V1 or V1.1 work; **status in *Free-Product
 Strategy* above, closeouts in `CHANGELOG.md`**): **Setup Kit SHIPPED, do not rebuild** (§3) ·
-**Scan Phase 1 SHIPPED and LIVE; persistence, consent, outcome measurement and every later
-phase NOT started and not approved** (§1) · **Lost Revenue Scan — no separate questionnaire
-without an approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder
-NOT started** (§4) · **Organic Acquisition Engine A-1, A-2a, A-2b, the homepage direct Scan CTA (#131) and
-Phase B (BC-1–BC-3, PRs #135, #137, #139) SHIPPED; C contract approved (C0), C1–C4 and D NOT started**
-(§7) · **Industry landing pages — Slices 1–4 SHIPPED; Slice 4 complete (4a PR #128, 4b PR #130)** (§8)
+**Scan Phase 1 SHIPPED and LIVE** (§1) · **no separate Lost Revenue questionnaire without an
+approved `SCAN_QUESTION_SET_VERSION` decision** (§2) · **FAQ / Knowledge Builder NOT started**
+(§4) · **Organic Acquisition Engine A-1, A-2a, A-2b, the homepage Scan CTA and Phase B
+SHIPPED; Phase C contract approved (C0), C1–C4 and D NOT started** (§7) · **Industry landing
+pages — Slices 1–4 SHIPPED, plan complete** (§8)
+
 Future:
 
 - Outlook Calendar
@@ -1062,4 +1011,10 @@ How that is kept:
 
 *Maintenance passes:* 2026-09-15 (165,612 → under budget; material moved to canonical owners) ·
 2026-09-16 (70,042 → under 65,000; duplicates merged, two stale statements corrected, the
-industry-page record given §8 — no rule paraphrased, every moved fact left a pointer).
+industry-page record given §8 — no rule paraphrased, every moved fact left a pointer) ·
+2026-09-27 (74,998 → 70,948; §7 homepage-CTA, Phase B and §8 Slice 4a/4b narratives, the
+Roadmap free-products line, the Free-Product intro, §2's finding table (now §83.2), the
+duplicated V1-complete / password-recovery lines in *Current Work* and the CLOSED-table
+preamble compacted to status plus pointers — every rule, open item and exclusion kept, each
+dropped detail already in `docs/ARCHITECTURE.md`, `docs/REMY_BEHAVIOUR_RULES.md` or the dated
+`CHANGELOG.md` entry).
